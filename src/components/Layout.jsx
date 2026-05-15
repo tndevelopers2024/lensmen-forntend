@@ -26,7 +26,7 @@ const Layout = ({ children, setAuthMode }) => {
             <h1 className="text-[16px] font-black uppercase text-[#03045e]">Lensmen <span className="text-[#E5550F]">Rentals</span></h1>
           </Link>
           <div className="flex items-center space-x-6">
-            {(!user || user.role !== 'admin') && (
+            {/* {(!user || user.role !== 'admin') && (
               <Link to="/cart" className="relative p-2 text-[#03045e] hover:bg-slate-50 rounded-xl transition-all">
                 <HiShoppingCart className="text-xl" />
                 {cart.length > 0 && (
@@ -35,7 +35,7 @@ const Layout = ({ children, setAuthMode }) => {
                   </span>
                 )}
               </Link>
-            )}
+            )} */}
             {user ? (
               <>
                 {user.role === 'admin' ? (

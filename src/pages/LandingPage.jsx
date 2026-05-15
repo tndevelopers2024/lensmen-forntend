@@ -210,11 +210,11 @@ const LandingPage = ({ setAuthMode, setShowBookingModal }) => {
                     </Link>
                     <p className="text-slate-400 line-clamp-2 text-[12px] font-medium leading-relaxed">{product.description}</p>
                     <div className="flex mt-auto border-t border-slate-50 pt-1 gap-2">
-                      {(!user || user.role !== 'admin') && (
+                      {/* {(!user || user.role !== 'admin') && (
                         <button onClick={() => addToCart(product)} className="flex-1 bg-slate-50 text-slate-400 p-2 rounded-xl font-black text-[8px] uppercase tracking-widest hover:bg-[#03045e] hover:text-white transition-all flex items-center justify-center space-x-1">
                           <HiShoppingCart className="text-sm" /> <span>Cart</span>
                         </button>
-                      )}
+                      )} */}
                       <button onClick={() => setShowBookingModal(product)} className="flex-1 bg-gradient-to-r from-[#03045e] to-[#5e60ce] text-white p-2 rounded-xl font-black text-[8px] uppercase tracking-widest hover:shadow-lg transition-all">Rent Now</button>
                     </div>
                   </div>

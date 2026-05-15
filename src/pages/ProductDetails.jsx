@@ -96,7 +96,7 @@ const ProductDetails = ({ setShowBookingModal }) => {
 
           <div className="space-y-4 pt-4">
             <div className="flex gap-3">
-              {(!user || user.role !== 'admin') && (
+              {/* {(!user || user.role !== 'admin') && (
                 <button 
                   onClick={() => addToCart(product)} 
                   className="flex-1 bg-white border border-slate-100 text-[#03045e] p-3 rounded-xl font-black text-[10px] uppercase tracking-[0.1em] hover:bg-slate-50 hover:border-[#5e60ce] transition-all flex items-center justify-center space-x-2 shadow-sm"
@@ -104,7 +104,7 @@ const ProductDetails = ({ setShowBookingModal }) => {
                   <HiShoppingCart className="text-sm" /> 
                   <span>Add to Cart</span>
                 </button>
-              )}
+              )} */}
               <button 
                 onClick={() => setShowBookingModal(product)} 
                 className="flex-[2] bg-gradient-to-r from-[#03045e] to-[#5e60ce] text-white p-3 rounded-xl font-black text-[10px] uppercase tracking-[0.1em] hover:shadow-lg transition-all"
