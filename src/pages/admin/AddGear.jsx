@@ -1,0 +1,120 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { HiUpload } from 'react-icons/hi'
+import toast from 'react-hot-toast'
+import { useGlobal } from '../../context/GlobalContext'
+
+const AddGear = () => {
+  const { fetchProducts, API_URL } = useGlobal()
+  const navigate = useNavigate()
+  const [newProduct, setNewProduct] = useState({ name: '', description: '', pricePerDay: '' })
+  const [productFile, setProductFile] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState('')
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProductFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      toast.success('Image selected');
+    }
+  }
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault()
+    const formData = new FormData();
+    formData.append('name', newProduct.name);
+    formData.append('description', newProduct.description);
+    formData.append('pricePerDay', newProduct.pricePerDay);
+    if (productFile) formData.append('image', productFile);
+
+    try {
+      const res = await fetch(`${API_URL}/products`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (res.ok) {
+        toast.success('Product added successfully')
+        fetchProducts()
+        navigate('/admin/all-products')
+      } else {
+        toast.error('Failed to add product')
+      }
+    } catch (error) {
+      toast.error('Error adding product')
+    }
+  }
+
+  return (
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="mb-8">
+        <p className="text-[#00b4d8] font-black uppercase tracking-[0.3em] text-[8px] mb-1">Inventory Expansion</p>
+        <h2 className="text-[16px] font-black text-[#03045e] uppercase tracking-widest">Add Gear</h2>
+      </div>
+
+      <div className="bg-white p-8 rounded-2xl shadow-lg border border-slate-50">
+        <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#00b4d8] uppercase tracking-widest ml-1">Product Name</label>
+            <input 
+              type="text" 
+              placeholder="e.g. ARRI Alexa Mini" 
+              required 
+              value={newProduct.name} 
+              onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} 
+              className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-[#5e60ce] outline-none transition-all placeholder:text-slate-200" 
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#00b4d8] uppercase tracking-widest ml-1">Daily Rate (INR)</label>
+            <input 
+              type="number" 
+              placeholder="0.00" 
+              required 
+              value={newProduct.pricePerDay} 
+              onChange={e => setNewProduct({ ...newProduct, pricePerDay: e.target.value })} 
+              className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-[#5e60ce] outline-none transition-all placeholder:text-slate-200" 
+            />
+          </div>
+
+          <div className="md:col-span-2 space-y-3">
+            <p className="text-[9px] font-black text-[#00b4d8] uppercase tracking-widest ml-1">Visual Asset</p>
+            <div className="flex items-center space-x-6">
+              <label className="flex-1 cursor-pointer group">
+                <div className="border border-dashed border-slate-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 hover:border-[#5e60ce] hover:bg-slate-50 transition-all group">
+                  <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-[#5e60ce]/10 transition-colors">
+                    <HiUpload className="text-xl text-slate-300 group-hover:text-[#5e60ce]" />
+                  </div>
+                  <span className="font-black text-[9px] uppercase tracking-[0.2em] text-slate-400 group-hover:text-[#03045e]">Select Image File</span>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                </div>
+              </label>
+              {previewUrl && (
+                <div className="w-32 h-32 rounded-xl border border-slate-100 shadow-md overflow-hidden relative group">
+                  <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 space-y-1">
+            <label className="text-[9px] font-black text-[#00b4d8] uppercase tracking-widest ml-1">Technical Description</label>
+            <textarea 
+              placeholder="Describe the gear's features and condition..." 
+              required 
+              value={newProduct.description} 
+              onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} 
+              className="w-full border border-slate-100 p-4 rounded-xl font-medium text-[12px] focus:border-[#5e60ce] outline-none h-24 transition-all resize-none" 
+            />
+          </div>
+
+          <button type="submit" className="md:col-span-2 bg-gradient-to-r from-[#03045e] to-[#5e60ce] text-white p-4 rounded-xl font-black text-[14px] uppercase tracking-[0.1em] hover:shadow-lg transition-all">Commit to Inventory</button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default AddGear
