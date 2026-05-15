@@ -202,8 +202,8 @@ const AdminOverview = () => {
                     </td>
                     <td className="p-6">
                       <div className="flex flex-col">
-                        <span className="text-[#03045e] font-black text-[12px] tracking-tighter">
-                          {new Date(order.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        <span className="text-brand-navy font-black text-[12px] tracking-tighter">
+                          {new Date(order.endDate).toLocaleDateString('en-GB')}
                         </span>
                         <span className="text-[7px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5">
                           At 06:00 PM

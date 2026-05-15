@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { HiCalendar, HiX, HiUser, HiPhone, HiMail, HiLocationMarker, HiClock } from 'react-icons/hi'
+import { HiCalendar, HiX, HiUser, HiPhone, HiMail, HiLocationMarker, HiClock, HiArrowRight } from 'react-icons/hi'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../context/GlobalContext'
 
@@ -49,8 +49,10 @@ const MyOrdersPage = () => {
                       <span className="bg-emerald-50 text-emerald-600 text-[7px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-100">Returned</span>
                     )}
                   </div>
-                  <p className="text-[#5e60ce] font-black text-[10px] uppercase tracking-widest mt-0.5">
-                    {new Date(order.startDate).toLocaleDateString()} — {new Date(order.endDate).toLocaleDateString()}
+                  <p className="text-brand-navy font-black text-[10px] uppercase tracking-widest mt-0.5 flex items-center">
+                    {new Date(order.startDate).toLocaleDateString('en-GB')}
+                    <HiArrowRight className="mx-2 text-brand-orange" />
+                    {new Date(order.endDate).toLocaleDateString('en-GB')}
                   </p>
                   <p className="text-slate-400 text-[10px] font-bold uppercase mt-1">Total: ₹{order.totalPrice}</p>
                 </div>
@@ -95,15 +97,15 @@ const MyOrdersPage = () => {
                   <h4 className="text-[16px] font-black text-[#03045e] uppercase leading-tight mb-2">{selectedOrder.productId?.name}</h4>
                   <div className="space-y-1">
                     <div className="flex items-center text-[10px] text-slate-500 font-bold space-x-2">
-                      <HiCalendar className="text-[#5e60ce]" />
-                      <span>{new Date(selectedOrder.startDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-                      <HiClock className="text-[#5e60ce] ml-2" />
+                      <HiCalendar className="text-brand-navy" />
+                      <span>{new Date(selectedOrder.startDate).toLocaleDateString('en-GB')}</span>
+                      <HiClock className="text-brand-navy ml-2" />
                       <span>{new Date(selectedOrder.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     <div className="flex items-center text-[10px] text-slate-500 font-bold space-x-2">
-                      <div className="w-4 flex justify-center text-[#ef4444]">—</div>
-                      <span>{new Date(selectedOrder.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
-                      <HiClock className="text-[#ef4444] ml-2" />
+                      <HiArrowRight className="w-4 text-brand-orange flex justify-center" />
+                      <span>{new Date(selectedOrder.endDate).toLocaleDateString('en-GB')}</span>
+                      <HiClock className="text-brand-red ml-2" />
                       <span>{new Date(selectedOrder.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
