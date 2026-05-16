@@ -7,6 +7,7 @@ export const API_URL = import.meta.env.VITE_API_URL || 'https://lensmen-backend.
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('rental_user')
     return saved ? JSON.parse(saved) : null
@@ -28,6 +29,7 @@ export const GlobalProvider = ({ children }) => {
   const [allOrders, setAllOrders] = useState([])
   const [adminProductList, setAdminProductList] = useState([])
   const [userOrders, setUserOrders] = useState([])
+  const [allUsers, setAllUsers] = useState([])
 
   useEffect(() => {
     if (user) localStorage.setItem('rental_user', JSON.stringify(user))
@@ -40,6 +42,7 @@ export const GlobalProvider = ({ children }) => {
 
   useEffect(() => {
     fetchProducts()
+    fetchCategories()
   }, [])
 
   const fetchProducts = async () => {
@@ -49,6 +52,16 @@ export const GlobalProvider = ({ children }) => {
       setProducts(data)
     } catch (error) {
       console.error('Fetch products error:', error)
+    }
+  }
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${API_URL}/products/categories`)
+      const data = await res.json()
+      setCategories(data)
+    } catch (error) {
+      console.error('Fetch categories error:', error)
     }
   }
 
@@ -70,6 +83,10 @@ export const GlobalProvider = ({ children }) => {
         const res = await fetch(`${API_URL}/admin/products`)
         const data = await res.json()
         setAdminProductList(data)
+      } else if (path === '/admin/users') {
+        const res = await fetch(`${API_URL}/admin/users`)
+        const data = await res.json()
+        setAllUsers(data)
       }
     } catch (error) {
       console.error('Fetch admin data error:', error)
@@ -101,6 +118,26 @@ export const GlobalProvider = ({ children }) => {
     toast.success('Removed from cart')
   }
 
+  const updateProfile = async (profileData) => {
+    try {
+      const res = await fetch(`${API_URL}/user/profile`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, ...profileData })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setUser(data)
+        return { success: true }
+      } else {
+        return { success: false, message: data.message }
+      }
+    } catch (error) {
+      console.error('Update profile error:', error)
+      return { success: false, message: 'Server error' }
+    }
+  }
+
   const logout = () => {
     setUser(null)
     window.location.href = '/'
@@ -109,6 +146,7 @@ export const GlobalProvider = ({ children }) => {
   return (
     <GlobalContext.Provider value={{
       products, setProducts,
+      categories, setCategories,
       user, setUser,
       cart, setCart,
       rentalDates, setRentalDates,
@@ -116,11 +154,13 @@ export const GlobalProvider = ({ children }) => {
       allOrders, setAllOrders,
       adminProductList, setAdminProductList,
       userOrders, setUserOrders,
+      allUsers, setAllUsers,
       fetchProducts,
       fetchAdminData,
       fetchUserOrders,
       addToCart,
       removeFromCart,
+      updateProfile,
       logout,
       API_URL
     }}>
