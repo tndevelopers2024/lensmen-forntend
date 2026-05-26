@@ -20,7 +20,8 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
     fullName: user?.fullName || '',
     email: user?.email || '',
     address: user?.address || '',
-    mobile: user?.mobile || ''
+    mobile: user?.mobile || '',
+    password: ''
   })
 
   // KYC Upload States during booking
@@ -29,6 +30,7 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
   const [panFront, setPanFront] = useState(null)
   const [panBack, setPanBack] = useState(null)
   const [uploadingKyc, setUploadingKyc] = useState(false)
+  const [showKycFormOverride, setShowKycFormOverride] = useState(false)
 
   const totalPerDay = products.reduce((sum, p) => sum + (p.pricePerDay || 0), 0);
   const duration = bookingData.startDate && bookingData.endDate 
@@ -37,18 +39,56 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
 
   const handleBooking = async (e) => {
     e.preventDefault()
-    if (!user) {
-      setAuthMode('login')
-      onClose()
-      return
-    }
 
     if (differenceInDays(bookingData.endDate, bookingData.startDate) > 10) {
       toast.error('Rental period cannot exceed 10 days')
       return
     }
 
-    const needsKycUpload = user.kycStatus === 'Not Uploaded' || user.kycStatus === 'Rejected'
+    let currentUser = user;
+
+    // 1. If not logged in, register the user first
+    if (!currentUser) {
+      if (!bookingData.password) {
+        toast.error('Please choose a password to create your account')
+        return
+      }
+      if (!aadhaarFront || !aadhaarBack || !panFront || !panBack) {
+        toast.error('Please select all 4 KYC documents')
+        return
+      }
+
+      setUploadingKyc(true)
+      try {
+        const regRes = await fetch(`${API_URL}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: bookingData.fullName,
+            email: bookingData.email,
+            password: bookingData.password,
+            mobile: bookingData.mobile,
+            address: bookingData.address,
+            accountType: 'Private'
+          })
+        })
+        const regData = await regRes.json()
+        if (regRes.ok) {
+          currentUser = regData.user
+          setUser(regData.user)
+        } else {
+          toast.error(regData.message || 'Registration failed')
+          setUploadingKyc(false)
+          return
+        }
+      } catch (err) {
+        toast.error('Error during registration')
+        setUploadingKyc(false)
+        return
+      }
+    }
+
+    const needsKycUpload = showKycFormOverride || currentUser.kycStatus === 'Not Uploaded' || currentUser.kycStatus === 'Rejected'
     if (needsKycUpload && (!aadhaarFront || !aadhaarBack || !panFront || !panBack)) {
       toast.error('Please select all 4 KYC documents')
       return
@@ -56,11 +96,11 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
 
     setUploadingKyc(true)
 
-    // Upload KYC if required
+    // 2. Upload KYC if required
     if (needsKycUpload) {
       try {
         const form = new FormData()
-        form.append('email', user.email)
+        form.append('email', currentUser.email)
         form.append('aadhaarFront', aadhaarFront)
         form.append('aadhaarBack', aadhaarBack)
         form.append('panFront', panFront)
@@ -85,7 +125,7 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
       }
     }
 
-    // Submit Booking
+    // 3. Submit Booking
     try {
       const res = await fetch(`${API_URL}/bookings`, {
         method: 'POST',
@@ -97,7 +137,7 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
           userEmail: bookingData.email,
           userAddress: bookingData.address,
           userMobile: bookingData.mobile,
-          accountType: user?.accountType || 'Private',
+          accountType: currentUser?.accountType || 'Private',
           startDate: bookingData.startDate,
           endDate: bookingData.endDate
         })
@@ -184,6 +224,22 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
                 className="w-full border-b border-slate-100 p-2 font-black text-[12px] focus:border-primary outline-none transition-all"
               />
             </div>
+            {!user && (
+              <div className="space-y-1">
+                <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Choose Password</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="CREATE ACCOUNT PASSWORD"
+                  value={bookingData.password}
+                  onChange={e => setBookingData({ ...bookingData, password: e.target.value })}
+                  className="w-full border-b border-slate-100 p-2 font-black text-[12px] focus:border-primary outline-none transition-all"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Already have an account? <button type="button" onClick={() => { setAuthMode('login'); onClose(); }} className="text-primary font-black underline">Log in here</button>
+                </p>
+              </div>
+            )}
 
             {/* Date Range Picker */}
             <div className="md:col-span-2 space-y-1 relative">
@@ -272,33 +328,62 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
           </div>
 
           {/* KYC Status & Inputs */}
-          {user && (
+          {user ? (
             <div className="mt-4">
-              {user.kycStatus === 'Approved' ? (
-                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
-                  <HiCheckCircle className="text-emerald-600 text-xl shrink-0" />
-                  <div>
-                    <p className="text-[11px] font-black text-emerald-600 uppercase tracking-widest">KYC Status: Verified</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Your profile is verified. Request will be submitted for approval.</p>
+              {!showKycFormOverride && user.kycStatus === 'Approved' ? (
+                <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <HiCheckCircle className="text-emerald-600 text-xl shrink-0" />
+                    <div>
+                      <p className="text-[11px] font-black text-emerald-600 uppercase tracking-widest">KYC Status: Verified</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Your profile is verified. Request will be submitted for approval.</p>
+                    </div>
                   </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowKycFormOverride(true)}
+                    className="text-[9px] text-brand-navy font-black hover:text-primary uppercase tracking-widest border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg transition-all shrink-0"
+                  >
+                    Update
+                  </button>
                 </div>
-              ) : user.kycStatus === 'Pending' ? (
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center space-x-3 shadow-sm">
-                  <HiClockSolid className="text-amber-600 text-xl shrink-0 animate-pulse" />
-                  <div>
-                    <p className="text-[11px] font-black text-amber-600 uppercase tracking-widest">KYC Status: Pending Verification</p>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">You can submit this request. Admin will approve it after verifying your uploaded documents.</p>
+              ) : !showKycFormOverride && user.kycStatus === 'Pending' ? (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <HiClockSolid className="text-amber-600 text-xl shrink-0 animate-pulse" />
+                    <div>
+                      <p className="text-[11px] font-black text-amber-600 uppercase tracking-widest">KYC Status: Pending Verification</p>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">You can submit this request. Admin will approve it after verifying your uploaded documents.</p>
+                    </div>
                   </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowKycFormOverride(true)}
+                    className="text-[9px] text-brand-navy font-black hover:text-primary uppercase tracking-widest border border-slate-200 bg-white px-2.5 py-1.5 rounded-lg transition-all shrink-0"
+                  >
+                    Update
+                  </button>
                 </div>
               ) : (
                 <div className="bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">
-                  <div>
-                    <h4 className="text-[11px] font-black text-brand-navy uppercase tracking-widest flex items-center">
-                      <HiUpload className="mr-2 text-primary" /> KYC Documents Required
-                    </h4>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">Rental requests require Aadhaar & PAN verification. Upload below:</p>
-                    {user.kycStatus === 'Rejected' && user.kycRejectionReason && (
-                      <p className="text-[9px] text-rose-600 font-black uppercase mt-1">Previous Rejection Reason: "{user.kycRejectionReason}"</p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="text-[11px] font-black text-brand-navy uppercase tracking-widest flex items-center">
+                        <HiUpload className="mr-2 text-primary" /> KYC Documents Required
+                      </h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">Rental requests require Aadhaar & PAN verification. Upload below:</p>
+                      {user.kycStatus === 'Rejected' && user.kycRejectionReason && (
+                        <p className="text-[9px] text-rose-600 font-black uppercase mt-1">Previous Rejection Reason: "{user.kycRejectionReason}"</p>
+                      )}
+                    </div>
+                    {(user.kycStatus === 'Approved' || user.kycStatus === 'Pending') && (
+                      <button 
+                        type="button" 
+                        onClick={() => setShowKycFormOverride(false)}
+                        className="text-[9px] text-slate-400 hover:text-slate-600 font-black uppercase tracking-widest"
+                      >
+                        Cancel
+                      </button>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -337,6 +422,49 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="mt-4 bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4 shadow-sm">
+              <div>
+                <h4 className="text-[11px] font-black text-brand-navy uppercase tracking-widest flex items-center">
+                  <HiUpload className="mr-2 text-primary" /> KYC Documents Required
+                </h4>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wide mt-0.5">Rental requests require Aadhaar & PAN verification. Upload below:</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Aadhaar Front</label>
+                  <input 
+                    type="file" accept="image/*" required
+                    onChange={e => setAadhaarFront(e.target.files[0])}
+                    className="w-full bg-white border border-slate-100 p-1.5 rounded-lg text-[12px] font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Aadhaar Back</label>
+                  <input 
+                    type="file" accept="image/*" required
+                    onChange={e => setAadhaarBack(e.target.files[0])}
+                    className="w-full bg-white border border-slate-100 p-1.5 rounded-lg text-[12px] font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">PAN Front</label>
+                  <input 
+                    type="file" accept="image/*" required
+                    onChange={e => setPanFront(e.target.files[0])}
+                    className="w-full bg-white border border-slate-100 p-1.5 rounded-lg text-[12px] font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">PAN Back</label>
+                  <input 
+                    type="file" accept="image/*" required
+                    onChange={e => setPanBack(e.target.files[0])}
+                    className="w-full bg-white border border-slate-100 p-1.5 rounded-lg text-[12px] font-bold"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
