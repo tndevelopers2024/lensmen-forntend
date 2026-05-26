@@ -1,9 +1,118 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { HiCalendar, HiX, HiUser, HiPhone, HiMail, HiLocationMarker, HiClock, HiArrowRight } from 'react-icons/hi'
+import { HiCalendar, HiX, HiUser, HiPhone, HiMail, HiLocationMarker, HiClock, HiArrowRight, HiCheckCircle, HiExclamationCircle } from 'react-icons/hi'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../context/GlobalContext'
 import TablePagination from '../components/TablePagination'
+
+const renderStatusBadge = (status) => {
+  let classes = ""
+  switch (status) {
+    case 'Request Submitted':
+      classes = "bg-slate-50 text-slate-500 border-slate-100"; break;
+    case 'KYC Pending':
+      classes = "bg-amber-50 text-amber-600 border-amber-100 animate-pulse-subtle"; break;
+    case 'KYC Approved':
+      classes = "bg-cyan-50 text-cyan-600 border-cyan-100"; break;
+    case 'Approved':
+      classes = "bg-emerald-50 text-emerald-600 border-emerald-100"; break;
+    case 'Ready for Pickup':
+      classes = "bg-indigo-50 text-indigo-600 border-indigo-100"; break;
+    case 'Picked Up':
+    case 'During Rental':
+    case 'Active':
+      classes = "bg-blue-50 text-blue-600 border-blue-100"; break;
+    case 'Return Pending':
+      classes = "bg-orange-50 text-orange-600 border-orange-100 animate-pulse-subtle"; break;
+    case 'Returned':
+    case 'Closed':
+      classes = "bg-green-50 text-green-600 border-green-100"; break;
+    case 'Rejected':
+      classes = "bg-rose-50 text-rose-600 border-rose-100"; break;
+    default:
+      classes = "bg-slate-50 text-slate-500 border-slate-100";
+  }
+  return (
+    <span className={`text-[10px] font-black px-2.5 py-1 rounded-xl uppercase tracking-widest border ${classes}`}>
+      {status}
+    </span>
+  )
+}
+
+const renderStatusStepper = (currentStatus) => {
+  if (currentStatus === 'Rejected') {
+    return (
+      <div className="bg-rose-50 border border-rose-200 p-6 rounded-2xl flex items-center space-x-4 shadow-sm">
+        <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center text-rose-600 text-2xl shrink-0">
+          <HiExclamationCircle />
+        </div>
+        <div>
+          <h4 className="text-[13px] font-black text-rose-800 uppercase tracking-wider">Rental Request Rejected</h4>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1">Please check email/rejection reason or submit a new request.</p>
+        </div>
+      </div>
+    )
+  }
+
+  const milestones = [
+    { label: 'Submitted', key: 'Submitted' },
+    { label: 'KYC Verified', key: 'KYC' },
+    { label: 'Approved', key: 'Approved' },
+    { label: 'Ready', key: 'Ready' },
+    { label: 'Active', key: 'Active' },
+    { label: 'Closed', key: 'Closed' }
+  ]
+
+  let activeIndex = -1
+  if (['Request Submitted', 'KYC Pending'].includes(currentStatus)) activeIndex = 0
+  else if (currentStatus === 'KYC Approved') activeIndex = 1
+  else if (currentStatus === 'Approved') activeIndex = 2
+  else if (currentStatus === 'Ready for Pickup') activeIndex = 3
+  else if (['Picked Up', 'During Rental', 'Return Pending', 'Active'].includes(currentStatus)) activeIndex = 4
+  else if (['Returned', 'Closed'].includes(currentStatus)) activeIndex = 5
+
+  return (
+    <div className="w-full py-4">
+      <div className="flex items-center justify-between relative w-full px-2">
+        <div className="absolute left-0 top-[22px] right-0 h-1 bg-slate-100 -z-10 rounded"></div>
+        <div 
+          className="absolute left-0 top-[22px] h-1 bg-primary -z-10 rounded transition-all duration-500" 
+          style={{ width: `${(Math.max(0, activeIndex) / (milestones.length - 1)) * 100}%` }}
+        ></div>
+
+        {milestones.map((m, idx) => {
+          const isCompleted = idx < activeIndex
+          const isActive = idx === activeIndex
+          let circleClass = ""
+          let labelClass = ""
+
+          if (isCompleted) {
+            circleClass = "bg-primary text-white scale-105 shadow-md shadow-orange-100"
+            labelClass = "text-primary font-black"
+          } else if (isActive) {
+            circleClass = "bg-brand-navy text-white ring-4 ring-orange-100 scale-110 shadow-lg shadow-orange-100"
+            labelClass = "text-brand-navy font-black scale-105"
+          } else {
+            circleClass = "bg-white border-2 border-slate-200 text-slate-300"
+            labelClass = "text-slate-400 font-bold"
+          }
+
+          return (
+            <div key={m.label} className="flex flex-col items-center flex-1 relative z-10">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-black transition-all ${circleClass}`}>
+                {isCompleted ? <HiCheckCircle className="text-lg" /> : <span>{idx + 1}</span>}
+              </div>
+              <span className={`text-[9px] uppercase tracking-widest mt-2 block text-center whitespace-nowrap ${labelClass}`}>
+                {m.label}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 
 const MyOrdersPage = () => {
   const { userOrders, fetchUserOrders, fetchProducts, API_URL } = useGlobal()
@@ -80,15 +189,13 @@ const MyOrdersPage = () => {
                   </div>
 
                   <div className="flex-1 min-w-[250px]">
-                    <div className="flex items-center space-x-3">
+                     <div className="flex items-center space-x-3">
                       <h3 className="text-[15px] font-black text-slate-900 uppercase tracking-tight group-hover:text-primary transition-colors">
                         {order.items && order.items.length > 0 
                           ? `${order.items.length} ${order.items.length === 1 ? 'Item' : 'Items'} Order` 
                           : (order.productId?.name || 'Unknown Product')}
                       </h3>
-                      {order.status === 'Returned' && (
-                        <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border border-emerald-100">Returned</span>
-                      )}
+                      {renderStatusBadge(order.status)}
                     </div>
                     
                     <div className="mt-1 flex items-center space-x-2">
@@ -139,9 +246,25 @@ const MyOrdersPage = () => {
             </button>
 
             <div className="p-8">
-              <div className="mb-8 border-b border-slate-50 pb-6">
-                <p className="text-primary font-black uppercase tracking-[0.3em] text-[12px] mb-1">Rental Requests</p>
-                <h2 className="text-[18px] font-black text-slate-900 uppercase tracking-widest">Order Details</h2>
+              <div className="mb-8 border-b border-slate-50 pb-6 flex justify-between items-end">
+                <div>
+                  <p className="text-primary font-black uppercase tracking-[0.3em] text-[12px] mb-1">Rental Requests</p>
+                  <h2 className="text-[18px] font-black text-slate-900 uppercase tracking-widest">Order Details</h2>
+                </div>
+                <div className="text-right">
+                  {renderStatusBadge(selectedOrder.status)}
+                </div>
+              </div>
+
+              {selectedOrder.status === 'Rejected' && selectedOrder.rejectionReason && (
+                <div className="mb-6 bg-rose-50 border border-rose-200 p-4 rounded-2xl">
+                  <p className="text-[11px] font-black text-rose-800 uppercase tracking-wider">Reason for Rejection:</p>
+                  <p className="text-[12px] font-bold text-rose-700 mt-1 uppercase italic">"{selectedOrder.rejectionReason}"</p>
+                </div>
+              )}
+
+              <div className="mb-8 bg-slate-50 p-6 rounded-[2rem] border border-slate-100/50">
+                {renderStatusStepper(selectedOrder.status)}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
@@ -262,13 +385,7 @@ const MyOrdersPage = () => {
                             <p className="text-[11px] font-black text-cyan-400 uppercase tracking-widest mb-1">Total Price</p>
                             <p className="text-[22px] font-black text-white">₹{selectedOrder.totalPrice.toLocaleString()}</p>
                           </div>
-                          <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest ${
-                            selectedOrder.status === 'Returned' 
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
-                            : 'bg-white/10 text-white border border-white/20'
-                          }`}>
-                            {selectedOrder.status || 'Active'}
-                          </div>
+                          {renderStatusBadge(selectedOrder.status)}
                         </div>
                       </div>
                     </div>

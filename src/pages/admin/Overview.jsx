@@ -20,13 +20,16 @@ const AdminOverview = () => {
   const [returnNotes, setReturnNotes] = useState('')
   const [editingNotes, setEditingNotes] = useState({ id: null, notes: '', condition: '' })
   
+  const activeRentalStatuses = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+  const returnedClosedStatuses = ['Returned', 'Closed']
+
   const scheduleOut = allOrders.filter(order => 
-    order.status !== 'Returned' && 
+    activeRentalStatuses.includes(order.status) && 
     isSameDay(new Date(order.startDate), outDate)
   )
   
   const scheduleIn = allOrders.filter(order => 
-    order.status !== 'Returned' && 
+    activeRentalStatuses.includes(order.status) && 
     isSameDay(new Date(order.endDate), inDate)
   )
 
@@ -60,11 +63,14 @@ const AdminOverview = () => {
     if (!searchMatch) return false
 
     // 2. Tab Filter
-    if (activeTab === 'rented' && order.status === 'Returned') return false
-    if (activeTab === 'returned' && order.status !== 'Returned') return false
+    const isActive = activeRentalStatuses.includes(order.status)
+    const isReturned = returnedClosedStatuses.includes(order.status)
+
+    if (activeTab === 'rented' && !isActive) return false
+    if (activeTab === 'returned' && !isReturned) return false
     if (activeTab === 'due') {
       const daysLeft = differenceInDays(new Date(order.endDate), new Date())
-      if (order.status === 'Returned' || daysLeft < 0 || daysLeft > 3) return false
+      if (!isActive || daysLeft < 0 || daysLeft > 3) return false
     }
 
     // 3. Date Range Filter
@@ -90,6 +96,85 @@ const AdminOverview = () => {
     } catch (error) {
       toast.error('Update failed')
     }
+  }
+
+  const renderTableStatusAndActions = (order) => {
+    const status = order.status
+
+    if (status === 'Closed') {
+      return (
+        <div className="flex items-center justify-center space-x-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-100 w-fit mx-auto">
+          <HiCheckCircle className="text-sm" />
+          <span className="text-[12px] font-black uppercase tracking-widest">Closed</span>
+        </div>
+      )
+    }
+
+    if (status === 'Rejected') {
+      return (
+        <div className="flex items-center justify-center space-x-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 w-fit mx-auto">
+          <HiExclamationCircle className="text-sm" />
+          <span className="text-[12px] font-black uppercase tracking-widest">Rejected</span>
+        </div>
+      )
+    }
+
+    if (status === 'Returned') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100">
+            <HiCheckCircle className="text-sm" />
+            <span className="text-[12px] font-black uppercase tracking-widest">Returned</span>
+          </div>
+          {order.returnCondition && (
+            <button 
+              onClick={() => setEditingNotes({ 
+                id: order._id, 
+                notes: order.returnNotes || '', 
+                condition: order.returnCondition 
+              })}
+              className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
+              title="Click to Edit Return Details"
+            >
+              {order.returnCondition}
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    let badgeColor = "bg-orange-50 text-primary border-primary/20 shadow-orange-50"
+    if (['During Rental', 'Picked Up', 'Active'].includes(status)) {
+      badgeColor = "bg-blue-50 text-blue-600 border-blue-200 shadow-blue-50"
+    } else if (status === 'Ready for Pickup') {
+      badgeColor = "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-indigo-50"
+    } else if (status === 'Request Submitted') {
+      badgeColor = "bg-slate-50 text-slate-500 border-slate-200 shadow-sm"
+    } else if (status === 'KYC Pending') {
+      badgeColor = "bg-amber-50 text-amber-600 border-amber-200 animate-pulse shadow-amber-50"
+    } else if (status === 'KYC Approved') {
+      badgeColor = "bg-cyan-50 text-cyan-600 border-cyan-200 shadow-cyan-50"
+    } else if (status === 'Approved') {
+      badgeColor = "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-emerald-50"
+    }
+
+    return (
+      <div className="flex items-center justify-center gap-3">
+        <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${badgeColor}`}>
+          <HiClock className="text-sm" />
+          <span className="text-[12px] font-black uppercase tracking-widest">{status}</span>
+        </div>
+        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(status) && (
+          <button 
+            onClick={() => setIsReturnConfirming(order._id)}
+            className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn justify-center"
+          >
+            <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
+            <span className="text-[12px] font-black uppercase tracking-widest">Mark Returned</span>
+          </button>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -402,47 +487,7 @@ const AdminOverview = () => {
                     </td>
                     <td className="p-6">
                       <div className="flex items-center justify-center gap-3">
-                        {order.status === 'Returned' ? (
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100 shadow-sm shadow-emerald-50">
-                              <HiCheckCircle className="text-sm" />
-                              <span className="text-[12px] font-black uppercase tracking-widest">Returned</span>
-                            </div>
-                            {order.returnCondition && (
-                              <button 
-                                onClick={() => setEditingNotes({ 
-                                  id: order._id, 
-                                  notes: order.returnNotes || '', 
-                                  condition: order.returnCondition 
-                                })}
-                                className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
-                                title="Click to Edit Return Details"
-                              >
-                                {order.returnCondition}
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <>
-                            <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${
-                              new Date(order.endDate) < new Date() 
-                              ? 'bg-red-50 text-red-500 border-red-100 shadow-red-50' 
-                              : 'bg-orange-50 text-primary border-primary/20 shadow-orange-50'
-                            }`}>
-                              {new Date(order.endDate) < new Date() ? <HiExclamationCircle className="text-sm" /> : <HiClock className="text-sm" />}
-                              <span className="text-[12px] font-black uppercase tracking-widest">
-                                {new Date(order.endDate) < new Date() ? 'Overdue' : 'Active'}
-                              </span>
-                            </div>
-                            <button 
-                              onClick={() => setIsReturnConfirming(order._id)}
-                              className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn justify-center"
-                            >
-                              <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-                              <span className="text-[12px] font-black uppercase tracking-widest">Mark Returned</span>
-                            </button>
-                          </>
-                        )}
+                        {renderTableStatusAndActions(order)}
                       </div>
                     </td>
                   </tr>

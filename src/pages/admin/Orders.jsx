@@ -3,7 +3,7 @@ import { useGlobal } from '../../context/GlobalContext'
 import toast from 'react-hot-toast'
 import DatePicker from 'react-datepicker'
 import "react-datepicker/dist/react-datepicker.css"
-import { HiCheckCircle, HiClock, HiExclamationCircle, HiArrowRight, HiShoppingCart, HiX, HiCalendar, HiLocationMarker, HiUser, HiPhone, HiMail, HiEye } from 'react-icons/hi'
+import { HiCheckCircle, HiClock, HiExclamationCircle, HiArrowRight, HiShoppingCart, HiX, HiCalendar, HiLocationMarker, HiUser, HiPhone, HiMail, HiEye, HiIdentification } from 'react-icons/hi'
 import TablePagination from '../../components/TablePagination'
 
 const OrdersMonitor = () => {
@@ -18,6 +18,8 @@ const OrdersMonitor = () => {
   const [returnCondition, setReturnCondition] = useState('Good')
   const [returnNotes, setReturnNotes] = useState('')
   const [editingNotes, setEditingNotes] = useState({ id: null, notes: '', condition: '' })
+  const [selectedKycOrder, setSelectedKycOrder] = useState(null)
+  const [kycRejectionReason, setKycRejectionReason] = useState('')
 
   const updateBookingStatus = async (id, newStatus, condition = 'Good', notes = '') => {
     try {
@@ -35,6 +37,210 @@ const OrdersMonitor = () => {
     }
   }
 
+  const handleStatusTransition = async (orderId, targetStatus, extraBody = {}) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus, ...extraBody })
+      })
+      if (res.ok) {
+        toast.success(`Order transitioned to ${targetStatus}`)
+        setSelectedOrder(null)
+        window.location.reload()
+      } else {
+        toast.error('Failed to transition order')
+      }
+    } catch (err) {
+      toast.error('Error transitioning order')
+    }
+  }
+
+  const renderTableStatusAndActions = (order) => {
+    const status = order.status
+
+    if (status === 'Closed') {
+      return (
+        <div className="flex items-center justify-center space-x-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-100 w-fit mx-auto">
+          <HiCheckCircle className="text-sm" />
+          <span className="text-[11px] font-black uppercase tracking-widest">Closed</span>
+        </div>
+      )
+    }
+
+    if (status === 'Rejected') {
+      return (
+        <div className="flex items-center justify-center space-x-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 w-fit mx-auto">
+          <HiExclamationCircle className="text-sm" />
+          <span className="text-[11px] font-black uppercase tracking-widest">Rejected</span>
+        </div>
+      )
+    }
+
+    if (status === 'Returned') {
+      return (
+        <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100">
+            <HiCheckCircle className="text-sm" />
+            <span className="text-[11px] font-black uppercase tracking-widest">Returned</span>
+          </div>
+          {order.returnCondition && (
+            <button 
+              onClick={() => setEditingNotes({ 
+                id: order._id, 
+                notes: order.returnNotes || '', 
+                condition: order.returnCondition 
+              })}
+              className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
+              title="Click to Edit Return Details"
+            >
+              {order.returnCondition}
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    let badgeColor = "bg-orange-50 text-primary border-primary/20 shadow-orange-50"
+    if (['During Rental', 'Picked Up', 'Active'].includes(status)) {
+      badgeColor = "bg-blue-50 text-blue-600 border-blue-200 shadow-blue-50"
+    } else if (status === 'Ready for Pickup') {
+      badgeColor = "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-indigo-50"
+    } else if (status === 'Request Submitted') {
+      badgeColor = "bg-slate-50 text-slate-500 border-slate-200 shadow-sm"
+    } else if (status === 'KYC Pending') {
+      badgeColor = "bg-amber-50 text-amber-600 border-amber-200 animate-pulse shadow-amber-50"
+    } else if (status === 'KYC Approved') {
+      badgeColor = "bg-cyan-50 text-cyan-600 border-cyan-200 shadow-cyan-50"
+    } else if (status === 'Approved') {
+      badgeColor = "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-emerald-50"
+    }
+
+    return (
+      <div className="flex items-center justify-center gap-3">
+        <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${badgeColor}`}>
+          <HiClock className="text-sm" />
+          <span className="text-[11px] font-black uppercase tracking-widest">{status}</span>
+        </div>
+        {status === 'KYC Pending' && (
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => handleStatusTransition(order._id, 'Approved')}
+              className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
+              title="Approve KYC"
+            >
+              <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Approve</span>
+            </button>
+            <button 
+              onClick={() => {
+                const reason = prompt("Enter reason for KYC rejection:")
+                if (reason) {
+                  handleStatusTransition(order._id, 'Rejected', { rejectionReason: reason })
+                }
+              }}
+              className="flex items-center space-x-1 bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
+              title="Reject KYC"
+            >
+              <HiX className="text-xs group-hover/btn:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Reject</span>
+            </button>
+          </div>
+        )}
+        {status === 'Request Submitted' && (
+          <div className="flex items-center gap-1.5">
+            <button 
+              onClick={() => handleStatusTransition(order._id, 'Approved')}
+              className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
+              title="Approve Rental"
+            >
+              <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Approve</span>
+            </button>
+            <button 
+              onClick={() => {
+                const reason = prompt("Enter reason for rejection:")
+                if (reason) {
+                  handleStatusTransition(order._id, 'Rejected', { rejectionReason: reason })
+                }
+              }}
+              className="flex items-center space-x-1 bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
+              title="Reject Rental"
+            >
+              <HiX className="text-xs group-hover/btn:scale-110 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Reject</span>
+            </button>
+          </div>
+        )}
+        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(status) && (
+          <button 
+            onClick={() => setIsReturnConfirming(order._id)}
+            className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn"
+          >
+            <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
+            <span className="text-[11px] font-black uppercase tracking-widest font-black">Mark Returned</span>
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  const renderAdminActionButtons = (order) => {
+    const status = order.status
+    const actions = []
+    
+    if (status === 'Request Submitted') {
+      actions.push({ label: 'Approve Rental', status: 'Approved', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
+      actions.push({ label: 'Reject Rental', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
+    } else if (status === 'KYC Pending') {
+      actions.push({ label: 'KYC Reviewed & Approve', status: 'Approved', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
+      actions.push({ label: 'Reject KYC & Request', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
+    } else if (status === 'Approved' || status === 'KYC Approved') {
+      actions.push({ label: 'Mark Ready for Pickup', status: 'Ready for Pickup', style: 'bg-indigo-500 hover:bg-indigo-600 text-white' })
+      actions.push({ label: 'Reject Rental', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
+    } else if (status === 'Ready for Pickup') {
+      actions.push({ label: 'Confirm Pickup (Start Rental)', status: 'During Rental', style: 'bg-blue-500 hover:bg-blue-600 text-white' })
+    } else if (['During Rental', 'Picked Up', 'Return Pending', 'Active'].includes(status)) {
+      actions.push({ label: 'Mark Returned', status: 'Returned', style: 'bg-orange-500 hover:bg-orange-600 text-white', triggersReturnModal: true })
+    } else if (status === 'Returned') {
+      actions.push({ label: 'Close Order (Settled)', status: 'Closed', style: 'bg-green-600 hover:bg-green-700 text-white' })
+    }
+    
+    if (actions.length === 0) {
+      return (
+        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center py-3 bg-slate-50 rounded-xl border border-slate-100">
+          Order {status} (No Pending Actions)
+        </p>
+      )
+    }
+
+    return (
+      <div className="flex flex-col space-y-2 mt-4">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status Action Center</p>
+        {actions.map(act => (
+          <button
+            key={act.label}
+            onClick={() => {
+              if (act.triggersReturnModal) {
+                setIsReturnConfirming(order._id)
+              } else if (act.requiresReason) {
+                const reason = prompt("Enter reason for rejection:")
+                if (reason) {
+                  handleStatusTransition(order._id, act.status, { rejectionReason: reason })
+                }
+              } else {
+                handleStatusTransition(order._id, act.status)
+              }
+            }}
+            className={`w-full py-3.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all shadow-md ${act.style}`}
+          >
+            {act.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   const filteredOrders = allOrders.filter(order => {
     // Search filter
     const matchesSearch = 
@@ -44,14 +250,17 @@ const OrdersMonitor = () => {
 
     // Tab filter
     let matchesTab = true
+    const activeRentalStatuses = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+    const returnedClosedStatuses = ['Returned', 'Closed']
+
     if (activeTab === 'RENTED OUT') {
-      matchesTab = order.status !== 'Returned'
+      matchesTab = activeRentalStatuses.includes(order.status)
     } else if (activeTab === 'RETURNED') {
-      matchesTab = order.status === 'Returned'
+      matchesTab = returnedClosedStatuses.includes(order.status)
     } else if (activeTab === 'RETURN IN 3 DAYS') {
       const threeDaysFromNow = new Date()
       threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3)
-      matchesTab = order.status !== 'Returned' && new Date(order.endDate) <= threeDaysFromNow && new Date(order.endDate) >= new Date()
+      matchesTab = activeRentalStatuses.includes(order.status) && new Date(order.endDate) <= threeDaysFromNow && new Date(order.endDate) >= new Date()
     }
 
     // Date filter
@@ -212,48 +421,16 @@ const OrdersMonitor = () => {
                       >
                         <HiEye className="text-base" />
                       </button>
-                      
-                      {order.status === 'Returned' ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100">
-                            <HiCheckCircle className="text-sm" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">Returned</span>
-                          </div>
-                          {order.returnCondition && (
-                            <button 
-                              onClick={() => setEditingNotes({ 
-                                id: order._id, 
-                                notes: order.returnNotes || '', 
-                                condition: order.returnCondition 
-                              })}
-                              className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
-                              title="Click to Edit Return Details"
-                            >
-                              {order.returnCondition}
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <>
-                          <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${
-                            new Date(order.endDate) < new Date() 
-                            ? 'bg-red-50 text-red-500 border-red-100 shadow-red-50' 
-                            : 'bg-orange-50 text-primary border-primary/20 shadow-orange-50'
-                          }`}>
-                            {new Date(order.endDate) < new Date() ? <HiExclamationCircle className="text-sm" /> : <HiClock className="text-sm" />}
-                            <span className="text-[11px] font-black uppercase tracking-widest">
-                              {new Date(order.endDate) < new Date() ? 'Overdue' : 'Active'}
-                            </span>
-                          </div>
-                          <button 
-                            onClick={() => setIsReturnConfirming(order._id)}
-                            className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn"
-                          >
-                            <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-                            <span className="text-[11px] font-black uppercase tracking-widest">Mark Returned</span>
-                          </button>
-                        </>
+                      {order.userKyc?.kycDocuments && (order.userKyc.kycDocuments.aadhaarFront || order.userKyc.kycDocuments.panFront) && (
+                        <button 
+                          onClick={() => setSelectedKycOrder(order)}
+                          className="p-2 bg-amber-50 text-amber-500 hover:text-white hover:bg-amber-500 rounded-lg transition-all"
+                          title="View KYC Documents"
+                        >
+                          <HiIdentification className="text-base" />
+                        </button>
                       )}
+                      {renderTableStatusAndActions(order)}
                     </div>
                   </td>
                 </tr>
@@ -402,23 +579,26 @@ const OrdersMonitor = () => {
                       </div>
                     </div>
                   </div>
+                  {selectedOrder.userKyc?.kycDocuments && (selectedOrder.userKyc.kycDocuments.aadhaarFront || selectedOrder.userKyc.kycDocuments.panFront) && (
+                    <div className="mt-4">
+                      <button 
+                        onClick={() => setSelectedKycOrder(selectedOrder)}
+                        className="w-full flex items-center justify-center space-x-2 bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-md"
+                      >
+                        <HiIdentification className="text-sm" />
+                        <span>View User KYC Documents</span>
+                      </button>
+                    </div>
+                  )}
 
-                  {/* Summary */}
+                  {/* Summary & Transitions */}
                   <div className="pt-4 space-y-6">
                     <div className="bg-brand-navy p-6 rounded-3xl flex flex-col space-y-4 shadow-xl shadow-orange-100/20">
                       <div>
                         <p className="text-[11px] font-black text-cyan-400 uppercase tracking-widest mb-1">Total Revenue</p>
                         <p className="text-[28px] font-black text-white tracking-tighter leading-none">₹{selectedOrder.totalPrice.toLocaleString()}</p>
                       </div>
-                      
-                      {selectedOrder.status !== 'Returned' && (
-                        <button 
-                          onClick={() => setIsReturnConfirming(selectedOrder._id)}
-                          className="w-full bg-white text-brand-navy py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all shadow-lg"
-                        >
-                          Mark as Returned
-                        </button>
-                      )}
+                      {renderAdminActionButtons(selectedOrder)}
                     </div>
                   </div>
                 </div>
@@ -552,6 +732,149 @@ const OrdersMonitor = () => {
               >
                 Save Changes
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KYC Document Viewer Modal */}
+      {selectedKycOrder && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-start justify-center p-4 z-[100] overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white max-w-4xl w-full rounded-3xl relative shadow-2xl border-t-8 border-amber-500 my-8 animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => {
+                setSelectedKycOrder(null);
+                setKycRejectionReason('');
+              }}
+              className="absolute right-6 top-6 text-slate-300 hover:text-red-500 transition-colors p-2 text-2xl font-light"
+            >
+              <HiX />
+            </button>
+
+            <div className="p-8">
+              <div className="mb-6 border-b border-slate-50 pb-4">
+                <p className="text-brand-orange font-black uppercase tracking-[0.3em] text-[12px] mb-1">Order KYC Documents View</p>
+                <h2 className="text-[18px] font-black text-brand-navy uppercase tracking-widest">Verify Documents: {selectedKycOrder.userName}</h2>
+                <p className="text-[11px] text-slate-400 font-bold uppercase mt-1">Customer Class: {selectedKycOrder.userKyc?.customerClass || 'New'}</p>
+                <p className="text-[11px] text-slate-400 font-bold uppercase mt-0.5">Current KYC Status: {selectedKycOrder.userKyc?.kycStatus || 'Not Uploaded'}</p>
+              </div>
+
+              {/* Document Previews */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                {[
+                  { name: 'Aadhaar Front', key: 'aadhaarFront' },
+                  { name: 'Aadhaar Back', key: 'aadhaarBack' },
+                  { name: 'PAN Front', key: 'panFront' },
+                  { name: 'PAN Back', key: 'panBack' }
+                ].map(doc => {
+                  const url = selectedKycOrder.userKyc?.kycDocuments?.[doc.key];
+                  return (
+                    <div key={doc.key} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{doc.name}</p>
+                      {url ? (
+                        <div className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex items-center justify-center">
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="w-full h-full block cursor-zoom-in" title="Click to view full image">
+                            <img src={url} alt={doc.name} className="w-full h-full object-contain p-2 hover:scale-105 transition-transform" />
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="w-full h-48 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 text-[11px] uppercase font-black">
+                          Not Submitted
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons if order needs approval/rejection */}
+              {selectedKycOrder.userKyc?.kycStatus === 'Pending' ? (
+                <div className="border-t border-slate-100 pt-6">
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6 space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Rejection Feedback (Required if rejecting KYC)</label>
+                    <textarea 
+                      value={kycRejectionReason}
+                      onChange={e => setKycRejectionReason(e.target.value)}
+                      placeholder="EXPLAIN WHY THE DOCUMENTS ARE BEING REJECTED (E.G. IMAGE BLURRY, DOCUMENT NAME MISMATCH...)"
+                      className="w-full bg-white border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 outline-none transition-all resize-none h-24"
+                    />
+                  </div>
+
+                  <div className="flex space-x-3">
+                    <button 
+                      onClick={() => {
+                        setSelectedKycOrder(null);
+                        setKycRejectionReason('');
+                      }}
+                      className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!kycRejectionReason.trim()) return;
+                        try {
+                          const userId = selectedKycOrder.userKyc?._id;
+                          if (userId) {
+                            // Update user status
+                            await fetch(`${API_URL}/admin/users/${userId}/kyc`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ kycStatus: 'Rejected', kycRejectionReason })
+                            });
+                            // Update booking status to Rejected
+                            await handleStatusTransition(selectedKycOrder._id, 'Rejected', { rejectionReason: kycRejectionReason });
+                            setSelectedKycOrder(null);
+                            setKycRejectionReason('');
+                          } else {
+                            toast.error('Associated user ID not found');
+                          }
+                        } catch (err) {
+                          toast.error('Error rejecting KYC');
+                        }
+                      }}
+                      disabled={!kycRejectionReason.trim()}
+                      className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-rose-600 disabled:opacity-50 transition-all shadow-lg shadow-rose-100"
+                    >
+                      Reject KYC Documents
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const userId = selectedKycOrder.userKyc?._id;
+                          if (userId) {
+                            // Update user status
+                            await fetch(`${API_URL}/admin/users/${userId}/kyc`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ kycStatus: 'Approved', kycRejectionReason: '' })
+                            });
+                            // Update booking status to Approved
+                            await handleStatusTransition(selectedKycOrder._id, 'Approved');
+                            setSelectedKycOrder(null);
+                          } else {
+                            toast.error('Associated user ID not found');
+                          }
+                        } catch (err) {
+                          toast.error('Error approving KYC');
+                        }
+                      }}
+                      className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
+                    >
+                      Approve KYC Verified
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-t border-slate-100 pt-6 flex justify-end">
+                  <button 
+                    onClick={() => setSelectedKycOrder(null)}
+                    className="px-8 py-3 bg-brand-navy hover:bg-slate-800 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all"
+                  >
+                    Close Viewer
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
