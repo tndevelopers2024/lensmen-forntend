@@ -15,7 +15,7 @@ const NAVY = '#1e1b4b'
 const HERO_SLIDES = [
   { image: '/images/hero1.jpeg', title: '', subtitle: '' },
   { image: '/images/hero2.jpeg', title: '', subtitle: '' },
-  { image: '/images/hero4.jpeg', title: '', subtitle: '' },
+  { image: '/images/hero5.jpeg', title: '', subtitle: '' },
 ]
 
 const LandingPage = ({ setShowBookingModal }) => {
