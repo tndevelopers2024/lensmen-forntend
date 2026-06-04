@@ -13,9 +13,9 @@ import toast from 'react-hot-toast'
 const NAVY = '#1e1b4b'
 
 const HERO_SLIDES = [
-  { image: '/images/hero1.png', title: 'Professional Cinema Gear',  subtitle: 'Rent the best cameras for your next big project.' },
-  { image: '/images/hero2.png', title: 'Master-Class Optics',       subtitle: 'Ultra-sharp lenses for every cinematic perspective.' },
-  { image: '/images/hero3.png', title: 'Studio Lighting Kits',      subtitle: 'Shape your story with professional-grade lighting.' },
+  { image: '/images/hero1.jpeg', title: '', subtitle: '' },
+  { image: '/images/hero2.jpeg', title: '', subtitle: '' },
+  { image: '/images/hero4.jpeg', title: '', subtitle: '' },
 ]
 
 const LandingPage = ({ setShowBookingModal }) => {
@@ -93,15 +93,12 @@ const LandingPage = ({ setShowBookingModal }) => {
   return (
     <>
       {/* ── Hero ───────────────────────────────────────────────────── */}
-      <div className="relative h-[520px] overflow-hidden bg-slate-900">
+      <div className="relative h-[70vh] overflow-hidden bg-slate-900">
         {HERO_SLIDES.map((slide, i) => (
           <div key={i} className={`absolute inset-0 transition-opacity duration-1000 ${i === currentSlide ? 'opacity-100' : 'opacity-0'}`}>
             <img src={slide.image} alt={slide.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/40 to-transparent" />
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-              <p className="text-slate-300/80 text-xs tracking-[0.25em] uppercase font-medium mb-5">
-                Lensmen Rentals
-              </p>
               <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight tracking-tight max-w-3xl mb-4">
                 {slide.title}
               </h1>
@@ -178,10 +175,10 @@ const LandingPage = ({ setShowBookingModal }) => {
             <div className="flex items-end">
               <button
                 onClick={handleCheck}
-                className="w-full bg-slate-900 text-white h-[46px] rounded-xl font-semibold text-sm hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+                className="w-full bg-slate-900 text-white h-[46px] rounded-xl font-semibold text-sm hover:bg-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <HiOutlineSearch className="text-base" />
-                Check
+                Check Availability
               </button>
             </div>
           </div>
@@ -249,11 +246,11 @@ const LandingPage = ({ setShowBookingModal }) => {
                 className="group bg-white border border-slate-100 rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
               >
                 {/* Image */}
-                <Link to={`/product/${product._id}`} className="relative block h-48 bg-slate-50 overflow-hidden">
+                <Link to={`/product/${product._id}`} className="relative block h-48 bg-white overflow-hidden">
                   <img
                     src={product.imageUrl || ''}
                     alt={product.name}
-                    className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-400 ${soldOut ? 'grayscale opacity-70' : ''}`}
+                    className={`w-full h-full object-contain group-hover:scale-105 transition-transform duration-400 ${soldOut ? 'grayscale opacity-70' : ''}`}
                   />
                   {soldOut && (
                     <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center">
