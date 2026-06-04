@@ -1,111 +1,287 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { HiChartBar, HiCube, HiShoppingCart, HiCollection, HiLogout, HiUsers } from 'react-icons/hi'
+import { Layout, Menu, ConfigProvider, Button, Tooltip } from 'antd'
+import {
+  BarChartOutlined, AppstoreOutlined, ShoppingCartOutlined, TeamOutlined,
+  PlusOutlined, QuestionCircleOutlined, SettingOutlined, LogoutOutlined,
+  LeftOutlined, RightOutlined, AccountBookOutlined, FileTextOutlined,
+  TagsOutlined, UnorderedListOutlined, BellOutlined,
+} from '@ant-design/icons'
 import { useGlobal } from '../context/GlobalContext'
 
+const { Sider, Content } = Layout
+
+const BRAND = '#E5550F'
+const NAVY  = '#1e1b4b'
+
 const AdminLayout = ({ children, location }) => {
-  const { user, logout } = useGlobal()
-  const menuItems = [
-    { to: '/admin', icon: HiChartBar, label: 'Overview' },
-    { to: '/admin/all-products', icon: HiCollection, label: 'Inventory' },
-    { to: '/admin/products', icon: HiCube, label: 'Add Product' },
-    { to: '/admin/orders', icon: HiShoppingCart, label: 'Orders' },
-    { to: '/admin/users', icon: HiUsers, label: 'Users' },
+  const { user, logout, notifications } = useGlobal()
+  const unreadCount = notifications.filter(n => !n.read).length
+  const [collapsed, setCollapsed] = useState(false)
+
+  const navItems = [
+    { key: '/admin',          icon: <BarChartOutlined />,     label: <Link to="/admin">Overview</Link> },
+    {
+      key: 'inventory',
+      icon: <AppstoreOutlined />,
+      label: 'Inventory',
+      children: [
+        { key: '/admin/all-products', icon: <UnorderedListOutlined />, label: <Link to="/admin/all-products">Products</Link> },
+        { key: '/admin/categories',   icon: <TagsOutlined />,          label: <Link to="/admin/categories">Categories</Link> },
+      ],
+    },
+    { key: '/admin/orders',   icon: <ShoppingCartOutlined />, label: <Link to="/admin/orders">Orders</Link> },
+    { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
+    { key: '/admin/accounts', icon: <AccountBookOutlined />,  label: <Link to="/admin/accounts">Accounts</Link> },
+    { key: '/admin/quotes',   icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
   ]
 
+  const utilItems = [
+    {
+      key: '/admin/notifications',
+      icon: (
+        <span style={{ position: 'relative', display: 'inline-flex' }}>
+          <BellOutlined />
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: -4, right: -6,
+              background: '#E5550F', color: '#fff',
+              fontSize: 8, fontWeight: 800,
+              width: 14, height: 14, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              lineHeight: 1,
+            }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </span>
+      ),
+      label: (
+        <Link to="/admin/notifications" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Notifications</span>
+          {unreadCount > 0 && (
+            <span style={{
+              background: '#E5550F', color: '#fff',
+              fontSize: 10, fontWeight: 700,
+              padding: '1px 7px', borderRadius: 10,
+            }}>
+              {unreadCount}
+            </span>
+          )}
+        </Link>
+      ),
+    },
+    { key: '/admin/help',     icon: <QuestionCircleOutlined />, label: <Link to="/admin/help">Help</Link> },
+    { key: '/admin/settings', icon: <SettingOutlined />,        label: <Link to="/admin/settings">Settings</Link> },
+  ]
+
+  const initials = user?.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+
   return (
-    <div className="flex bg-[#f8fafc] p-4 gap-4 min-h-screen">
-      <aside className="w-64 bg-brand-navy text-white p-6 flex flex-col rounded-[1.5rem] shadow-2xl relative overflow-hidden h-[calc(100vh-2rem)] sticky top-4">
-        <div className="mb-10 relative z-10 flex flex-col items-center border-b border-white/10 pb-6">
-          <Link to="/" className="flex flex-col items-center space-y-3 group">
-            <div className="w-16 h-16 bg-white rounded-2xl p-2 shadow-xl group-hover:scale-110 transition-transform duration-500">
-              <img src="/logo.jpg" alt="Logo" className="w-full h-full object-contain" />
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: NAVY,
+          borderRadius: 8,
+          fontFamily: 'inherit',
+          colorBgContainer: '#ffffff',
+        },
+        components: {
+          Menu: {
+            itemSelectedBg: '#f0f1f7',
+            itemSelectedColor: NAVY,
+            itemHoverBg: '#f9fafb',
+            itemHeight: 40,
+            iconSize: 16,
+            itemPaddingInline: 12,
+            collapsedIconSize: 17,
+            itemColor: '#4b5563',
+            iconMarginInlineEnd: 10,
+          },
+          Table: {
+            borderRadius: 0,
+            headerBg: '#fafafa',
+            headerSortActiveBg: '#fafafa',
+            rowHoverBg: '#fafafa',
+          },
+          Modal: { borderRadius: 12 },
+          Button: { borderRadius: 8 },
+          Card: { borderRadius: 16 },
+          Tabs: { inkBarColor: NAVY, itemSelectedColor: NAVY, itemHoverColor: NAVY },
+          Input: { borderRadius: 8 },
+          Select: { borderRadius: 8 },
+          DatePicker: { borderRadius: 8 },
+        },
+      }}
+    >
+      <Layout style={{ minHeight: '100vh', background: '#f4f6f8' }}>
+
+        {/* ── Sidebar ─────────────────────────────────────────── */}
+        <Sider
+          collapsed={collapsed}
+          collapsedWidth={64}
+          width={220}
+          trigger={null}
+          style={{
+            background: '#fff',
+            borderRight: '1px solid #f0f0f0',
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+            {/* Logo + collapse */}
+            <div style={{
+              height: 60,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: collapsed ? 'center' : 'space-between',
+              padding: '0 16px',
+              borderBottom: '1px solid #f0f0f0',
+              flexShrink: 0,
+            }}>
+              {!collapsed && (
+                <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+                  <img
+                    src="/logo.jpg" alt="Logo"
+                    style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }}
+                  />
+                  <div style={{ lineHeight: 1.25 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: NAVY, letterSpacing: '-0.02em' }}>Lensmen</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>Rentals</div>
+                  </div>
+                </Link>
+              )}
+              <Button
+                type="text" size="small"
+                icon={collapsed
+                  ? <RightOutlined style={{ fontSize: 11 }} />
+                  : <LeftOutlined  style={{ fontSize: 11 }} />
+                }
+                onClick={() => setCollapsed(c => !c)}
+                style={{ color: '#9ca3af', width: 28, height: 28 }}
+              />
             </div>
-            <div className="text-center">
-              <h1 className="text-[14px] font-black uppercase text-white tracking-tighter">Lensmen</h1>
-              <h1 className="text-[14px] font-black uppercase text-primary tracking-tighter -mt-1">Rentals</h1>
+
+            {/* Add Product CTA */}
+            {/* <div style={{ padding: '10px 12px', borderBottom: '1px solid #f0f0f0', flexShrink: 0 }}>
+              <Tooltip title={collapsed ? 'Add Product' : ''} placement="right">
+                <Link to="/admin/all-products" style={{ textDecoration: 'none' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '7px 8px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#fff7ed')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <div style={{
+                      width: 26, height: 26,
+                      borderRadius: '50%',
+                      background: BRAND,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <PlusOutlined style={{ color: '#fff', fontSize: 12 }} />
+                    </div>
+                    {!collapsed && (
+                      <span style={{ fontSize: 13, fontWeight: 600, color: BRAND }}>Add Product</span>
+                    )}
+                  </div>
+                </Link>
+              </Tooltip>
+            </div> */}
+
+            {/* Main Nav */}
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingTop: 6 }}>
+              <Menu
+                mode="inline"
+                selectedKeys={[location.pathname]}
+                defaultOpenKeys={['/admin/all-products', '/admin/categories'].includes(location.pathname) ? ['inventory'] : []}
+                inlineCollapsed={collapsed}
+                items={navItems}
+                style={{ border: 'none', background: 'transparent' }}
+              />
             </div>
-          </Link>
-        </div>
 
-
-        <div className="mb-8 relative z-10">
-          <p className="text-[12px] font-black uppercase tracking-[0.3em] text-orange-300 mb-1 opacity-60">Admin Console</p>
-          <h2 className="text-[14px] font-black uppercase tracking-widest">Management</h2>
-        </div>
-
-        <nav className="flex-1 space-y-2 relative z-10">
-          {menuItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center space-x-3 p-3.5 font-black transition-all rounded-xl group ${location.pathname === item.to
-                ? 'bg-white text-brand-navy shadow-lg scale-105'
-                : 'hover:bg-white/10 text-white/70 hover:text-white'
-                }`}
-            >
-              <item.icon className={`text-xl ${location.pathname === item.to ? 'text-primary' : 'text-orange-400 group-hover:text-orange-300'}`} />
-              <span className="uppercase tracking-widest text-[12px]">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-
-        {/* User Profile Section at Bottom */}
-        <div className="mt-auto pt-6 border-t border-white/10 relative z-10">
-          <div className="flex items-center justify-between bg-white/5 p-3 rounded-2xl hover:bg-white/10 transition-all group">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center text-primary font-black text-xs uppercase">
-                {user?.fullName?.charAt(0)}
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-orange-300 uppercase tracking-widest opacity-60">Session Admin</p>
-                <p className="text-[12px] font-black text-white uppercase truncate max-w-[100px]">{user?.fullName}</p>
-              </div>
+            {/* Util Nav */}
+            <div style={{ flexShrink: 0, borderTop: '1px solid #f0f0f0', paddingBlock: 4 }}>
+              <Menu
+                mode="inline"
+                selectedKeys={[location.pathname]}
+                inlineCollapsed={collapsed}
+                items={utilItems}
+                style={{ border: 'none', background: 'transparent' }}
+              />
             </div>
-            <button 
-              onClick={logout}
-              className="p-2 hover:bg-red-500 rounded-lg transition-all text-white/40 hover:text-white group-hover:text-white/60"
-              title="Sign Out"
-            >
-              <HiLogout className="text-lg" />
-            </button>
-          </div>
-        </div>
-      </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Admin Top Header */}
-        <header className="h-16 flex items-center justify-between px-4 sticky top-0 z-30 bg-[#ffffff] rounded-xl mb-2">
-          <div className="flex items-center space-x-3 bg-white px-4 py-2 rounded-2xl border border-slate-100 shadow-sm">
-            <div className="w-1.5 h-5 bg-primary rounded-full"></div>
-            <h2 className="text-[12px] font-black uppercase text-brand-navy tracking-widest">
-              {menuItems.find(item => item.to === location.pathname)?.label || 'Dashboard'}
-            </h2>
-          </div>
+            {/* User Profile */}
+            <div style={{
+              flexShrink: 0,
+              borderTop: '1px solid #f0f0f0',
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              justifyContent: collapsed ? 'center' : 'flex-start',
+            }}>
+              <Tooltip title={collapsed ? user?.fullName : ''} placement="right">
+                <div style={{
+                  width: 32, height: 32,
+                  borderRadius: '50%',
+                  background: BRAND,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: 11, fontWeight: 700,
+                  flexShrink: 0, cursor: 'default',
+                }}>
+                  {initials}
+                </div>
+              </Tooltip>
 
-          <div className="flex items-center space-x-6">
-          
-            
-            <div className="h-8 w-px bg-slate-200"></div>
-            
-            <div className="flex items-center space-x-3">
-              <div className="text-right">
-                <p className="text-[12px] font-black text-brand-navy uppercase truncate max-w-[120px]">{user?.fullName}</p>
-                <p className="text-[12px] font-black text-primary uppercase tracking-widest">Administrator</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-slate-100 text-brand-navy font-black text-[12px] shadow-md">
-                {user?.fullName?.split(' ').map(n => n[0]).join('')}
-              </div>
+              {!collapsed && (
+                <>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13, fontWeight: 600, color: '#111827',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {user?.fullName}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Admin</div>
+                  </div>
+                  <Button
+                    type="text" size="small"
+                    icon={<LogoutOutlined style={{ fontSize: 13 }} />}
+                    onClick={logout}
+                    title="Sign out"
+                    style={{ color: '#9ca3af', width: 28, height: 28, flexShrink: 0 }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.background = 'transparent' }}
+                  />
+                </>
+              )}
             </div>
-          </div>
-        </header>
 
-        <main className="flex-1 bg-white rounded-[1.5rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-            {children}
           </div>
-        </main>
-      </div>
-    </div>
+        </Sider>
+
+        {/* ── Content ─────────────────────────────────────────── */}
+        <Content style={{ background: '#f4f6f8', overflowY: 'auto', minHeight: '100vh', padding: 32 }}>
+          {children}
+        </Content>
+
+      </Layout>
+    </ConfigProvider>
   )
 }
 

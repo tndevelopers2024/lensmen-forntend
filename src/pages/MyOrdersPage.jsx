@@ -281,7 +281,12 @@ const MyOrdersPage = () => {
                             className="w-16 h-16 object-cover rounded-xl shadow-lg"
                           />
                           <div className="flex-1">
-                            <h4 className="text-[13px] font-black text-brand-navy uppercase leading-tight">{item?.name || 'Unknown Product'}</h4>
+                            <h4 className="text-[13px] font-black text-brand-navy uppercase leading-tight">
+                              {item?.name || 'Unknown Product'}
+                              {item?.quantity > 1 && (
+                                <span className="ml-2 text-[10px] font-black text-primary bg-orange-50 px-1.5 py-0.5 rounded">×{item.quantity}</span>
+                              )}
+                            </h4>
                             <p className="text-[11px] text-brand-orange font-black uppercase mt-1">₹{item?.pricePerDay} / Day</p>
                           </div>
                         </div>

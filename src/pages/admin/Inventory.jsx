@@ -1,291 +1,436 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { HiTrash, HiPencil, HiX } from 'react-icons/hi'
+import {
+  Table, Button, Tag, Drawer, Form, Input, InputNumber,
+  Upload, Space, Popconfirm, Image, Tooltip, Divider,
+} from 'antd'
+import {
+  EditOutlined, DeleteOutlined, PlusOutlined,
+  BarcodeOutlined, CheckCircleOutlined, InboxOutlined, SyncOutlined,
+} from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
-import TablePagination from '../../components/TablePagination'
+import PageHeader from '../../components/PageHeader'
+import CategorySelect from '../../components/CategorySelect'
 
+const { TextArea } = Input
+const { Dragger }  = Upload
+
+const NAVY  = '#1e1b4b'
+const BRAND = '#E5550F'
+
+const dividerStyle = { fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }
+
+// ── Shared gallery grid (add + edit) ─────────────────────────────────
+const GalleryGrid = ({ existingUrls = [], newFiles = [], onRemoveExisting, onRemoveNew, onAdd }) => {
+  const totalCount = existingUrls.length + newFiles.length
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 20 }}>
+      {/* Existing saved images */}
+      {existingUrls.map((url, i) => (
+        <div key={`e-${i}`} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb', aspectRatio: '1' }}>
+          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <button type="button" onClick={() => onRemoveExisting(i)}
+            style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, lineHeight: 1 }}>
+            ×
+          </button>
+          <div style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(30,27,75,0.7)', color: '#fff', fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3 }}>SAVED</div>
+        </div>
+      ))}
+      {/* New (not yet uploaded) files */}
+      {newFiles.map((file, i) => (
+        <div key={`n-${i}`} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '2px solid #E5550F', aspectRatio: '1' }}>
+          <img src={URL.createObjectURL(file)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <button type="button" onClick={() => onRemoveNew(i)}
+            style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, lineHeight: 1 }}>
+            ×
+          </button>
+          <div style={{ position: 'absolute', bottom: 3, left: 3, background: 'rgba(229,85,15,0.85)', color: '#fff', fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 3 }}>NEW</div>
+        </div>
+      ))}
+      {/* Add slot */}
+      {totalCount < 5 && (
+        <label style={{ cursor: 'pointer', borderRadius: 8, border: '2px dashed #e5e7eb', background: '#f9fafb', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, aspectRatio: '1' }}>
+          <PlusOutlined style={{ color: '#9ca3af', fontSize: 18 }} />
+          <span style={{ fontSize: 10, color: '#9ca3af' }}>Add</span>
+          <input type="file" accept="image/*" multiple style={{ display: 'none' }}
+            onChange={e => { Array.from(e.target.files).slice(0, 5 - totalCount).forEach(f => onAdd(f)); e.target.value = '' }} />
+        </label>
+      )}
+    </div>
+  )
+}
+
+// ── Product Form body (shared by Add + Edit) ──────────────────────────
+const ProductForm = ({ form, totalQty, setTotalQty, imagePreview, onImageChange, isAdd,
+  galleryFiles, onAddGallery, onRemoveGallery,
+  existingGallery, onRemoveExistingGallery }) => (
+  <Form form={form} layout="vertical">
+
+    <Divider orientation="left" style={dividerStyle}>Product Image</Divider>
+    <Form.Item style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <Dragger beforeUpload={onImageChange} showUploadList={false} accept="image/*" style={{ borderRadius: 8 }}>
+            <InboxOutlined style={{ fontSize: 24, color: '#9ca3af' }} />
+            <p style={{ fontSize: 13, color: '#6b7280', margin: '6px 0 2px' }}>
+              {imagePreview ? 'Click or drag to replace image' : 'Click or drag to upload'}
+            </p>
+            <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>JPG, PNG, WEBP</p>
+          </Dragger>
+        </div>
+        {imagePreview && (
+          <img src={imagePreview} style={{ width: 80, height: 80, borderRadius: 10, objectFit: 'cover', border: '1px solid #e5e7eb', flexShrink: 0 }} alt="" />
+        )}
+      </div>
+    </Form.Item>
+
+    <Divider orientation="left" style={dividerStyle}>
+      Gallery Images
+      <span style={{ color: '#9ca3af', fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 11, marginLeft: 6 }}>— optional, up to 5</span>
+    </Divider>
+    <GalleryGrid
+      existingUrls={isAdd ? [] : (existingGallery || [])}
+      newFiles={galleryFiles || []}
+      onRemoveExisting={i => onRemoveExistingGallery && onRemoveExistingGallery(i)}
+      onRemoveNew={i => onRemoveGallery && onRemoveGallery(i)}
+      onAdd={f => onAddGallery && onAddGallery(f)}
+    />
+
+    <Divider orientation="left" style={dividerStyle}>Basic Information</Divider>
+
+    <Form.Item label="Product Name" name="name" rules={[{ required: true, message: 'Required' }]}>
+      <Input size="large" placeholder="e.g. Canon EOS R5" />
+    </Form.Item>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <Form.Item label="Daily Rate (₹)" name="pricePerDay" rules={[{ required: true, message: 'Required' }]}>
+        <InputNumber style={{ width: '100%' }} size="large" min={0} prefix="₹" />
+      </Form.Item>
+      <Form.Item label="SKU" name="sku">
+        <Input size="large" prefix={<BarcodeOutlined style={{ color: '#d1d5db' }} />} placeholder="Auto-generated" />
+      </Form.Item>
+    </div>
+
+    <Form.Item label="Category" name="category" rules={isAdd ? [{ required: true, message: 'Required' }] : []}>
+      <CategorySelect size="large" style={{ width: '100%' }} placeholder="Select or create a category" />
+    </Form.Item>
+
+    <Form.Item label="Description" name="description" rules={isAdd ? [{ required: true, message: 'Required' }] : []}>
+      <TextArea rows={3} placeholder="Features, accessories included, handling notes…" />
+    </Form.Item>
+
+    <Divider orientation="left" style={dividerStyle}>Inventory</Divider>
+
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <Form.Item label="Total Units Owned" name="totalQuantity" style={{ marginBottom: 0 }}>
+        <InputNumber
+          size="large" min={1} style={{ width: '100%' }}
+          onChange={v => {
+            setTotalQty(v || 1)
+            const cur = form.getFieldValue('availableQuantity') || 0
+            if (cur > (v || 1)) form.setFieldValue('availableQuantity', v || 1)
+          }}
+        />
+      </Form.Item>
+      <Form.Item label="Available Now" name="availableQuantity" style={{ marginBottom: 0 }}>
+        <InputNumber size="large" min={0} max={totalQty} style={{ width: '100%' }} />
+      </Form.Item>
+    </div>
+
+  </Form>
+)
+
+// ── Main page ─────────────────────────────────────────────────────────
 const AdminInventory = () => {
-  const { adminProductList, fetchAdminData, API_URL, categories } = useGlobal()
-  const [isConfirming, setIsConfirming] = useState(null)
-  const [showDropdown, setShowDropdown] = useState(false)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
+  const { adminProductList, fetchAdminData, fetchProducts, API_URL } = useGlobal()
 
+  // Edit state
   const [editingProduct, setEditingProduct] = useState(null)
+  const [editForm]  = Form.useForm()
+  const [saving,    setSaving]    = useState(false)
+  const [editQty,   setEditQty]   = useState(1)
+  const [editGallery,    setEditGallery]    = useState([])
+  const [editGalleryFiles, setEditGalleryFiles] = useState([])
+  const [editImagePreview, setEditImagePreview] = useState('')
 
-  const paginatedProducts = adminProductList.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  )
+  // Add state
+  const [addOpen,    setAddOpen]    = useState(false)
+  const [addForm]    = Form.useForm()
+  const [adding,     setAdding]     = useState(false)
+  const [addQty,     setAddQty]     = useState(1)
+  const [addFile,    setAddFile]    = useState(null)
+  const [addPreview, setAddPreview] = useState('')
+  const [galleryFiles, setGalleryFiles] = useState([])
 
-  const filteredCategories = categories.filter(cat => 
-    cat.toLowerCase().includes((editingProduct?.category || '').toLowerCase())
-  )
-
-  const deleteProduct = async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/products/${id}`, { method: 'DELETE' })
-      if (res.ok) {
-        toast.success('Product deleted')
-        fetchAdminData('/admin/all-products')
-      }
-    } catch (error) {
-      toast.error('Failed to delete product')
-    }
+  // ── Open edit ──────────────────────────────────────────────────────
+  const openEdit = (product) => {
+    const total = product.totalQuantity || 1
+    setEditQty(total)
+    setEditGallery(product.galleryImages || [])
+    setEditGalleryFiles([])
+    setEditImagePreview(product.imageUrl || '')
+    setEditingProduct({ ...product, newImage: null })
+    editForm.setFieldsValue({
+      name:              product.name,
+      pricePerDay:       product.pricePerDay,
+      description:       product.description,
+      category:          product.category,
+      sku:               product.sku || '',
+      totalQuantity:     total,
+      availableQuantity: product.availableQuantity ?? total,
+    })
   }
 
-
-
-  const handleUpdate = async (e) => {
-    e.preventDefault()
-    const formData = new FormData()
-    formData.append('name', editingProduct.name)
-    formData.append('description', editingProduct.description || '')
-    formData.append('pricePerDay', editingProduct.pricePerDay)
-    formData.append('isAvailable', editingProduct.isAvailable)
-    formData.append('category', editingProduct.category || '')
-    if (editingProduct.newImage) {
-      formData.append('image', editingProduct.newImage)
-    }
-
+  // ── Save edit ──────────────────────────────────────────────────────
+  const handleUpdate = async () => {
+    const values = await editForm.validateFields()
+    setSaving(true)
+    const fd = new FormData()
+    Object.entries(values).forEach(([k, v]) => { if (v !== undefined && v !== null) fd.append(k, v) })
+    if (editingProduct.newImage) fd.append('image', editingProduct.newImage)
+    fd.append('existingGallery', JSON.stringify(editGallery))
+    editGalleryFiles.forEach(f => fd.append('gallery', f))
     try {
-      const res = await fetch(`${API_URL}/products/${editingProduct._id}`, {
-        method: 'PUT',
-        body: formData
-      })
+      const res = await fetch(`${API_URL}/products/${editingProduct._id}`, { method: 'PUT', body: fd })
       if (res.ok) {
         toast.success('Product updated')
         setEditingProduct(null)
+        setEditGalleryFiles([])
         fetchAdminData('/admin/all-products')
-      }
-    } catch (error) {
-      toast.error('Update failed')
-    }
+      } else { const d = await res.json(); toast.error(d.message || 'Update failed') }
+    } catch { toast.error('Update failed') }
+    finally { setSaving(false) }
   }
 
+  // ── Add product ────────────────────────────────────────────────────
+  const openAdd = () => {
+    addForm.resetFields()
+    addForm.setFieldsValue({ totalQuantity: 1, availableQuantity: 1 })
+    setAddQty(1); setAddFile(null); setAddPreview(''); setGalleryFiles([])
+    setAddOpen(true)
+  }
+
+  const handleAdd = async () => {
+    const values = await addForm.validateFields()
+    setAdding(true)
+    const fd = new FormData()
+    Object.entries(values).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') fd.append(k, v) })
+    if (addFile) fd.append('image', addFile)
+    galleryFiles.forEach(f => fd.append('gallery', f))
+    try {
+      const res = await fetch(`${API_URL}/products`, { method: 'POST', body: fd })
+      if (res.ok) {
+        toast.success('Product added')
+        setAddOpen(false); setGalleryFiles([])
+        fetchProducts()
+        fetchAdminData('/admin/all-products')
+      } else { const d = await res.json(); toast.error(d.message || 'Failed') }
+    } catch { toast.error('Error adding product') }
+    finally { setAdding(false) }
+  }
+
+  // ── Sync stock ────────────────────────────────────────────────────
+  const [syncing, setSyncing] = useState(false)
+  const syncStock = async () => {
+    setSyncing(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/sync-stock`, { method: 'POST' })
+      const d = await res.json()
+      if (res.ok) {
+        toast.success(d.message)
+        fetchAdminData('/admin/all-products')
+        fetchProducts()
+      } else {
+        toast.error(d.message || 'Sync failed')
+      }
+    } catch { toast.error('Sync failed') }
+    finally { setSyncing(false) }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────
+  const deleteProduct = async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/products/${id}`, { method: 'DELETE' })
+      if (res.ok) { toast.success('Product deleted'); fetchAdminData('/admin/all-products') }
+    } catch { toast.error('Failed to delete') }
+  }
+
+  // ── Table columns ──────────────────────────────────────────────────
+  const columns = [
+    {
+      title: 'Product',
+      key: 'product',
+      render: (_, item) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Image
+            src={item.imageUrl} alt={item.name} width={44} height={44}
+            style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #f0f0f0', flexShrink: 0 }}
+            fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+          />
+          <div>
+            <div style={{ fontWeight: 600, color: NAVY, fontSize: 14 }}>{item.name}</div>
+            {item.sku && (
+              <div style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace', marginTop: 1 }}>
+                <BarcodeOutlined style={{ fontSize: 10, marginRight: 3 }} />{item.sku}
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Category',
+      dataIndex: 'category',
+      key: 'category',
+      render: cat => <Tag style={{ borderRadius: 6 }}>{cat || 'Uncategorised'}</Tag>,
+    },
+    {
+      title: 'Daily Rate',
+      dataIndex: 'pricePerDay',
+      key: 'pricePerDay',
+      render: price => (
+        <span style={{ fontWeight: 700, color: NAVY }}>
+          <span style={{ color: '#9ca3af' }}>₹</span>{price}
+          <span style={{ color: '#94a3b8', fontSize: 11, fontWeight: 400 }}> / day</span>
+        </span>
+      ),
+    },
+    {
+      title: 'Stock',
+      key: 'stock',
+      render: (_, item) => {
+        const avail = item.availableQuantity ?? (item.isAvailable ? 1 : 0)
+        const total = item.totalQuantity || 1
+        return (
+          <Tooltip title={`${avail} of ${total} available`}>
+            <span style={{ fontWeight: 600, color: avail > 0 ? '#10b981' : '#ef4444', fontSize: 13 }}>
+              {avail}<span style={{ color: '#d1d5db', fontWeight: 400 }}> / {total}</span>
+            </span>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      title: 'Status',
+      dataIndex: 'isAvailable',
+      key: 'isAvailable',
+      render: available =>
+        available
+          ? <Tag color="success" icon={<CheckCircleOutlined />}>In Stock</Tag>
+          : <Tag color="default">Rented Out</Tag>,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      align: 'center',
+      render: (_, item) => (
+        <Space>
+          <Button icon={<EditOutlined />} size="small" onClick={() => openEdit(item)} />
+          <Popconfirm
+            title="Delete this product?"
+            description="This action cannot be undone."
+            onConfirm={() => deleteProduct(item._id)}
+            okText="Delete" okButtonProps={{ danger: true }}
+          >
+            <Button icon={<DeleteOutlined />} size="small" danger />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ]
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <p className="text-brand-orange font-black uppercase tracking-[0.3em] text-[12px] mb-1">Stock Control</p>
-          <h2 className="text-[16px] font-black text-brand-navy uppercase tracking-widest">Inventory</h2>
-        </div>
-        <Link to="/admin/products" className="bg-primary text-white px-6 py-3 rounded-lg font-black text-[12px] uppercase tracking-widest hover:scale-105 transition-all shadow-md shadow-orange-100">Add New Product</Link>
-      </div>
+    <div>
+      <PageHeader
+        eyebrow="Inventory"
+        title="Products"
+        subtitle="Manage all rental equipment and availability"
+        actions={
+          <Space>
+            <Tooltip title="Recalculate available stock from active bookings">
+              <Button icon={<SyncOutlined spin={syncing} />} size="large" onClick={syncStock} loading={syncing}>
+                Sync Stock
+              </Button>
+            </Tooltip>
+            <Button type="primary" icon={<PlusOutlined />} size="large" onClick={openAdd}>
+              Add Product
+            </Button>
+          </Space>
+        }
+      />
 
-      <div className="bg-white rounded-2xl shadow-lg border border-slate-50 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-[#f8fafc] text-brand-navy uppercase text-[12px] tracking-[0.2em] font-black border-b border-slate-100">
-              <th className="p-4">Product Details</th>
-              <th className="p-4">Category</th>
-              <th className="p-4">Daily Rate</th>
-              <th className="p-4">Inventory Status</th>
-              <th className="p-4 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {paginatedProducts.map(item => (
-              <tr key={item._id} className="hover:bg-[#f8fafc]/50 transition-colors group">
-                <td className="p-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-lg overflow-hidden shadow-sm border border-white group-hover:border-brand-orange transition-colors">
-                      <img src={item.imageUrl} className="w-full h-full object-cover" alt={item.name} />
-                    </div>
-                    <div>
-                      <p className="font-black text-brand-navy uppercase text-[12px] mb-0.5 tracking-tight">{item.name}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <span className="text-[11px] font-black bg-slate-50 text-brand-navy px-3 py-1.5 rounded-lg uppercase tracking-widest border border-slate-100">
-                    {item.category || 'Gear'}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <div className="flex items-baseline space-x-0.5">
-                    <span className="text-brand-orange font-black text-[12px]">₹</span>
-                    <span className="text-brand-navy font-black text-[13px]">{item.pricePerDay}</span>
-                    <span className="text-slate-400 font-bold text-[10px] ml-1 uppercase tracking-tighter">/ day</span>
-                  </div>
-                </td>
-                <td className="p-4">
-                  {item.isAvailable ? (
-                    <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest border border-emerald-100">In Stock</span>
-                  ) : (
-                    <span className="bg-slate-50 text-slate-400 text-[10px] font-black px-2 py-1 rounded-md uppercase tracking-widest border border-slate-100">Out of Stock</span>
-                  )}
-                </td>
-                <td className="p-4">
-                  <div className="flex items-center justify-center space-x-2">
-                    <button 
-                      onClick={() => setEditingProduct(item)}
-                      className="p-2 text-slate-400 hover:text-brand-navy hover:bg-slate-50 rounded-lg transition-all"
-                    >
-                      <HiPencil />
-                    </button>
-                    <button 
-                      onClick={() => setIsConfirming(item._id)}
-                      className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <HiTrash />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <TablePagination 
-          totalItems={adminProductList.length}
-          rowsPerPage={rowsPerPage}
-          setRowsPerPage={setRowsPerPage}
-          currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
+      <Table
+        columns={columns}
+        dataSource={adminProductList}
+        rowKey="_id"
+        pagination={{
+          defaultPageSize: 10, showSizeChanger: true,
+          pageSizeOptions: ['5', '10', '20', '50'],
+          showTotal: (total, range) => `Showing ${range[0]}-${range[1]} of ${total}`,
+        }}
+        style={{ background: '#fff', borderRadius: 16 }}
+        bordered={false}
+      />
+
+      {/* ── Add Product Drawer ─────────────────────────────────────── */}
+      <Drawer
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        title={<span style={{ color: NAVY, fontWeight: 700 }}>Add Product</span>}
+        width={560}
+        extra={
+          <Button type="primary" loading={adding} onClick={handleAdd}>
+            Add to Inventory
+          </Button>
+        }
+        destroyOnHidden
+      >
+        <ProductForm
+          form={addForm}
+          totalQty={addQty}
+          setTotalQty={setAddQty}
+          imagePreview={addPreview}
+          onImageChange={file => { setAddFile(file); setAddPreview(URL.createObjectURL(file)); return false }}
+          isAdd
+          galleryFiles={galleryFiles}
+          onAddGallery={f => setGalleryFiles(prev => prev.length < 5 ? [...prev, f] : prev)}
+          onRemoveGallery={i => setGalleryFiles(prev => prev.filter((_, idx) => idx !== i))}
         />
-      </div>
+      </Drawer>
 
-      {/* Edit Modal */}
-      {editingProduct && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 relative animate-in zoom-in-95 duration-200">
-            <button onClick={() => setEditingProduct(null)} className="absolute right-4 top-4 text-slate-300 hover:text-slate-600">
-              <HiX className="text-2xl" />
-            </button>
-            <div className="mb-6">
-              <p className="text-brand-orange font-black uppercase tracking-[0.3em] text-[12px] mb-1">Gear Management</p>
-              <h2 className="text-[16px] font-black text-brand-navy uppercase tracking-widest">Edit Product</h2>
-            </div>
-            <form onSubmit={handleUpdate} className="space-y-4">
-              <div className="space-y-3">
-                <p className="text-[12px] font-black text-brand-orange uppercase tracking-widest ml-1">Update Visual Asset</p>
-                <div className="flex items-center space-x-4">
-                  <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-100 shadow-sm">
-                    <img src={editingProduct.newImage ? URL.createObjectURL(editingProduct.newImage) : editingProduct.imageUrl} className="w-full h-full object-cover" alt="Preview" />
-                  </div>
-                  <label className="flex-1 cursor-pointer">
-                    <div className="border border-dashed border-slate-200 p-3 rounded-lg flex flex-col items-center justify-center hover:bg-slate-50 transition-all">
-                      <span className="text-[12px] font-black text-brand-navy uppercase">Change Image</span>
-                      <input type="file" className="hidden" accept="image/*" onChange={e => setEditingProduct({...editingProduct, newImage: e.target.files[0]})} />
-                    </div>
-                  </label>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Gear Name</label>
-                  <input 
-                    type="text" 
-                    value={editingProduct.name} 
-                    onChange={e => setEditingProduct({...editingProduct, name: e.target.value})}
-                    className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-brand-orange outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Daily Rate (₹)</label>
-                  <input 
-                    type="number" 
-                    value={editingProduct.pricePerDay} 
-                    onChange={e => setEditingProduct({...editingProduct, pricePerDay: e.target.value})}
-                    className="w-full border-b border-slate-100 p-2 font-black text-[12px] focus:border-brand-orange outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Description</label>
-                <textarea 
-                  value={editingProduct.description || ''} 
-                  onChange={e => setEditingProduct({...editingProduct, description: e.target.value})}
-                  className="w-full border border-slate-100 p-3 rounded-xl font-medium text-[12px] focus:border-brand-orange outline-none min-h-[100px] resize-none bg-slate-50/50"
-                  placeholder="Enter gear specifications and details..."
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Availability</label>
-                <select 
-                  value={editingProduct.isAvailable} 
-                  onChange={e => setEditingProduct({...editingProduct, isAvailable: e.target.value === 'true'})}
-                  className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-brand-orange outline-none bg-white"
-                >
-                  <option value="true">In Stock</option>
-                  <option value="false">Rented Out</option>
-                </select>
-              </div>
-
-              <div className="space-y-1 relative">
-                <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1">Category (Search or Type)</label>
-                <input 
-                  type="text" 
-                  value={editingProduct.category || ''} 
-                  onChange={e => {
-                    setEditingProduct({...editingProduct, category: e.target.value})
-                    setShowDropdown(true)
-                  }}
-                  onFocus={() => setShowDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                  className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-brand-orange outline-none"
-                  placeholder="e.g. CAMERA, LENS"
-                />
-                {showDropdown && filteredCategories.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-40 overflow-y-auto">
-                    {filteredCategories.map((cat, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => {
-                          setEditingProduct({ ...editingProduct, category: cat })
-                          setShowDropdown(false)
-                        }}
-                        className="w-full text-left p-3 hover:bg-slate-50 text-[11px] font-black text-brand-navy uppercase border-b border-slate-50 last:border-0 transition-colors"
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button type="submit" className="w-full bg-brand-navy text-white p-4 rounded-xl font-black text-[12px] uppercase tracking-widest shadow-lg shadow-orange-100 mt-4 transition-all hover:bg-primary">Save Changes</button>
-            </form>
-          </div>
-        </div>
-      )}
- 
-
-      {/* Stylish Confirmation Popup */}
-      {isConfirming && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
-          <div className="bg-white max-w-sm w-full p-8 rounded-3xl shadow-2xl border border-slate-100 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl">
-              <HiTrash />
-            </div>
-            <h3 className="text-[18px] font-black text-slate-900 uppercase tracking-tight mb-2">Delete Product?</h3>
-            <p className="text-[12px] text-slate-400 font-medium uppercase tracking-widest mb-8 leading-relaxed">
-              Are you sure you want to remove this item from the inventory? This action cannot be undone.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => setIsConfirming(null)}
-                className="py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[12px] uppercase tracking-widest hover:bg-slate-100 transition-all"
-              >
-                No, Keep it
-              </button>
-              <button 
-                onClick={() => {
-                  deleteProduct(isConfirming)
-                  setIsConfirming(null)
-                }}
-                className="py-3 bg-red-500 text-white rounded-xl font-black text-[12px] uppercase tracking-widest hover:bg-red-600 shadow-lg shadow-red-100 transition-all"
-              >
-                Yes, Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Edit Product Drawer ────────────────────────────────────── */}
+      <Drawer
+        open={!!editingProduct}
+        onClose={() => setEditingProduct(null)}
+        title={<span style={{ color: NAVY, fontWeight: 700 }}>Edit Product</span>}
+        width={560}
+        extra={
+          <Button type="primary" loading={saving} onClick={handleUpdate}>
+            Save Changes
+          </Button>
+        }
+        destroyOnHidden
+      >
+        {editingProduct && (
+          <ProductForm
+            form={editForm}
+            totalQty={editQty}
+            setTotalQty={setEditQty}
+            isAdd={false}
+            imagePreview={editImagePreview}
+            onImageChange={file => {
+              setEditingProduct(p => ({ ...p, newImage: file }))
+              setEditImagePreview(URL.createObjectURL(file))
+              return false
+            }}
+            existingGallery={editGallery}
+            onRemoveExistingGallery={i => setEditGallery(prev => prev.filter((_, idx) => idx !== i))}
+            galleryFiles={editGalleryFiles}
+            onAddGallery={f => setEditGalleryFiles(prev => (prev.length + editGallery.length) < 5 ? [...prev, f] : prev)}
+            onRemoveGallery={i => setEditGalleryFiles(prev => prev.filter((_, idx) => idx !== i))}
+          />
+        )}
+      </Drawer>
     </div>
   )
 }

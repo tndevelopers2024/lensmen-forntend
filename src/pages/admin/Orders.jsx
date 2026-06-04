@@ -1,884 +1,887 @@
 import { useState } from 'react'
-import { useGlobal } from '../../context/GlobalContext'
+import {
+  Input, Button, Modal, Typography, Radio, DatePicker, Image,
+  Row, Col, Descriptions, Pagination, Space, Tooltip
+} from 'antd'
+import {
+  EyeOutlined, SafetyCertificateOutlined, CheckCircleOutlined,
+  ArrowRightOutlined, SearchOutlined, FilterOutlined, CloseOutlined,
+} from '@ant-design/icons'
 import toast from 'react-hot-toast'
-import DatePicker from 'react-datepicker'
-import "react-datepicker/dist/react-datepicker.css"
-import { HiCheckCircle, HiClock, HiExclamationCircle, HiArrowRight, HiShoppingCart, HiX, HiCalendar, HiLocationMarker, HiUser, HiPhone, HiMail, HiEye, HiIdentification } from 'react-icons/hi'
-import TablePagination from '../../components/TablePagination'
+import dayjs from 'dayjs'
+import { useGlobal } from '../../context/GlobalContext'
+import PageHeader from '../../components/PageHeader'
+import PaymentModal from '../../components/PaymentModal'
 
+const { Text } = Typography
+const { TextArea } = Input
+
+// ── Status config ────────────────────────────────────────────────────
+const STATUS_CFG = {
+  'Request Submitted': { color: '#94a3b8', bg: '#f8fafc', label: 'Submitted' },
+  'KYC Pending':       { color: '#f59e0b', bg: '#fffbeb', label: 'KYC Pending' },
+  'KYC Approved':      { color: '#10b981', bg: '#f0fdf4', label: 'KYC Approved' },
+  'Approved':          { color: '#10b981', bg: '#f0fdf4', label: 'Approved' },
+  'Ready for Pickup':  { color: '#6366f1', bg: '#eef2ff', label: 'Ready for Pickup' },
+  'During Rental':     { color: '#3b82f6', bg: '#eff6ff', label: 'Active Rental' },
+  'Picked Up':         { color: '#3b82f6', bg: '#eff6ff', label: 'Picked Up' },
+  'Active':            { color: '#3b82f6', bg: '#eff6ff', label: 'Active' },
+  'Return Pending':    { color: '#f97316', bg: '#fff7ed', label: 'Return Pending' },
+  'Returned':          { color: '#22c55e', bg: '#f0fdf4', label: 'Returned' },
+  'Closed':            { color: '#22c55e', bg: '#f0fdf4', label: 'Closed' },
+  'Rejected':          { color: '#ef4444', bg: '#fef2f2', label: 'Rejected' },
+}
+
+const cfg = (status) => STATUS_CFG[status] || { color: '#94a3b8', bg: '#f8fafc', label: status }
+
+// ── Active rental statuses ───────────────────────────────────────────
+const ACTIVE_STATUSES   = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+const RETURNED_STATUSES = ['Returned', 'Closed']
+
+// ── Main component ───────────────────────────────────────────────────
 const OrdersMonitor = () => {
   const { allOrders, API_URL } = useGlobal()
-  const [selectedOrder, setSelectedOrder] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeTab, setActiveTab] = useState('ALL RENTALS')
-  const [dateFilter, setDateFilter] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [rowsPerPage, setRowsPerPage] = useState(10)
-  const [isReturnConfirming, setIsReturnConfirming] = useState(null)
-  const [returnCondition, setReturnCondition] = useState('Good')
-  const [returnNotes, setReturnNotes] = useState('')
-  const [editingNotes, setEditingNotes] = useState({ id: null, notes: '', condition: '' })
-  const [selectedKycOrder, setSelectedKycOrder] = useState(null)
-  const [kycRejectionReason, setKycRejectionReason] = useState('')
 
+  const [selectedOrder,     setSelectedOrder]     = useState(null)
+  const [searchQuery,       setSearchQuery]       = useState('')
+  const [activeTab,         setActiveTab]         = useState('all')
+  const [dateFilter,        setDateFilter]        = useState(null)
+  const [currentPage,       setCurrentPage]       = useState(1)
+  const [pageSize,          setPageSize]          = useState(10)
+  const [isReturnConfirming,setIsReturnConfirming]= useState(null)
+  const [returnCondition,   setReturnCondition]   = useState('Good')
+  const [returnNotes,       setReturnNotes]       = useState('')
+  const [editingNotes,      setEditingNotes]      = useState({ id: null, notes: '', condition: '' })
+  const [selectedKycOrder,  setSelectedKycOrder]  = useState(null)
+  const [kycRejectionReason,setKycRejectionReason]= useState('')
+  const [actionLoading,     setActionLoading]     = useState(false)
+  const [paymentTarget,     setPaymentTarget]     = useState(null)
+  const [rejectTarget,      setRejectTarget]      = useState(null) // { orderId, targetStatus }
+  const [rejectReason,      setRejectReason]      = useState('')
+
+  // ── API helpers ────────────────────────────────────────────────────
   const updateBookingStatus = async (id, newStatus, condition = 'Good', notes = '') => {
     try {
       const res = await fetch(`${API_URL}/admin/bookings/${id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, returnCondition: condition, returnNotes: notes })
+        body: JSON.stringify({ status: newStatus, returnCondition: condition, returnNotes: notes }),
       })
-      if (res.ok) {
-        toast.success(`Marked as ${newStatus}`)
-        window.location.reload()
-      }
-    } catch (error) {
-      toast.error('Update failed')
-    }
+      if (res.ok) { toast.success(`Marked as ${newStatus}`) }
+    } catch { toast.error('Update failed') }
   }
 
-  const handleStatusTransition = async (orderId, targetStatus, extraBody = {}) => {
+  const handleTransition = async (orderId, targetStatus, extraBody = {}) => {
+    setActionLoading(true)
     try {
       const res = await fetch(`${API_URL}/admin/bookings/${orderId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus, ...extraBody })
+        body: JSON.stringify({ status: targetStatus, ...extraBody }),
       })
-      if (res.ok) {
-        toast.success(`Order transitioned to ${targetStatus}`)
-        setSelectedOrder(null)
-        window.location.reload()
-      } else {
-        toast.error('Failed to transition order')
-      }
-    } catch (err) {
-      toast.error('Error transitioning order')
-    }
+      if (res.ok) { toast.success(`→ ${targetStatus}`); setSelectedOrder(null) }
+      else toast.error('Failed')
+    } catch { toast.error('Error') }
+    finally { setActionLoading(false) }
   }
 
-  const renderTableStatusAndActions = (order) => {
-    const status = order.status
-
-    if (status === 'Closed') {
-      return (
-        <div className="flex items-center justify-center space-x-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-100 w-fit mx-auto">
-          <HiCheckCircle className="text-sm" />
-          <span className="text-[11px] font-black uppercase tracking-widest">Closed</span>
-        </div>
-      )
-    }
-
-    if (status === 'Rejected') {
-      return (
-        <div className="flex items-center justify-center space-x-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 w-fit mx-auto">
-          <HiExclamationCircle className="text-sm" />
-          <span className="text-[11px] font-black uppercase tracking-widest">Rejected</span>
-        </div>
-      )
-    }
-
-    if (status === 'Returned') {
-      return (
-        <div className="flex items-center justify-center gap-2">
-          <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100">
-            <HiCheckCircle className="text-sm" />
-            <span className="text-[11px] font-black uppercase tracking-widest">Returned</span>
-          </div>
-          {order.returnCondition && (
-            <button 
-              onClick={() => setEditingNotes({ 
-                id: order._id, 
-                notes: order.returnNotes || '', 
-                condition: order.returnCondition 
-              })}
-              className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
-              title="Click to Edit Return Details"
-            >
-              {order.returnCondition}
-            </button>
-          )}
-        </div>
-      )
-    }
-
-    let badgeColor = "bg-orange-50 text-primary border-primary/20 shadow-orange-50"
-    if (['During Rental', 'Picked Up', 'Active'].includes(status)) {
-      badgeColor = "bg-blue-50 text-blue-600 border-blue-200 shadow-blue-50"
-    } else if (status === 'Ready for Pickup') {
-      badgeColor = "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-indigo-50"
-    } else if (status === 'Request Submitted') {
-      badgeColor = "bg-slate-50 text-slate-500 border-slate-200 shadow-sm"
-    } else if (status === 'KYC Pending') {
-      badgeColor = "bg-amber-50 text-amber-600 border-amber-200 animate-pulse shadow-amber-50"
-    } else if (status === 'KYC Approved') {
-      badgeColor = "bg-cyan-50 text-cyan-600 border-cyan-200 shadow-cyan-50"
-    } else if (status === 'Approved') {
-      badgeColor = "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-emerald-50"
-    }
-
-    return (
-      <div className="flex items-center justify-center gap-3">
-        <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${badgeColor}`}>
-          <HiClock className="text-sm" />
-          <span className="text-[11px] font-black uppercase tracking-widest">{status}</span>
-        </div>
-        {status === 'KYC Pending' && (
-          <div className="flex items-center gap-1.5">
-            <button 
-              onClick={() => handleStatusTransition(order._id, 'Approved')}
-              className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
-              title="Approve KYC"
-            >
-              <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Approve</span>
-            </button>
-            <button 
-              onClick={() => {
-                const reason = prompt("Enter reason for KYC rejection:")
-                if (reason) {
-                  handleStatusTransition(order._id, 'Rejected', { rejectionReason: reason })
-                }
-              }}
-              className="flex items-center space-x-1 bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
-              title="Reject KYC"
-            >
-              <HiX className="text-xs group-hover/btn:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Reject</span>
-            </button>
-          </div>
-        )}
-        {status === 'Request Submitted' && (
-          <div className="flex items-center gap-1.5">
-            <button 
-              onClick={() => handleStatusTransition(order._id, 'Approved')}
-              className="flex items-center space-x-1 bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
-              title="Approve Rental"
-            >
-              <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Approve</span>
-            </button>
-            <button 
-              onClick={() => {
-                const reason = prompt("Enter reason for rejection:")
-                if (reason) {
-                  handleStatusTransition(order._id, 'Rejected', { rejectionReason: reason })
-                }
-              }}
-              className="flex items-center space-x-1 bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-xl transition-all shadow-md group/btn"
-              title="Reject Rental"
-            >
-              <HiX className="text-xs group-hover/btn:scale-110 transition-transform" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Reject</span>
-            </button>
-          </div>
-        )}
-        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(status) && (
-          <button 
-            onClick={() => setIsReturnConfirming(order._id)}
-            className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn"
-          >
-            <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-            <span className="text-[11px] font-black uppercase tracking-widest font-black">Mark Returned</span>
-          </button>
-        )}
-      </div>
-    )
-  }
-
-  const renderAdminActionButtons = (order) => {
-    const status = order.status
-    const actions = []
-    
-    if (status === 'Request Submitted') {
-      actions.push({ label: 'Approve Rental', status: 'Approved', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
-      actions.push({ label: 'Reject Rental', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
-    } else if (status === 'KYC Pending') {
-      actions.push({ label: 'KYC Reviewed & Approve', status: 'Approved', style: 'bg-emerald-500 hover:bg-emerald-600 text-white' })
-      actions.push({ label: 'Reject KYC & Request', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
-    } else if (status === 'Approved' || status === 'KYC Approved') {
-      actions.push({ label: 'Mark Ready for Pickup', status: 'Ready for Pickup', style: 'bg-indigo-500 hover:bg-indigo-600 text-white' })
-      actions.push({ label: 'Reject Rental', status: 'Rejected', style: 'bg-rose-500 hover:bg-rose-600 text-white', requiresReason: true })
-    } else if (status === 'Ready for Pickup') {
-      actions.push({ label: 'Confirm Pickup (Start Rental)', status: 'During Rental', style: 'bg-blue-500 hover:bg-blue-600 text-white' })
-    } else if (['During Rental', 'Picked Up', 'Return Pending', 'Active'].includes(status)) {
-      actions.push({ label: 'Mark Returned', status: 'Returned', style: 'bg-orange-500 hover:bg-orange-600 text-white', triggersReturnModal: true })
-    } else if (status === 'Returned') {
-      actions.push({ label: 'Close Order (Settled)', status: 'Closed', style: 'bg-green-600 hover:bg-green-700 text-white' })
-    }
-    
-    if (actions.length === 0) {
-      return (
-        <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest text-center py-3 bg-slate-50 rounded-xl border border-slate-100">
-          Order {status} (No Pending Actions)
-        </p>
-      )
-    }
-
-    return (
-      <div className="flex flex-col space-y-2 mt-4">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status Action Center</p>
-        {actions.map(act => (
-          <button
-            key={act.label}
-            onClick={() => {
-              if (act.triggersReturnModal) {
-                setIsReturnConfirming(order._id)
-              } else if (act.requiresReason) {
-                const reason = prompt("Enter reason for rejection:")
-                if (reason) {
-                  handleStatusTransition(order._id, act.status, { rejectionReason: reason })
-                }
-              } else {
-                handleStatusTransition(order._id, act.status)
-              }
-            }}
-            className={`w-full py-3.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all shadow-md ${act.style}`}
-          >
-            {act.label}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
+  // ── Filtering ──────────────────────────────────────────────────────
   const filteredOrders = allOrders.filter(order => {
-    // Search filter
-    const matchesSearch = 
-      order.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.userMobile?.includes(searchQuery) ||
-      order.userEmail?.toLowerCase().includes(searchQuery.toLowerCase())
+    const q = searchQuery.toLowerCase()
+    const matchSearch =
+      order.userName?.toLowerCase().includes(q) ||
+      order.userMobile?.includes(q) ||
+      order.userEmail?.toLowerCase().includes(q)
 
-    // Tab filter
-    let matchesTab = true
-    const activeRentalStatuses = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
-    const returnedClosedStatuses = ['Returned', 'Closed']
-
-    if (activeTab === 'RENTED OUT') {
-      matchesTab = activeRentalStatuses.includes(order.status)
-    } else if (activeTab === 'RETURNED') {
-      matchesTab = returnedClosedStatuses.includes(order.status)
-    } else if (activeTab === 'RETURN IN 3 DAYS') {
-      const threeDaysFromNow = new Date()
-      threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3)
-      matchesTab = activeRentalStatuses.includes(order.status) && new Date(order.endDate) <= threeDaysFromNow && new Date(order.endDate) >= new Date()
+    let matchTab = true
+    if (activeTab === 'rented')   matchTab = ACTIVE_STATUSES.includes(order.status)
+    if (activeTab === 'returned') matchTab = RETURNED_STATUSES.includes(order.status)
+    if (activeTab === 'due') {
+      const soon = new Date(); soon.setDate(soon.getDate() + 3)
+      matchTab = ACTIVE_STATUSES.includes(order.status) &&
+        new Date(order.endDate) <= soon && new Date(order.endDate) >= new Date()
     }
 
-    // Date filter
-    const matchesDate = !dateFilter || new Date(order.startDate).toLocaleDateString() === new Date(dateFilter).toLocaleDateString()
+    const matchDate = !dateFilter ||
+      new Date(order.startDate).toDateString() === dateFilter.toDate().toDateString()
 
-    return matchesSearch && matchesTab && matchesDate
+    return matchSearch && matchTab && matchDate
   })
 
-  const paginatedOrders = filteredOrders.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  )
+  const counts = {
+    all:      allOrders.length,
+    rented:   allOrders.filter(o => ACTIVE_STATUSES.includes(o.status)).length,
+    returned: allOrders.filter(o => RETURNED_STATUSES.includes(o.status)).length,
+    due: allOrders.filter(o => {
+      const soon = new Date(); soon.setDate(soon.getDate() + 3)
+      return ACTIVE_STATUSES.includes(o.status) && new Date(o.endDate) <= soon && new Date(o.endDate) >= new Date()
+    }).length,
+  }
 
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 bg-brand-navy rounded-2xl flex items-center justify-center shadow-lg shadow-brand-navy/20">
-            <HiShoppingCart className="text-white text-xl" />
-          </div>
-          <div>
-            <p className="text-primary font-black uppercase tracking-[0.3em] text-[12px] mb-0.5">Rental Pipeline</p>
-            <h2 className="text-[18px] font-black text-brand-navy uppercase tracking-widest leading-tight">Orders Monitor</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.1em]">Track, search and manage every booking</p>
-          </div>
-        </div>
+  const paginated = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-          <div className="relative group flex-1 sm:w-64">
-            <HiEye className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-brand-orange transition-colors" />
-            <input 
-              type="text"
-              placeholder="SEARCH BY NAME, MOBILE..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-[12px] font-black uppercase tracking-widest focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange outline-none transition-all shadow-sm"
-            />
-          </div>
-          <div className="relative group min-w-[200px]">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-              <HiCalendar className="text-slate-300 group-focus-within:text-brand-orange transition-colors" />
-            </div>
-            <DatePicker
-              selected={dateFilter ? new Date(dateFilter) : null}
-              onChange={(date) => setDateFilter(date)}
-              dateFormat="dd/MM/yyyy"
-              placeholderText="FILTER BY DATE"
-              isClearable
-              className="w-full pl-12 pr-4 py-4 bg-white border border-slate-100 rounded-2xl text-[12px] font-black uppercase tracking-widest focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange outline-none transition-all shadow-sm cursor-pointer"
-              wrapperClassName="w-full"
-              portalId="root"
-              popperProps={{ strategy: "fixed" }}
-            />
-          </div>
-        </div>
-      </div>
+  // ── Row: inline status actions ─────────────────────────────────────
+  const InlineStatus = ({ order }) => {
+    const s = order.status
+    const { color, label } = cfg(s)
 
-      <div className="flex flex-wrap gap-2 mb-8 bg-slate-50/50 p-2 rounded-2xl border border-slate-100 w-fit">
-        {['ALL RENTALS', 'RENTED OUT', 'RETURNED', 'RETURN IN 3 DAYS'].map(tab => (
+    if (s === 'Returned') return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <CheckCircleOutlined /> Returned
+        </span>
+        {order.returnCondition && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-6 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all ${
-              activeTab === tab 
-              ? 'bg-white text-brand-navy shadow-md shadow-slate-200/50 border border-slate-100' 
-              : 'text-slate-400 hover:text-brand-navy hover:bg-white/50'
-            }`}
+            onClick={() => setEditingNotes({ id: order._id, notes: order.returnNotes || '', condition: order.returnCondition })}
+            style={{
+              fontSize: 11, fontWeight: 600,
+              color: order.returnCondition === 'Good' ? '#22c55e' : '#ef4444',
+              background: order.returnCondition === 'Good' ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${order.returnCondition === 'Good' ? '#bbf7d0' : '#fecaca'}`,
+              borderRadius: 6, padding: '2px 8px', cursor: 'pointer',
+            }}
           >
-            {tab}
+            {order.returnCondition}
           </button>
+        )}
+      </div>
+    )
+
+    if (s === 'Rejected') return (
+      <span style={{ color: '#ef4444', fontSize: 13, fontWeight: 600 }}>Rejected</span>
+    )
+
+    if (s === 'Closed') return (
+      <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>Closed</span>
+    )
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{
+          fontSize: 12, fontWeight: 600, color,
+          background: cfg(s).bg,
+          border: `1px solid ${color}30`,
+          borderRadius: 6, padding: '2px 8px',
+        }}>{label}</span>
+
+        {(s === 'KYC Pending' || s === 'Request Submitted') && (
+          <>
+            <button
+              onClick={() => handleTransition(order._id, 'Approved')}
+              style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: '#10b981', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
+            >Approve</button>
+            <button
+              onClick={() => { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: 'Rejected' }) }}
+              style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', background: '#fff', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
+            >Reject</button>
+          </>
+        )}
+
+        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(s) && (
+          <button
+            onClick={() => setIsReturnConfirming(order._id)}
+            style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: '#1e1b4b', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
+          >Mark Returned</button>
+        )}
+      </div>
+    )
+  }
+
+  // ── Detail modal action buttons ────────────────────────────────────
+  const DetailActions = ({ order }) => {
+    const s = order.status
+    const map = {
+      'Request Submitted': [
+        { label: 'Approve Rental', target: 'Approved', primary: true },
+        { label: 'Reject',         target: 'Rejected', danger: true, needsReason: true },
+      ],
+      'KYC Pending': [
+        { label: 'Approve KYC',    target: 'Approved', primary: true },
+        { label: 'Reject KYC',     target: 'Rejected', danger: true, needsReason: true },
+      ],
+    }
+    if (['Approved', 'KYC Approved'].includes(s)) {
+      map[s] = [
+        { label: 'Ready for Pickup', target: 'Ready for Pickup', primary: true },
+        { label: 'Reject', target: 'Rejected', danger: true, needsReason: true },
+      ]
+    }
+    if (s === 'Ready for Pickup') map[s] = [{ label: 'Confirm Pickup', target: 'During Rental', primary: true }]
+    if (['During Rental', 'Picked Up', 'Return Pending', 'Active'].includes(s)) {
+      map[s] = [{ label: 'Mark Returned', target: 'Returned', modal: true }]
+    }
+    if (s === 'Returned') map[s] = [{ label: 'Close Order', target: 'Closed', primary: true }]
+
+    const actions = map[s] || []
+    if (!actions.length) return <Text type="secondary" style={{ fontSize: 12 }}>No pending actions</Text>
+
+    return (
+      <Space direction="vertical" style={{ width: '100%' }}>
+        {actions.map(a => (
+          <Button
+            key={a.label}
+            type={a.primary ? 'primary' : 'default'}
+            danger={a.danger}
+            block
+            loading={actionLoading}
+            onClick={() => {
+              if (a.modal) { setIsReturnConfirming(order._id) }
+              else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
+              else handleTransition(order._id, a.target)
+            }}
+          >{a.label}</Button>
         ))}
-      </div>
+      </Space>
+    )
+  }
 
-      <div className="bg-white rounded-2xl shadow-lg border border-slate-50 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-[#f8fafc] text-brand-navy uppercase text-[12px] tracking-[0.2em] font-black border-b border-slate-100">
-              <th className="p-6">Equipment Details</th>
-              <th className="p-6">Client & Contact</th>
-              <th className="p-6">Return Schedule</th>
-              <th className="p-6 text-center">Actions & Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {filteredOrders.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="p-20 text-center">
-                  <div className="flex flex-col items-center">
-                    <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 border-2 border-dashed border-slate-100">
-                      <HiShoppingCart className="text-slate-200 text-2xl" />
-                    </div>
-                    <p className="text-[12px] font-black text-slate-300 uppercase tracking-[0.2em]">No results found</p>
-                    <p className="text-[12px] text-slate-400 font-bold uppercase tracking-widest mt-1">Try adjusting your filters or search query</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              paginatedOrders.map(order => (
-                <tr key={order._id} className="hover:bg-[#f8fafc]/50 transition-colors group">
-                  <td className="p-6">
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-24 flex items-center -space-x-4 flex-shrink-0">
-                          {(order.items && order.items.length > 0 ? order.items : [order.productId]).slice(0, 3).map((item, idx) => (
-                            <div key={idx} className="relative">
-                              <div className="w-10 h-10 rounded-lg overflow-hidden border-2 border-white shadow-sm bg-white">
-                                <img src={item?.productId?.imageUrl || item?.imageUrl} className="w-full h-full object-cover" alt="" />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="space-y-1">
-                           {(order.items && order.items.length > 0 ? order.items : [order.productId]).slice(0, 2).map((item, idx) => (
-                             <div key={idx} className="flex items-center space-x-2">
-                               <div className="w-1 h-1 bg-brand-navy/30 rounded-full flex-shrink-0"></div>
-                               <p className="text-brand-navy font-black uppercase text-[11px] tracking-tight truncate max-w-[150px]">{item?.name || 'Item'}</p>
-                             </div>
-                           ))}
-                           {(order.items?.length > 2) && <p className="text-[9px] text-slate-400 font-black uppercase ml-2.5">+{order.items.length - 2} More Items</p>}
-                        </div>
-                      </div>
-                      {order.status === 'Returned' && order.returnNotes && (
-                        <div className="ml-auto flex items-center pr-4">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight italic bg-slate-50/50 px-3 py-1.5 rounded-xl border border-slate-100 max-w-[200px] truncate" title={order.returnNotes}>
-                            "{order.returnNotes}"
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-6">
-                    <div className="flex items-center space-x-2">
-                      <p className="font-black text-brand-navy uppercase text-[12px] tracking-tight">{order.userName}</p>
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${order.accountType === 'Company' ? 'bg-orange-50 text-primary border border-primary/20' : 'bg-slate-50 text-slate-400 border border-slate-100'}`}>
-                        {order.accountType || 'Private'}
-                      </span>
-                    </div>
-                    <p className="text-[12px] text-brand-orange font-black mt-0.5">{order.userMobile || 'No Contact'}</p>
-                    <p className="text-[11px] text-slate-400 font-medium lowercase tracking-tight">{order.userEmail}</p>
-                  </td>
-                  <td className="p-6">
-                    <div className="flex flex-col">
-                      <span className="text-brand-navy font-black text-[12px] tracking-tighter">
-                        {new Date(order.endDate).toLocaleDateString('en-GB')}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-black uppercase mt-0.5 flex items-center">
-                        <HiClock className="mr-1 text-[10px]" />
-                        At {new Date(order.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-6">
-                    <div className="flex items-center justify-center gap-3">
-                      <button 
-                        onClick={() => setSelectedOrder(order)}
-                        className="p-2 bg-slate-50 text-slate-300 hover:text-brand-navy hover:bg-slate-100 rounded-lg transition-all"
-                        title="View Full Details"
-                      >
-                        <HiEye className="text-base" />
-                      </button>
-                      {order.userKyc?.kycDocuments && (order.userKyc.kycDocuments.aadhaarFront || order.userKyc.kycDocuments.panFront) && (
-                        <button 
-                          onClick={() => setSelectedKycOrder(order)}
-                          className="p-2 bg-amber-50 text-amber-500 hover:text-white hover:bg-amber-500 rounded-lg transition-all"
-                          title="View KYC Documents"
-                        >
-                          <HiIdentification className="text-base" />
-                        </button>
-                      )}
-                      {renderTableStatusAndActions(order)}
-                    </div>
-                  </td>
-                </tr>
-              ))
+  // ── Tab pill ───────────────────────────────────────────────────────
+  const TabPill = ({ id, label }) => {
+    const active = activeTab === id
+    return (
+      <button
+        onClick={() => { setActiveTab(id); setCurrentPage(1) }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 14px',
+          borderRadius: 20,
+          border: active ? '1.5px solid #1e1b4b' : '1.5px solid #e5e7eb',
+          background: active ? '#1e1b4b' : 'transparent',
+          color: active ? '#fff' : '#6b7280',
+          fontSize: 13, fontWeight: active ? 600 : 500,
+          cursor: 'pointer', transition: 'all 0.15s',
+        }}
+      >
+        {label}
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          background: active ? 'rgba(255,255,255,0.2)' : '#e5e7eb',
+          color: active ? '#fff' : '#6b7280',
+          borderRadius: 10, padding: '1px 7px',
+          minWidth: 20, textAlign: 'center',
+        }}>
+          {counts[id]}
+        </span>
+      </button>
+    )
+  }
+
+  // ── Order row ──────────────────────────────────────────────────────
+  const OrderRow = ({ order }) => {
+    const items = order.items?.length ? order.items : [order.productId]
+    const hasKyc = order.userKyc?.kycDocuments &&
+      (order.userKyc.kycDocuments.aadhaarFront || order.userKyc.kycDocuments.panFront)
+
+    return (
+      <div
+        style={{
+          display: 'flex', alignItems: 'center',
+          borderBottom: '1px solid #f3f4f6',
+          padding: '14px 20px 14px 18px',
+          gap: 0,
+          background: '#fff',
+          transition: 'background 0.12s',
+          cursor: 'pointer',
+        }}
+        onClick={() => setSelectedOrder(order)}
+        onMouseEnter={e => (e.currentTarget.style.background = '#fafafa')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+      >
+        {/* Equipment */}
+        <div style={{ flex: '0 0 300px', display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
+            {items.slice(0, 3).map((item, i) => (
+              <img
+                key={i}
+                src={item?.productId?.imageUrl || item?.imageUrl || ''}
+                alt=""
+                style={{
+                  width: 36, height: 36, borderRadius: 7,
+                  objectFit: 'cover', objectPosition: 'center',
+                  border: '1px solid #f0f0f0', background: '#f9f9f9',
+                }}
+              />
+            ))}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            {items.slice(0, 2).map((item, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#d1d5db', flexShrink: 0 }} />
+                <span style={{
+                  fontSize: 13, fontWeight: 600, color: '#111827',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {item?.name || 'Unknown Item'}
+                </span>
+              </div>
+            ))}
+            {items.length > 2 && (
+              <div style={{ fontSize: 11, color: '#9ca3af', marginLeft: 11, marginTop: 2 }}>
+                +{items.length - 2} More Items
+              </div>
             )}
-          </tbody>
-        </table>
-        <TablePagination 
-          totalItems={filteredOrders.length}
-          rowsPerPage={rowsPerPage}
-          setRowsPerPage={setRowsPerPage}
-          currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
-        />
+          </div>
+        </div>
+
+        {/* Client */}
+        <div style={{ flex: '0 0 220px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{order.userName}</span>
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              background: '#f3f4f6', color: '#6b7280',
+              padding: '1px 6px', borderRadius: 4,
+            }}>
+              {order.accountType || 'Private'}
+            </span>
+          </div>
+          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 1 }}>
+            {order.userMobile || '—'}
+          </div>
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>{order.userEmail}</div>
+        </div>
+
+        {/* Return date */}
+        <div style={{ flex: '0 0 140px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+            {new Date(order.endDate).toLocaleDateString('en-GB')}
+          </div>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 1 }}>
+            At {new Date(order.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+          </div>
+        </div>
+
+        {/* Actions + Status */}
+        <div
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}
+          onClick={e => e.stopPropagation()}
+        >
+          <Tooltip title="View Order Details">
+            <button
+              onClick={() => setSelectedOrder(order)}
+              style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: '#f9fafb', border: '1px solid #f0f0f0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', color: '#9ca3af',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#f0f0f0'; e.currentTarget.style.color = '#374151' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#f9fafb'; e.currentTarget.style.color = '#9ca3af' }}
+            >
+              <EyeOutlined style={{ fontSize: 14 }} />
+            </button>
+          </Tooltip>
+
+          {hasKyc && (
+            <Tooltip title="View KYC Documents">
+              <button
+                onClick={() => setSelectedKycOrder(order)}
+                style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: '#f9fafb', border: '1px solid #e5e7eb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', color: '#6b7280',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <SafetyCertificateOutlined style={{ fontSize: 14 }} />
+              </button>
+            </Tooltip>
+          )}
+
+          <InlineStatus order={order} />
+
+          {/* Payment button — shown for financially active orders */}
+          {['Ready for Pickup', 'During Rental', 'Picked Up', 'Return Pending', 'Returned', 'Closed', 'Active'].includes(order.status) && (
+            <Tooltip title={order.pendingAmount > 0 ? `₹${order.pendingAmount?.toLocaleString()} pending` : 'Fully Paid'}>
+              <button
+                onClick={() => setPaymentTarget(order)}
+                style={{
+                  width: 32, height: 32, borderRadius: 8, fontWeight: 800, fontSize: 13,
+                  background: '#f9fafb',
+                  border: '1px solid #e5e7eb',
+                  color: order.pendingAmount > 0 ? '#374151' : '#6b7280',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >₹</button>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Rental Pipeline"
+        title="Orders Monitor"
+        subtitle="Track, search and manage every booking"
+        actions={
+          <Space>
+            <Input
+              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+              placeholder="Search by name, mobile..."
+              value={searchQuery}
+              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
+              allowClear
+              style={{ width: 240 }}
+            />
+            <DatePicker
+              placeholder="Filter by date"
+              value={dateFilter}
+              onChange={d => { setDateFilter(d); setCurrentPage(1) }}
+              allowClear
+              style={{ width: 155 }}
+            />
+          </Space>
+        }
+      />
+
+      {/* Filter Tabs */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        <TabPill id="all"      label="All Rentals" />
+        <TabPill id="rented"   label="Rented Out" />
+        <TabPill id="returned" label="Returned" />
+        <TabPill id="due"      label="Return in 3 Days" />
       </div>
 
-      {/* Admin Order Detail Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-start justify-center p-4 z-50 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white max-w-6xl w-full rounded-3xl relative shadow-2xl border-t-8 border-brand-navy my-8 animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setSelectedOrder(null)}
-              className="absolute right-6 top-6 text-slate-300 hover:text-red-500 transition-colors p-2 text-2xl font-light"
-            >
-              <HiX />
-            </button>
+      {/* Order list card */}
+      <div style={{
+        background: '#fff',
+        borderRadius: 16,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        overflow: 'hidden',
+        border: '1px solid #f0f0f0',
+      }}>
+        {/* Column headers */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 20px 10px 22px',
+          background: '#fafafa',
+          borderBottom: '1px solid #f0f0f0',
+          gap: 0,
+        }}>
+          <div style={{ flex: '0 0 300px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Equipment Details</div>
+          <div style={{ flex: '0 0 220px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Client & Contact</div>
+          <div style={{ flex: '0 0 140px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Return Schedule</div>
+          <div style={{ flex: 1,          fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Actions & Status</div>
+        </div>
 
-            <div className="p-10">
-              <div className="mb-8 border-b border-slate-50 pb-6 flex justify-between items-end">
-                <div>
-                  <p className="text-brand-orange font-black uppercase tracking-[0.3em] text-[12px] mb-1">Internal Order View</p>
-                  <h2 className="text-[20px] font-black text-brand-navy uppercase tracking-widest">Order Details</h2>
-                  <p className="text-[12px] text-slate-400 font-bold uppercase mt-1">Ref: {selectedOrder._id}</p>
-                </div>
-                <div className="text-right">
-                   <span className={`px-4 py-1.5 rounded-full text-[12px] font-black uppercase tracking-[0.2em] ${selectedOrder.status === 'Returned' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-orange-50 text-primary border border-primary/20'}`}>
-                    {selectedOrder.status}
-                   </span>
-                </div>
+        {/* Rows */}
+        {paginated.length === 0 ? (
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#d1d5db' }}>
+            <FilterOutlined style={{ fontSize: 32, marginBottom: 12, display: 'block' }} />
+            <div style={{ fontSize: 13, fontWeight: 600 }}>No orders match your filters</div>
+          </div>
+        ) : (
+          paginated.map(order => <OrderRow key={order._id} order={order} />)
+        )}
+
+        {/* Pagination */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 20px',
+          borderTop: '1px solid #f3f4f6',
+          background: '#fafafa',
+        }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Showing {filteredOrders.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length}
+          </Text>
+          <Pagination
+            current={currentPage}
+            pageSize={pageSize}
+            total={filteredOrders.length}
+            onChange={(p, ps) => { setCurrentPage(p); setPageSize(ps) }}
+            showSizeChanger
+            pageSizeOptions={['5', '10', '20', '50']}
+            size="small"
+          />
+        </div>
+      </div>
+
+      {/* ── Order Detail Modal ───────────────────────────────────────── */}
+      <Modal
+        open={!!selectedOrder}
+        onCancel={() => setSelectedOrder(null)}
+        footer={null}
+        width={1140}
+        styles={{ body: { padding: '0 28px 28px' } }}
+        title={
+          <Space>
+            <span style={{ color: '#1e1b4b', fontWeight: 700, fontSize: 16 }}>Order Details</span>
+            <Text type="secondary" style={{ fontSize: 12 }}>#{selectedOrder?._id?.slice(-8).toUpperCase()}</Text>
+            {selectedOrder && (
+              <span style={{
+                fontSize: 11, fontWeight: 700,
+                color: cfg(selectedOrder.status).color,
+                background: cfg(selectedOrder.status).bg,
+                border: `1px solid ${cfg(selectedOrder.status).color}30`,
+                borderRadius: 6, padding: '2px 10px',
+              }}>
+                {cfg(selectedOrder.status).label}
+              </span>
+            )}
+          </Space>
+        }
+        destroyOnHidden
+      >
+        {selectedOrder && (() => {
+          const MILESTONES = [
+            { label: 'Submitted',  statuses: ['Request Submitted', 'KYC Pending'] },
+            { label: 'KYC Done',   statuses: ['KYC Approved'] },
+            { label: 'Approved',   statuses: ['Approved'] },
+            { label: 'Ready',      statuses: ['Ready for Pickup'] },
+            { label: 'Active',     statuses: ['Picked Up', 'During Rental', 'Return Pending', 'Active'] },
+            { label: 'Closed',     statuses: ['Returned', 'Closed'] },
+          ]
+          const isRejected   = selectedOrder.status === 'Rejected'
+          const activeIdx    = isRejected ? -1 : MILESTONES.findIndex(m => m.statuses.includes(selectedOrder.status))
+          const trackPct     = activeIdx >= 0 ? (activeIdx / (MILESTONES.length - 1)) * 100 : 0
+
+          return (
+            <>
+              {/* ── Status stepper ─────────────────────────── */}
+              <div style={{ background: '#f8fafc', border: '1px solid #eef0f3', borderRadius: 14, padding: '20px 28px', marginBottom: 24, marginTop: 8 }}>
+                {isRejected ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 0' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <span style={{ color: '#ef4444', fontSize: 20 }}>✕</span>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#991b1b', fontSize: 14 }}>Rental Request Rejected</div>
+                      {selectedOrder.rejectionReason && (
+                        <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 3 }}>
+                          Reason: <em>"{selectedOrder.rejectionReason}"</em>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ position: 'relative' }}>
+                    {/* Track */}
+                    <div style={{ position: 'absolute', left: '6%', right: '6%', top: 16, height: 3, background: '#e5e7eb', borderRadius: 2, zIndex: 0 }} />
+                    <div style={{
+                      position: 'absolute', left: '6%', top: 16, height: 3,
+                      background: 'linear-gradient(90deg, #10b981, #1e1b4b)',
+                      borderRadius: 2, zIndex: 1,
+                      width: `${trackPct * 0.88}%`,
+                      transition: 'width 0.5s ease',
+                    }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
+                      {MILESTONES.map((m, i) => {
+                        const done   = i < activeIdx
+                        const active = i === activeIdx
+                        return (
+                          <div key={m.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                            <div style={{
+                              width: 34, height: 34, borderRadius: '50%',
+                              background: done ? '#10b981' : active ? '#1e1b4b' : '#fff',
+                              border: done || active ? 'none' : '2px solid #e5e7eb',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 13, fontWeight: 700,
+                              color: done || active ? '#fff' : '#d1d5db',
+                              boxShadow: active ? '0 0 0 5px rgba(30,27,75,0.12)' : done ? '0 0 0 3px rgba(16,185,129,0.15)' : 'none',
+                              transition: 'all 0.3s',
+                            }}>
+                              {done ? '✓' : i + 1}
+                            </div>
+                            <span style={{
+                              fontSize: 10, fontWeight: active ? 700 : done ? 600 : 500,
+                              color: done ? '#10b981' : active ? '#1e1b4b' : '#9ca3af',
+                              textTransform: 'uppercase', letterSpacing: '0.06em',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {m.label}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                {/* Column 1: Equipment List */}
-                <div className="space-y-4">
-                  <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Equipment List</p>
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-100">
-                    {(selectedOrder.items && selectedOrder.items.length > 0 ? selectedOrder.items : [selectedOrder.productId]).map((item, idx) => (
-                      <div key={idx} className="p-4 bg-slate-50/50 rounded-2xl border border-slate-100 space-y-3">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-white rounded-xl overflow-hidden border border-slate-100 p-1">
-                             <img src={item?.productId?.imageUrl || item?.imageUrl || 'https://via.placeholder.com/100'} className="w-full h-full object-contain" alt="" />
+              {/* ── 3-column content ───────────────────────── */}
+              <Row gutter={20}>
+                {/* Equipment */}
+                <Col span={8}>
+                  <Text strong style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Equipment</Text>
+                  <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(selectedOrder.items?.length ? selectedOrder.items : [selectedOrder.productId]).map((item, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 12, padding: 12, background: '#fafafa', borderRadius: 12, border: '1px solid #f0f0f0' }}>
+                        <img src={item?.productId?.imageUrl || item?.imageUrl || ''} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'contain', background: '#fff', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e1b4b' }}>
+                            {item?.name}
+                            {(item?.quantity > 1) && (
+                              <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#E5550F', background: '#fff7ed', padding: '1px 6px', borderRadius: 4 }}>
+                                ×{item.quantity}
+                              </span>
+                            )}
                           </div>
-                          <div className="flex-1">
-                            <p className="text-[12px] font-black text-brand-navy uppercase tracking-tight leading-tight">{item?.name || 'Unknown Item'}</p>
-                            <p className="text-[11px] text-slate-400 font-bold uppercase mt-0.5">Rate: ₹{item?.pricePerDay || 0} / Day</p>
-                          </div>
+                          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>₹{item?.pricePerDay}/day</div>
                         </div>
                       </div>
                     ))}
+                    {selectedOrder.notes && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Customer Notes</div>
+                        <div style={{ fontSize: 12, color: '#78350f' }}>{selectedOrder.notes}</div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                </Col>
 
-                {/* Column 2: Rental Window & Pickup */}
-                <div className="space-y-8">
-                  <div className="space-y-4">
-                    <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Logistics</p>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-6">
-                      <div className="flex justify-between items-center">
-                        <div className="text-center flex-1">
-                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Pick Up</p>
-                          <p className="text-[12px] font-black text-brand-navy uppercase">{new Date(selectedOrder.startDate).toLocaleDateString('en-GB')}</p>
-                          <p className="text-[11px] text-brand-orange font-bold mt-0.5">{new Date(selectedOrder.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
-                        <div className="px-4">
-                          <HiArrowRight className="text-slate-300" />
-                        </div>
-                        <div className="text-center flex-1">
-                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Return</p>
-                          <p className="text-[12px] font-black text-brand-navy uppercase">{new Date(selectedOrder.endDate).toLocaleDateString('en-GB')}</p>
-                          <p className="text-[11px] text-brand-orange font-bold mt-0.5">{new Date(selectedOrder.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                        </div>
+                {/* Logistics */}
+                <Col span={8}>
+                  <Text strong style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Logistics</Text>
+                  <div style={{ marginTop: 12, background: '#fafafa', borderRadius: 14, padding: 16, border: '1px solid #f0f0f0', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700 }}>PICKUP</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{new Date(selectedOrder.startDate).toLocaleDateString('en-GB')}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>{new Date(selectedOrder.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
-                      <div className="pt-4 border-t border-slate-200 border-dashed flex justify-between items-center">
-                        <p className="text-[11px] font-black text-slate-400 uppercase">Total Duration</p>
-                        <p className="text-[13px] font-black text-brand-navy uppercase">{selectedOrder.totalDays || Math.ceil(Math.abs(new Date(selectedOrder.endDate) - new Date(selectedOrder.startDate)) / (1000 * 60 * 60 * 24)) || 1} Day(s)</p>
+                      <ArrowRightOutlined style={{ color: '#d1d5db' }} />
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700 }}>RETURN</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{new Date(selectedOrder.endDate).toLocaleDateString('en-GB')}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280' }}>{new Date(selectedOrder.endDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                     </div>
+                    <div style={{ borderTop: '1px dashed #e5e7eb', marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between' }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>Duration</Text>
+                      <Text strong style={{ fontSize: 12 }}>{selectedOrder.totalDays || 1} Day(s)</Text>
+                    </div>
                   </div>
+                  <Descriptions column={1} size="small" bordered style={{ borderRadius: 10 }}>
+                    <Descriptions.Item label="Client">{selectedOrder.userName}</Descriptions.Item>
+                    <Descriptions.Item label="Mobile">{selectedOrder.userMobile}</Descriptions.Item>
+                    <Descriptions.Item label="Email">{selectedOrder.userEmail}</Descriptions.Item>
+                    <Descriptions.Item label="Address">{selectedOrder.userAddress}</Descriptions.Item>
+                  </Descriptions>
+                </Col>
 
-                  <div className="space-y-4">
-                    <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Pickup Point</p>
-                    <div className="bg-orange-50/50 p-6 rounded-3xl border-2 border-primary/20 shadow-lg shadow-orange-100/10 animate-pulse-subtle relative overflow-hidden group">
-                      <div className="absolute top-0 left-0 w-1 h-full bg-primary"></div>
-                      <p className="text-[12px] font-black text-brand-navy uppercase flex items-center">
-                        Lensmen Rentals HQ
-                        <span className="ml-2 w-1.5 h-1.5 bg-primary rounded-full animate-ping"></span>
-                      </p>
-                      <p className="text-[11px] text-slate-600 font-bold leading-relaxed mt-2 italic">
-                        123 Creative Studio Street, Film City,<br />
-                        Chennai, Tamil Nadu - 600001
-                      </p>
+                {/* Revenue & Actions */}
+                <Col span={8}>
+                  <Text strong style={{ fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Revenue & Actions</Text>
+                  <div style={{ marginTop: 12, background: '#1e1b4b', borderRadius: 14, padding: '20px 16px', marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, color: '#93c5fd', fontWeight: 700 }}>TOTAL REVENUE</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 4 }}>
+                      ₹{selectedOrder.totalPrice?.toLocaleString()}
                     </div>
                   </div>
-                </div>
-
-                {/* Column 3: Client Info & Financials */}
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Client Profile</p>
-                    <div className="space-y-4 bg-slate-50/50 p-6 rounded-3xl border border-slate-100">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-brand-navy shadow-sm border border-slate-100">
-                          <HiUser className="text-sm" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase text-slate-400 font-bold">Full Name</p>
-                          <p className="text-[12px] font-black text-brand-navy uppercase leading-none">{selectedOrder.userName}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-brand-navy shadow-sm border border-slate-100">
-                          <HiMail className="text-sm" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase text-slate-400 font-bold">Email Address</p>
-                          <p className="text-[12px] font-black text-brand-navy leading-none">{selectedOrder.userEmail}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-brand-navy shadow-sm border border-slate-100">
-                          <HiPhone className="text-sm" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase text-slate-400 font-bold">Mobile Number</p>
-                          <p className="text-[12px] font-black text-brand-navy leading-none">{selectedOrder.userMobile}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-brand-navy shadow-sm border border-slate-100 mt-0.5">
-                          <HiLocationMarker className="text-sm" />
-                        </div>
-                        <div>
-                          <p className="text-[10px] uppercase text-slate-400 font-bold">Delivery Address</p>
-                          <p className="text-[11px] font-black text-brand-navy uppercase leading-relaxed line-clamp-3">{selectedOrder.userAddress}</p>
-                        </div>
-                      </div>
+                  <div style={{ background: '#f9fafb', borderRadius: 12, padding: '12px 14px', border: '1px solid #f0f0f0', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Collected</Text>
+                      <Text strong style={{ color: '#10b981' }}>₹{(selectedOrder.totalPaid || 0).toLocaleString()}</Text>
                     </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Pending</Text>
+                      <Text strong style={{ color: (selectedOrder.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                        ₹{(selectedOrder.pendingAmount || 0).toLocaleString()}
+                      </Text>
+                    </div>
+                    {(selectedOrder.payments || []).map((p, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0', borderTop: '1px solid #f0f0f0' }}>
+                        <Space size={4}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>{p.type}</span>
+                          <span style={{ color: '#6b7280' }}>{p.mode}</span>
+                        </Space>
+                        <Text strong>₹{p.amount?.toLocaleString()}</Text>
+                      </div>
+                    ))}
                   </div>
-                  {selectedOrder.userKyc?.kycDocuments && (selectedOrder.userKyc.kycDocuments.aadhaarFront || selectedOrder.userKyc.kycDocuments.panFront) && (
-                    <div className="mt-4">
-                      <button 
-                        onClick={() => setSelectedKycOrder(selectedOrder)}
-                        className="w-full flex items-center justify-center space-x-2 bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-md"
-                      >
-                        <HiIdentification className="text-sm" />
-                        <span>View User KYC Documents</span>
-                      </button>
-                    </div>
+                  <Button block style={{ marginBottom: 12 }} onClick={() => { setSelectedOrder(null); setPaymentTarget(selectedOrder) }}>
+                    ₹ Record Payment
+                  </Button>
+                  {selectedOrder.userKyc?.kycDocuments && (
+                    <Button block icon={<SafetyCertificateOutlined />} style={{ marginBottom: 12 }} onClick={() => setSelectedKycOrder(selectedOrder)}>
+                      View KYC Documents
+                    </Button>
                   )}
+                  <DetailActions order={selectedOrder} />
+                </Col>
+              </Row>
+            </>
+          )
+        })()}
+      </Modal>
 
-                  {/* Summary & Transitions */}
-                  <div className="pt-4 space-y-6">
-                    <div className="bg-brand-navy p-6 rounded-3xl flex flex-col space-y-4 shadow-xl shadow-orange-100/20">
-                      <div>
-                        <p className="text-[11px] font-black text-cyan-400 uppercase tracking-widest mb-1">Total Revenue</p>
-                        <p className="text-[28px] font-black text-white tracking-tighter leading-none">₹{selectedOrder.totalPrice.toLocaleString()}</p>
-                      </div>
-                      {renderAdminActionButtons(selectedOrder)}
-                    </div>
+      {/* ── Return Confirmation Modal ────────────────────────────────── */}
+      <Modal
+        open={!!isReturnConfirming}
+        onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('') }}
+        title="Confirm Equipment Return"
+        okText="Confirm Return"
+        okButtonProps={{ style: returnCondition === 'Bad' ? { background: '#ef4444', borderColor: '#ef4444' } : {} }}
+        onOk={() => {
+          updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes)
+          setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('')
+          if (selectedOrder) setSelectedOrder(null)
+        }}
+        centered destroyOnHidden
+      >
+        <div style={{ paddingBlock: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Physical Condition</Text>
+            <Radio.Group value={returnCondition} onChange={e => setReturnCondition(e.target.value)} buttonStyle="solid">
+              <Radio.Button value="Good">Good Condition</Radio.Button>
+              <Radio.Button value="Bad" style={returnCondition === 'Bad' ? { background: '#ef4444', borderColor: '#ef4444' } : {}}>Found Issues</Radio.Button>
+            </Radio.Group>
+          </div>
+          {returnCondition === 'Bad' && (
+            <div>
+              <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>Issue Details</Text>
+              <TextArea rows={3} value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Describe the damage..." />
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* ── Edit Return Notes Modal ──────────────────────────────────── */}
+      <Modal
+        open={!!editingNotes.id}
+        onCancel={() => setEditingNotes({ id: null, notes: '', condition: '' })}
+        title="Edit Return Details"
+        okText="Save Changes"
+        onOk={() => {
+          updateBookingStatus(editingNotes.id, 'Returned', editingNotes.condition, editingNotes.notes)
+          setEditingNotes({ id: null, notes: '', condition: '' })
+        }}
+        centered destroyOnHidden
+      >
+        <div style={{ paddingBlock: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Condition</Text>
+            <Radio.Group value={editingNotes.condition} onChange={e => setEditingNotes(p => ({ ...p, condition: e.target.value }))} buttonStyle="solid">
+              <Radio.Button value="Good">Good</Radio.Button>
+              <Radio.Button value="Bad">Bad</Radio.Button>
+            </Radio.Group>
+          </div>
+          <div>
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>Notes</Text>
+            <TextArea rows={3} value={editingNotes.notes} onChange={e => setEditingNotes(p => ({ ...p, notes: e.target.value }))} />
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Payment Modal ────────────────────────────────────────────── */}
+      <PaymentModal
+        open={!!paymentTarget}
+        booking={paymentTarget}
+        onClose={() => setPaymentTarget(null)}
+        onSuccess={() => { setPaymentTarget(null) }}
+      />
+
+      {/* ── Rejection Reason Modal ───────────────────────────────────── */}
+      <Modal
+        open={!!rejectTarget}
+        onCancel={() => { setRejectTarget(null); setRejectReason('') }}
+        title={
+          <Space>
+            <span style={{ color: '#ef4444', fontSize: 18, display: 'flex', alignItems: 'center' }}>
+              <CloseOutlined />
+            </span>
+            <span style={{ color: '#1e1b4b', fontWeight: 700 }}>Reject Order</span>
+          </Space>
+        }
+        okText="Confirm Rejection"
+        okButtonProps={{ danger: true, disabled: !rejectReason.trim(), loading: actionLoading }}
+        cancelText="Cancel"
+        onOk={() => {
+          if (!rejectReason.trim()) return
+          handleTransition(rejectTarget.orderId, rejectTarget.targetStatus, { rejectionReason: rejectReason.trim() })
+        }}
+        centered
+        destroyOnHidden
+      >
+        <div style={{ paddingBlock: 8 }}>
+          <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 12 }}>
+            Let the customer know why this order is being rejected. This message will be shared with them.
+          </Text>
+          <TextArea
+            rows={4}
+            autoFocus
+            value={rejectReason}
+            onChange={e => setRejectReason(e.target.value)}
+            placeholder="e.g. KYC document is blurry, requested dates unavailable, gear under maintenance..."
+          />
+        </div>
+      </Modal>
+
+      {/* ── KYC Viewer Modal ─────────────────────────────────────────── */}
+      <Modal
+        open={!!selectedKycOrder}
+        onCancel={() => { setSelectedKycOrder(null); setKycRejectionReason('') }}
+        title={`KYC Documents — ${selectedKycOrder?.userName}`}
+        width={760}
+        footer={
+          selectedKycOrder?.userKyc?.kycStatus === 'Pending' ? (
+            <Space>
+              <Button onClick={() => { setSelectedKycOrder(null); setKycRejectionReason('') }}>Cancel</Button>
+              <Button danger disabled={!kycRejectionReason.trim()}
+                onClick={async () => {
+                  const uid = selectedKycOrder.userKyc?._id
+                  if (!uid) return toast.error('User not found')
+                  await fetch(`${API_URL}/admin/users/${uid}/kyc`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kycStatus: 'Rejected', kycRejectionReason }) })
+                  await handleTransition(selectedKycOrder._id, 'Rejected', { rejectionReason: kycRejectionReason })
+                  setSelectedKycOrder(null); setKycRejectionReason('')
+                }}>
+                Reject KYC
+              </Button>
+              <Button type="primary" style={{ background: '#10b981' }}
+                onClick={async () => {
+                  const uid = selectedKycOrder.userKyc?._id
+                  if (!uid) return toast.error('User not found')
+                  await fetch(`${API_URL}/admin/users/${uid}/kyc`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kycStatus: 'Approved' }) })
+                  await handleTransition(selectedKycOrder._id, 'Approved')
+                  setSelectedKycOrder(null)
+                }}>
+                Approve KYC
+              </Button>
+            </Space>
+          ) : (
+            <Button onClick={() => setSelectedKycOrder(null)}>Close</Button>
+          )
+        }
+        destroyOnHidden
+      >
+        {selectedKycOrder && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+              {[
+                { name: 'Aadhaar Front', key: 'aadhaarFront' },
+                { name: 'Aadhaar Back',  key: 'aadhaarBack' },
+                { name: 'PAN Front',     key: 'panFront' },
+                { name: 'PAN Back',      key: 'panBack' },
+              ].map(doc => {
+                const url = selectedKycOrder.userKyc?.kycDocuments?.[doc.key]
+                return (
+                  <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 12, padding: 12, border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{doc.name}</Text>
+                    {url
+                      ? <Image src={url} alt={doc.name} height={160} style={{ objectFit: 'contain', borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                      : <div style={{ width: '100%', height: 160, border: '2px dashed #e5e7eb', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d1d5db', fontSize: 12, fontWeight: 600 }}>Not Submitted</div>
+                    }
                   </div>
-                </div>
-              </div>
+                )
+              })}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Return Confirmation Modal */}
-      {isReturnConfirming && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-dashed border-emerald-100">
-              <HiCheckCircle className="text-4xl text-emerald-500" />
-            </div>
-            <h3 className="text-[18px] font-black text-brand-navy uppercase tracking-tight mb-2">Equipment Return</h3>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6">
-              Please verify the condition of the equipment before confirming the return.
-            </p>
-
-            <div className="space-y-6 mb-8 text-left">
+            {selectedKycOrder.userKyc?.kycStatus === 'Pending' && (
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Physical Condition</label>
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => setReturnCondition('Good')}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${returnCondition === 'Good' ? 'bg-white text-emerald-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Good Condition
-                  </button>
-                  <button 
-                    onClick={() => setReturnCondition('Bad')}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${returnCondition === 'Bad' ? 'bg-white text-red-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Found Issues
-                  </button>
-                </div>
+                <Text type="secondary" style={{ fontSize: 11, fontWeight: 700, display: 'block', marginBottom: 6 }}>Rejection Reason (required if rejecting)</Text>
+                <TextArea rows={3} value={kycRejectionReason} onChange={e => setKycRejectionReason(e.target.value)} placeholder="Explain why the documents are being rejected..." />
               </div>
-
-              <div className={`transition-all duration-300 ${returnCondition === 'Bad' ? 'opacity-100 translate-y-0 h-auto' : 'opacity-0 -translate-y-2 h-0 overflow-hidden'}`}>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Issue Details</label>
-                <textarea 
-                  value={returnNotes}
-                  onChange={(e) => setReturnNotes(e.target.value)}
-                  placeholder="DESCRIBE THE DAMAGE OR ISSUE..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all resize-none h-24"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => {
-                  setIsReturnConfirming(null)
-                  setReturnCondition('Good')
-                  setReturnNotes('')
-                }}
-                className="flex-1 px-6 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes)
-                  setIsReturnConfirming(null)
-                  setReturnCondition('Good')
-                  setReturnNotes('')
-                  if (selectedOrder) setSelectedOrder(null)
-                }}
-                className={`flex-1 px-6 py-3 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all shadow-lg ${returnCondition === 'Bad' ? 'bg-red-500 hover:bg-red-600 shadow-red-100' : 'bg-brand-navy hover:bg-emerald-600 shadow-emerald-100'}`}
-              >
-                Confirm Return
-              </button>
-            </div>
+            )}
           </div>
-        </div>
-      )}
-      {/* Edit Return Details Modal */}
-      {editingNotes.id && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center animate-in zoom-in-95 duration-200">
-            <h3 className="text-[18px] font-black text-brand-navy uppercase tracking-tight mb-2">Edit Return Info</h3>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6">
-              Update the condition or notes for this equipment.
-            </p>
-
-            <div className="space-y-6 mb-8 text-left">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Physical Condition</label>
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => setEditingNotes(prev => ({ ...prev, condition: 'Good' }))}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${editingNotes.condition === 'Good' ? 'bg-white text-emerald-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Good
-                  </button>
-                  <button 
-                    onClick={() => setEditingNotes(prev => ({ ...prev, condition: 'Bad' }))}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${editingNotes.condition === 'Bad' ? 'bg-white text-red-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Bad
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Notes</label>
-                <textarea 
-                  value={editingNotes.notes}
-                  onChange={(e) => setEditingNotes(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="ADD ANY NOTES..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-brand-navy/10 focus:border-brand-navy outline-none transition-all resize-none h-24"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setEditingNotes({ id: null, notes: '', condition: '' })}
-                className="flex-1 px-6 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateBookingStatus(editingNotes.id, 'Returned', editingNotes.condition, editingNotes.notes)
-                  setEditingNotes({ id: null, notes: '', condition: '' })
-                }}
-                className="flex-1 px-6 py-3 bg-brand-navy text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* KYC Document Viewer Modal */}
-      {selectedKycOrder && (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-start justify-center p-4 z-[100] overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white max-w-4xl w-full rounded-3xl relative shadow-2xl border-t-8 border-amber-500 my-8 animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => {
-                setSelectedKycOrder(null);
-                setKycRejectionReason('');
-              }}
-              className="absolute right-6 top-6 text-slate-300 hover:text-red-500 transition-colors p-2 text-2xl font-light"
-            >
-              <HiX />
-            </button>
-
-            <div className="p-8">
-              <div className="mb-6 border-b border-slate-50 pb-4">
-                <p className="text-brand-orange font-black uppercase tracking-[0.3em] text-[12px] mb-1">Order KYC Documents View</p>
-                <h2 className="text-[18px] font-black text-brand-navy uppercase tracking-widest">Verify Documents: {selectedKycOrder.userName}</h2>
-                <p className="text-[11px] text-slate-400 font-bold uppercase mt-1">Customer Class: {selectedKycOrder.userKyc?.customerClass || 'New'}</p>
-                <p className="text-[11px] text-slate-400 font-bold uppercase mt-0.5">Current KYC Status: {selectedKycOrder.userKyc?.kycStatus || 'Not Uploaded'}</p>
-              </div>
-
-              {/* Document Previews */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {[
-                  { name: 'Aadhaar Front', key: 'aadhaarFront' },
-                  { name: 'Aadhaar Back', key: 'aadhaarBack' },
-                  { name: 'PAN Front', key: 'panFront' },
-                  { name: 'PAN Back', key: 'panBack' }
-                ].map(doc => {
-                  const url = selectedKycOrder.userKyc?.kycDocuments?.[doc.key];
-                  return (
-                    <div key={doc.key} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{doc.name}</p>
-                      {url ? (
-                        <div className="w-full h-48 rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm flex items-center justify-center">
-                          <a href={url} target="_blank" rel="noopener noreferrer" className="w-full h-full block cursor-zoom-in" title="Click to view full image">
-                            <img src={url} alt={doc.name} className="w-full h-full object-contain p-2 hover:scale-105 transition-transform" />
-                          </a>
-                        </div>
-                      ) : (
-                        <div className="w-full h-48 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 text-[11px] uppercase font-black">
-                          Not Submitted
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Action Buttons if order needs approval/rejection */}
-              {selectedKycOrder.userKyc?.kycStatus === 'Pending' ? (
-                <div className="border-t border-slate-100 pt-6">
-                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6 space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Rejection Feedback (Required if rejecting KYC)</label>
-                    <textarea 
-                      value={kycRejectionReason}
-                      onChange={e => setKycRejectionReason(e.target.value)}
-                      placeholder="EXPLAIN WHY THE DOCUMENTS ARE BEING REJECTED (E.G. IMAGE BLURRY, DOCUMENT NAME MISMATCH...)"
-                      className="w-full bg-white border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 outline-none transition-all resize-none h-24"
-                    />
-                  </div>
-
-                  <div className="flex space-x-3">
-                    <button 
-                      onClick={() => {
-                        setSelectedKycOrder(null);
-                        setKycRejectionReason('');
-                      }}
-                      className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-slate-200 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        if (!kycRejectionReason.trim()) return;
-                        try {
-                          const userId = selectedKycOrder.userKyc?._id;
-                          if (userId) {
-                            // Update user status
-                            await fetch(`${API_URL}/admin/users/${userId}/kyc`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ kycStatus: 'Rejected', kycRejectionReason })
-                            });
-                            // Update booking status to Rejected
-                            await handleStatusTransition(selectedKycOrder._id, 'Rejected', { rejectionReason: kycRejectionReason });
-                            setSelectedKycOrder(null);
-                            setKycRejectionReason('');
-                          } else {
-                            toast.error('Associated user ID not found');
-                          }
-                        } catch (err) {
-                          toast.error('Error rejecting KYC');
-                        }
-                      }}
-                      disabled={!kycRejectionReason.trim()}
-                      className="flex-1 py-4 bg-rose-500 text-white rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-rose-600 disabled:opacity-50 transition-all shadow-lg shadow-rose-100"
-                    >
-                      Reject KYC Documents
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const userId = selectedKycOrder.userKyc?._id;
-                          if (userId) {
-                            // Update user status
-                            await fetch(`${API_URL}/admin/users/${userId}/kyc`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ kycStatus: 'Approved', kycRejectionReason: '' })
-                            });
-                            // Update booking status to Approved
-                            await handleStatusTransition(selectedKycOrder._id, 'Approved');
-                            setSelectedKycOrder(null);
-                          } else {
-                            toast.error('Associated user ID not found');
-                          }
-                        } catch (err) {
-                          toast.error('Error approving KYC');
-                        }
-                      }}
-                      className="flex-1 py-4 bg-emerald-500 text-white rounded-2xl font-black text-[12px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
-                    >
-                      Approve KYC Verified
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="border-t border-slate-100 pt-6 flex justify-end">
-                  <button 
-                    onClick={() => setSelectedKycOrder(null)}
-                    className="px-8 py-3 bg-brand-navy hover:bg-slate-800 text-white rounded-xl font-black text-[11px] uppercase tracking-widest transition-all"
-                  >
-                    Close Viewer
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   )
 }

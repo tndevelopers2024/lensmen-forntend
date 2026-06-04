@@ -1,84 +1,86 @@
 import { useState } from 'react'
-import { HiChartBar, HiCube, HiShoppingCart, HiCalendar, HiFilter, HiCheckCircle, HiClock, HiExclamationCircle, HiSearch } from 'react-icons/hi'
+import {
+  Row, Col, Card, Statistic, Table, Tabs, Tag, Button, Space,
+  Input, Modal, Radio, DatePicker, Typography,
+} from 'antd'
+import { SearchOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { useGlobal } from '../../context/GlobalContext'
-import DatePicker from 'react-datepicker'
-import "react-datepicker/dist/react-datepicker.css"
-import { isWithinInterval, differenceInDays, isSameDay } from 'date-fns'
 import toast from 'react-hot-toast'
+import dayjs from 'dayjs'
+import { isWithinInterval, differenceInDays, isSameDay } from 'date-fns'
+import PageHeader from '../../components/PageHeader'
+
+const { Text } = Typography
+const { TextArea } = Input
+const { RangePicker } = DatePicker
+
+const NAVY = '#1e1b4b'
+
+const STATUS_TAG = {
+  Closed:              { color: 'success' },
+  Rejected:            { color: 'error' },
+  Returned:            { color: 'success' },
+  'KYC Pending':       { color: 'warning' },
+  'KYC Approved':      { color: 'cyan' },
+  Approved:            { color: 'green' },
+  'Ready for Pickup':  { color: 'blue' },
+  'During Rental':     { color: 'processing' },
+  'Picked Up':         { color: 'processing' },
+  Active:              { color: 'processing' },
+  'Request Submitted': { color: 'default' },
+  'Return Pending':    { color: 'warning' },
+}
 
 const AdminOverview = () => {
   const { adminStats, allOrders, API_URL } = useGlobal()
-  const [dateRange, setDateRange] = useState([null, null])
-  const [startDate, endDate] = dateRange
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('rented') // default to rented
+  const [dateRange,          setDateRange]          = useState([null, null])
+  const [startDate,          endDate]               = dateRange
+  const [searchTerm,         setSearchTerm]         = useState('')
+  const [activeTab,          setActiveTab]          = useState('rented')
   const [isReturnConfirming, setIsReturnConfirming] = useState(null)
-  
-  const [outDate, setOutDate] = useState(new Date())
-  const [inDate, setInDate] = useState(new Date())
-  const [returnCondition, setReturnCondition] = useState('Good')
-  const [returnNotes, setReturnNotes] = useState('')
-  const [editingNotes, setEditingNotes] = useState({ id: null, notes: '', condition: '' })
-  
-  const activeRentalStatuses = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+  const [outDate,            setOutDate]            = useState(new Date())
+  const [inDate,             setInDate]             = useState(new Date())
+  const [returnCondition,    setReturnCondition]    = useState('Good')
+  const [returnNotes,        setReturnNotes]        = useState('')
+  const [editingNotes,       setEditingNotes]       = useState({ id: null, notes: '', condition: '' })
+
+  const activeRentalStatuses   = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
   const returnedClosedStatuses = ['Returned', 'Closed']
 
-  const scheduleOut = allOrders.filter(order => 
-    activeRentalStatuses.includes(order.status) && 
-    isSameDay(new Date(order.startDate), outDate)
-  )
-  
-  const scheduleIn = allOrders.filter(order => 
-    activeRentalStatuses.includes(order.status) && 
-    isSameDay(new Date(order.endDate), inDate)
-  )
+  const scheduleOut = allOrders.filter(o => activeRentalStatuses.includes(o.status) && isSameDay(new Date(o.startDate), outDate))
+  const scheduleIn  = allOrders.filter(o => activeRentalStatuses.includes(o.status) && isSameDay(new Date(o.endDate),   inDate))
 
-  const flattenItems = (orders) => {
-    return orders.flatMap(order => {
-      const items = order.items && order.items.length > 0 
-        ? order.items 
-        : [{ productId: order.productId, name: order.productId?.name, imageUrl: order.productId?.imageUrl || order.imageUrl, _id: 'legacy' }]
-        
-      return items.map((item, idx) => ({
-        ...order,
-        displayItem: item,
-        uniqueKey: `${order._id}-${item.productId?._id || item._id || idx}`
-      }))
+  const flattenItems = (orders) =>
+    orders.flatMap(order => {
+      const items = order.items?.length ? order.items : [{ productId: order.productId, name: order.productId?.name, imageUrl: order.productId?.imageUrl || order.imageUrl, _id: 'legacy' }]
+      return items.map((item, idx) => ({ ...order, displayItem: item, uniqueKey: `${order._id}-${item.productId?._id || item._id || idx}` }))
     })
-  }
 
   const flattenedOut = flattenItems(scheduleOut)
-  const flattenedIn = flattenItems(scheduleIn)
+  const flattenedIn  = flattenItems(scheduleIn)
 
   const filteredOrders = allOrders.filter(order => {
-    // 1. Search Filter
-    const searchMatch = 
+    const searchMatch =
       order.userName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.userMobile?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.userEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order._id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.items && order.items.some(item => item.name.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+      order.items?.some(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       order.productId?.name?.toLowerCase().includes(searchTerm.toLowerCase())
 
     if (!searchMatch) return false
-
-    // 2. Tab Filter
-    const isActive = activeRentalStatuses.includes(order.status)
+    const isActive   = activeRentalStatuses.includes(order.status)
     const isReturned = returnedClosedStatuses.includes(order.status)
-
-    if (activeTab === 'rented' && !isActive) return false
+    if (activeTab === 'rented'   && !isActive)   return false
     if (activeTab === 'returned' && !isReturned) return false
     if (activeTab === 'due') {
       const daysLeft = differenceInDays(new Date(order.endDate), new Date())
       if (!isActive || daysLeft < 0 || daysLeft > 3) return false
     }
-
-    // 3. Date Range Filter
     if (!startDate && !endDate) return true
     const orderDate = new Date(order.startDate)
-    if (startDate && !endDate) return orderDate >= startDate
-    if (startDate && endDate) return isWithinInterval(orderDate, { start: startDate, end: endDate })
-
+    if (startDate && !endDate)  return orderDate >= startDate
+    if (startDate && endDate)   return isWithinInterval(orderDate, { start: startDate, end: endDate })
     return true
   })
 
@@ -87,555 +89,329 @@ const AdminOverview = () => {
       const res = await fetch(`${API_URL}/admin/bookings/${id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, returnCondition: condition, returnNotes: notes })
+        body: JSON.stringify({ status: newStatus, returnCondition: condition, returnNotes: notes }),
       })
-      if (res.ok) {
-        toast.success(`Marked as ${newStatus}`)
-        window.location.reload()
-      }
-    } catch (error) {
-      toast.error('Update failed')
-    }
+      if (res.ok) { toast.success(`Marked as ${newStatus}`); window.location.reload() }
+    } catch { toast.error('Update failed') }
   }
 
-  const renderTableStatusAndActions = (order) => {
-    const status = order.status
-
-    if (status === 'Closed') {
+  const renderStatusCell = (order) => {
+    if (order.status === 'Returned') {
       return (
-        <div className="flex items-center justify-center space-x-1.5 bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-100 w-fit mx-auto">
-          <HiCheckCircle className="text-sm" />
-          <span className="text-[12px] font-black uppercase tracking-widest">Closed</span>
-        </div>
-      )
-    }
-
-    if (status === 'Rejected') {
-      return (
-        <div className="flex items-center justify-center space-x-1.5 bg-rose-50 text-rose-600 px-3 py-1.5 rounded-xl border border-rose-100 w-fit mx-auto">
-          <HiExclamationCircle className="text-sm" />
-          <span className="text-[12px] font-black uppercase tracking-widest">Rejected</span>
-        </div>
-      )
-    }
-
-    if (status === 'Returned') {
-      return (
-        <div className="flex items-center justify-center gap-2">
-          <div className="flex items-center space-x-1.5 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl border border-emerald-100">
-            <HiCheckCircle className="text-sm" />
-            <span className="text-[12px] font-black uppercase tracking-widest">Returned</span>
-          </div>
+        <Space>
+          <Tag color="success" icon={<CheckCircleOutlined />}>Returned</Tag>
           {order.returnCondition && (
-            <button 
-              onClick={() => setEditingNotes({ 
-                id: order._id, 
-                notes: order.returnNotes || '', 
-                condition: order.returnCondition 
-              })}
-              className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl border transition-all hover:scale-105 active:scale-95 shadow-sm ${order.returnCondition === 'Good' ? 'bg-slate-50 text-emerald-500 border-emerald-100 hover:bg-emerald-50' : 'bg-red-50 text-red-500 border-red-100 hover:bg-red-100'}`}
-              title="Click to Edit Return Details"
+            <Tag
+              color={order.returnCondition === 'Good' ? 'success' : 'error'}
+              style={{ cursor: 'pointer' }}
+              onClick={() => setEditingNotes({ id: order._id, notes: order.returnNotes || '', condition: order.returnCondition })}
             >
               {order.returnCondition}
-            </button>
+            </Tag>
           )}
-        </div>
+        </Space>
       )
     }
-
-    let badgeColor = "bg-orange-50 text-primary border-primary/20 shadow-orange-50"
-    if (['During Rental', 'Picked Up', 'Active'].includes(status)) {
-      badgeColor = "bg-blue-50 text-blue-600 border-blue-200 shadow-blue-50"
-    } else if (status === 'Ready for Pickup') {
-      badgeColor = "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-indigo-50"
-    } else if (status === 'Request Submitted') {
-      badgeColor = "bg-slate-50 text-slate-500 border-slate-200 shadow-sm"
-    } else if (status === 'KYC Pending') {
-      badgeColor = "bg-amber-50 text-amber-600 border-amber-200 animate-pulse shadow-amber-50"
-    } else if (status === 'KYC Approved') {
-      badgeColor = "bg-cyan-50 text-cyan-600 border-cyan-200 shadow-cyan-50"
-    } else if (status === 'Approved') {
-      badgeColor = "bg-emerald-50 text-emerald-600 border-emerald-200 shadow-emerald-50"
-    }
-
+    const tag = STATUS_TAG[order.status] || { color: 'default' }
     return (
-      <div className="flex items-center justify-center gap-3">
-        <div className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border shadow-sm ${badgeColor}`}>
-          <HiClock className="text-sm" />
-          <span className="text-[12px] font-black uppercase tracking-widest">{status}</span>
-        </div>
-        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(status) && (
-          <button 
-            onClick={() => setIsReturnConfirming(order._id)}
-            className="flex items-center space-x-1.5 bg-brand-navy text-white px-3 py-1.5 rounded-xl hover:bg-primary transition-all shadow-lg shadow-orange-100/50 group/btn justify-center"
-          >
-            <HiCheckCircle className="text-xs group-hover/btn:scale-110 transition-transform" />
-            <span className="text-[12px] font-black uppercase tracking-widest">Mark Returned</span>
-          </button>
+      <Space wrap>
+        <Tag color={tag.color}>{order.status}</Tag>
+        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(order.status) && (
+          <Button size="small" type="primary" onClick={() => setIsReturnConfirming(order._id)}>
+            Mark Returned
+          </Button>
         )}
-      </div>
+      </Space>
     )
   }
 
+  // ── Schedule item row ─────────────────────────────────────────────
+  const ScheduleRow = ({ item }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
+      <img
+        src={item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl || ''}
+        style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
+        alt=""
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: NAVY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {item.displayItem?.name || 'Unknown item'}
+        </div>
+        <div style={{ fontSize: 12, color: '#6b7280' }}>{item.userName}</div>
+      </div>
+    </div>
+  )
+
+  const columns = [
+    {
+      title: 'Equipment',
+      key: 'equipment',
+      render: (_, order) => {
+        const items = order.items?.length ? order.items : [order.productId]
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img
+              src={(items[0]?.productId?.imageUrl || items[0]?.imageUrl) || ''}
+              style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
+              alt=""
+            />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: NAVY }}>
+                {items.length > 1 ? `${items.length} items` : items[0]?.name || '—'}
+              </div>
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      title: 'Client',
+      key: 'client',
+      render: (_, order) => (
+        <div>
+          <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>{order.userName}</div>
+          <div style={{ color: '#6b7280', fontSize: 12 }}>{order.userMobile || '—'}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Return Date',
+      dataIndex: 'endDate',
+      key: 'endDate',
+      render: date => (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 13 }}>{new Date(date).toLocaleDateString('en-GB')}</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>
+            {new Date(date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Status & Action',
+      key: 'actions',
+      render: (_, order) => renderStatusCell(order),
+    },
+  ]
+
+  const cardStyle = { borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: 'none' }
+
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
-        <p className="text-primary font-black uppercase tracking-[0.3em] text-[12px] mb-1">Analytics Dashboard</p>
-        <h2 className="text-[16px] font-black text-brand-navy uppercase tracking-widest">Performance</h2>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader
+        eyebrow="Overview"
+        title="Dashboard"
+        subtitle="Business performance at a glance"
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg relative overflow-hidden group hover:shadow-orange-50 transition-all">
-          <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-            <HiCube className="text-4xl text-brand-navy" />
-          </div>
-          <p className="text-slate-400 font-black uppercase tracking-widest text-[12px] mb-2">Total Inventory</p>
-          <div className="flex items-baseline space-x-2">
-            <p className="text-[24px] font-black text-brand-navy tracking-tighter">{adminStats.productCount}</p>
-            <span className="text-brand-orange font-black text-[12px] uppercase">Units</span>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-lg relative overflow-hidden group hover:shadow-red-50 transition-all">
-          <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
-            <HiShoppingCart className="text-4xl text-brand-red" />
-          </div>
-          <p className="text-slate-400 font-black uppercase tracking-widest text-[12px] mb-2">Active Bookings</p>
-          <div className="flex items-baseline space-x-2">
-            <p className="text-[24px] font-black text-brand-red tracking-tighter">{adminStats.bookingCount}</p>
-            <span className="text-brand-red font-black text-[12px] uppercase">Orders</span>
-          </div>
-        </div>
-        <div className="bg-primary p-6 rounded-2xl shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-3 opacity-10">
-            <HiChartBar className="text-4xl text-white" />
-          </div>
-          <p className="text-brand-yellow font-black uppercase tracking-widest text-[12px] mb-2">Total Revenue</p>
-          <div className="flex items-baseline space-x-2">
-            <span className="text-brand-yellow font-black text-[14px] leading-none">₹</span>
-            <p className="text-[24px] font-black text-white tracking-tighter">{adminStats.totalRevenue}</p>
-          </div>
-        </div>
-      </div>
+      {/* ── KPI row ──────────────────────────────────────────────────── */}
+      <Row gutter={[16, 16]}>
+        <Col span={8}>
+          <Card style={cardStyle}>
+            <Statistic
+              title={<span style={{ fontSize: 13, color: '#6b7280' }}>Total Inventory</span>}
+              value={adminStats.productCount}
+              suffix={<span style={{ fontSize: 12, color: '#9ca3af' }}>units</span>}
+              valueStyle={{ color: NAVY, fontWeight: 700, fontSize: 28 }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card style={cardStyle}>
+            <Statistic
+              title={<span style={{ fontSize: 13, color: '#6b7280' }}>Active Bookings</span>}
+              value={adminStats.bookingCount}
+              suffix={<span style={{ fontSize: 12, color: '#9ca3af' }}>orders</span>}
+              valueStyle={{ color: NAVY, fontWeight: 700, fontSize: 28 }}
+            />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card style={cardStyle}>
+            <Statistic
+              title={<span style={{ fontSize: 13, color: '#6b7280' }}>Total Revenue</span>}
+              value={adminStats.totalRevenue}
+              prefix={<span style={{ fontSize: 18, color: '#9ca3af' }}>₹</span>}
+              valueStyle={{ color: NAVY, fontWeight: 700, fontSize: 28 }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Going Out */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden group hover:border-brand-orange/20 transition-all duration-300">
-          <div className="p-6 border-b border-slate-50 bg-slate-50/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-brand-orange/10 rounded-xl flex items-center justify-center text-brand-orange">
-                  <HiShoppingCart className="text-xl" />
-                </div>
+      {/* ── Schedule row ─────────────────────────────────────────────── */}
+      <Row gutter={[16, 16]}>
+        <Col span={12}>
+          <Card
+            style={cardStyle}
+            bodyStyle={{ padding: 0 }}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 className="text-[14px] font-black text-brand-navy uppercase tracking-wider">Going Out</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Pickups: {outDate.toLocaleDateString('en-GB')}</p>
+                  <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Going Out</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Pickups: {outDate.toLocaleDateString('en-GB')}</div>
                 </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <div className="relative group/picker min-w-[120px]">
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-                    <HiCalendar className="text-brand-orange text-[10px]" />
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <DatePicker
-                    selected={outDate}
-                    onChange={(date) => setOutDate(date)}
-                    className="w-full border border-slate-100 p-1.5 pl-7 rounded-lg font-black uppercase text-[9px] tracking-widest focus:border-brand-orange outline-none transition-all cursor-pointer bg-white shadow-sm"
-                    placeholderText="DATE"
-                    portalId="root"
-                    popperProps={{ strategy: "fixed" }}
-                    dateFormat="dd/MM/yyyy"
+                    value={dayjs(outDate)}
+                    onChange={d => d && setOutDate(d.toDate())}
+                    size="small" format="DD/MM/YYYY" allowClear={false}
                   />
-                </div>
-                <div className="px-3 py-1 bg-brand-orange text-white rounded-lg text-[12px] font-black shadow-lg shadow-orange-100 flex-shrink-0">
-                  {flattenedOut.length}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{flattenedOut.length}</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="p-4 max-h-[220px] overflow-y-auto custom-scrollbar">
-            {flattenedOut.length > 0 ? (
-              <div className="space-y-3">
-                {flattenedOut.map(item => (
-                  <div key={item.uniqueKey} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/50 hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-100">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 bg-white rounded-xl border border-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
-                        <img 
-                          src={item.displayItem.imageUrl || item.displayItem.productId?.imageUrl || 'https://via.placeholder.com/32'} 
-                          className="w-full h-full object-contain p-1"
-                          alt=""
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[11px] font-black text-brand-navy uppercase tracking-tight">
-                          {item.displayItem.name || 'Unknown Item'}
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{item.userName}</p>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-black bg-orange-100 text-brand-orange px-2 py-0.5 rounded-full uppercase">Active</span>
-                  </div>
-                ))}
-              </div>
+            }
+          >
+            {flattenedOut.length === 0 ? (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: '#d1d5db', fontSize: 12 }}>No pickups scheduled</div>
             ) : (
-              <div className="py-12 text-center">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 opacity-20">
-                  <HiShoppingCart className="text-xl text-slate-400" />
-                </div>
-                <p className="text-[11px] text-slate-300 font-black uppercase tracking-widest">No orders scheduled</p>
-              </div>
+              flattenedOut.map(item => <ScheduleRow key={item.uniqueKey} item={item} />)
             )}
-          </div>
-        </div>
-
-        {/* Coming Back */}
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden group hover:border-emerald-500/20 transition-all duration-300">
-          <div className="p-6 border-b border-slate-50 bg-slate-50/30">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600">
-                  <HiCheckCircle className="text-xl" />
-                </div>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card
+            style={cardStyle}
+            bodyStyle={{ padding: 0 }}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h3 className="text-[14px] font-black text-brand-navy uppercase tracking-wider">Coming Back</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Returns: {inDate.toLocaleDateString('en-GB')}</p>
+                  <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Coming Back</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Returns: {inDate.toLocaleDateString('en-GB')}</div>
                 </div>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <div className="relative group/picker min-w-[120px]">
-                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
-                    <HiCalendar className="text-emerald-500 text-[10px]" />
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <DatePicker
-                    selected={inDate}
-                    onChange={(date) => setInDate(date)}
-                    className="w-full border border-slate-100 p-1.5 pl-7 rounded-lg font-black uppercase text-[9px] tracking-widest focus:border-emerald-500 outline-none transition-all cursor-pointer bg-white shadow-sm"
-                    placeholderText="DATE"
-                    portalId="root"
-                    popperProps={{ strategy: "fixed" }}
-                    dateFormat="dd/MM/yyyy"
+                    value={dayjs(inDate)}
+                    onChange={d => d && setInDate(d.toDate())}
+                    size="small" format="DD/MM/YYYY" allowClear={false}
                   />
-                </div>
-                <div className="px-3 py-1 bg-emerald-500 text-white rounded-lg text-[12px] font-black shadow-lg shadow-emerald-100 flex-shrink-0">
-                  {flattenedIn.length}
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{flattenedIn.length}</span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="p-4 max-h-[220px] overflow-y-auto custom-scrollbar">
-            {flattenedIn.length > 0 ? (
-              <div className="space-y-3">
-                {flattenedIn.map(item => (
-                  <div key={item.uniqueKey} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/50 hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-100">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 bg-white rounded-xl border border-slate-100 flex items-center justify-center overflow-hidden shadow-sm">
-                        <img 
-                          src={item.displayItem.imageUrl || item.displayItem.productId?.imageUrl || 'https://via.placeholder.com/32'} 
-                          className="w-full h-full object-contain p-1"
-                          alt=""
-                        />
-                      </div>
-                      <div>
-                        <p className="text-[11px] font-black text-brand-navy uppercase tracking-tight">
-                          {item.displayItem.name || 'Unknown Item'}
-                        </p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{item.userName}</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setIsReturnConfirming(item._id)}
-                      className="px-3 py-1.5 bg-brand-navy text-white rounded-lg text-[9px] font-black uppercase hover:bg-emerald-600 transition-all shadow-sm hover:shadow-md"
-                    >
-                      Return
-                    </button>
-                  </div>
-                ))}
-              </div>
+            }
+          >
+            {flattenedIn.length === 0 ? (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: '#d1d5db', fontSize: 12 }}>No returns due</div>
             ) : (
-              <div className="py-12 text-center">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3 opacity-20">
-                  <HiCheckCircle className="text-xl text-slate-400" />
+              flattenedIn.map(item => (
+                <div key={item.uniqueKey} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
+                  <img
+                    src={item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl || ''}
+                    style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
+                    alt=""
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: NAVY }}>{item.displayItem?.name || 'Unknown item'}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{item.userName}</div>
+                  </div>
+                  <Button size="small" type="primary" onClick={() => setIsReturnConfirming(item._id)}>Return</Button>
                 </div>
-                <p className="text-[11px] text-slate-300 font-black uppercase tracking-widest">No returns due</p>
-              </div>
+              ))
             )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* ── Rental Pipeline ──────────────────────────────────────────── */}
+      <Card
+        style={cardStyle}
+        bodyStyle={{ padding: 0 }}
+        title={
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, color: NAVY, fontSize: 15 }}>Rental Pipeline</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', fontWeight: 400 }}>Track, search and manage every booking</div>
+            </div>
+            <Space>
+              <Input
+                prefix={<SearchOutlined style={{ color: '#d1d5db' }} />}
+                placeholder="Search orders…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                allowClear
+                style={{ width: 220 }}
+              />
+              <RangePicker
+                value={[startDate ? dayjs(startDate) : null, endDate ? dayjs(endDate) : null]}
+                onChange={dates => setDateRange(dates ? [dates[0]?.toDate() || null, dates[1]?.toDate() || null] : [null, null])}
+                format="DD/MM/YYYY"
+                style={{ width: 240 }}
+              />
+            </Space>
+          </div>
+        }
+      >
+        <div style={{ padding: '0 24px' }}>
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={[
+              { key: 'all',      label: 'All Rentals' },
+              { key: 'rented',   label: 'Rented Out' },
+              { key: 'returned', label: 'Returned' },
+              { key: 'due',      label: 'Due in 3 Days' },
+            ]}
+            size="small"
+          />
+        </div>
+        <Table
+          columns={columns}
+          dataSource={filteredOrders}
+          rowKey="_id"
+          pagination={{ defaultPageSize: 10, showSizeChanger: true, showTotal: (t, r) => `Showing ${r[0]}-${r[1]} of ${t}` }}
+          style={{ borderRadius: 0 }}
+        />
+      </Card>
+
+      {/* Return Confirmation Modal */}
+      <Modal
+        open={!!isReturnConfirming}
+        onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('') }}
+        title="Confirm Equipment Return"
+        okText="Confirm Return"
+        okButtonProps={{ style: returnCondition === 'Bad' ? { background: '#ef4444', borderColor: '#ef4444' } : {} }}
+        onOk={() => { updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes); setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('') }}
+        centered destroyOnHidden
+      >
+        <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Physical Condition</Text>
+            <Radio.Group value={returnCondition} onChange={e => setReturnCondition(e.target.value)} buttonStyle="solid">
+              <Radio.Button value="Good">Good Condition</Radio.Button>
+              <Radio.Button value="Bad">Found Issues</Radio.Button>
+            </Radio.Group>
+          </div>
+          {returnCondition === 'Bad' && (
+            <div>
+              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>Issue Details</Text>
+              <TextArea rows={3} value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="Describe the damage or issue…" />
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Edit Return Notes Modal */}
+      <Modal
+        open={!!editingNotes.id}
+        onCancel={() => setEditingNotes({ id: null, notes: '', condition: '' })}
+        title="Edit Return Details"
+        okText="Save Changes"
+        onOk={() => { updateBookingStatus(editingNotes.id, 'Returned', editingNotes.condition, editingNotes.notes); setEditingNotes({ id: null, notes: '', condition: '' }) }}
+        centered destroyOnHidden
+      >
+        <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Condition</Text>
+            <Radio.Group value={editingNotes.condition} onChange={e => setEditingNotes(p => ({ ...p, condition: e.target.value }))} buttonStyle="solid">
+              <Radio.Button value="Good">Good</Radio.Button>
+              <Radio.Button value="Bad">Bad</Radio.Button>
+            </Radio.Group>
+          </div>
+          <div>
+            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>Notes</Text>
+            <TextArea rows={3} value={editingNotes.notes} onChange={e => setEditingNotes(p => ({ ...p, notes: e.target.value }))} />
           </div>
         </div>
-      </div>
-
-      <div className="bg-white rounded-3xl border border-slate-50 shadow-xl overflow-hidden">
-        <div className="p-8 border-b border-slate-50 bg-slate-50/30">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-brand-navy rounded-xl flex items-center justify-center shadow-lg shadow-orange-100">
-                <HiCalendar className="text-white text-xl" />
-              </div>
-              <div>
-                <h3 className="text-[14px] font-black text-brand-navy uppercase tracking-wider">Rental Pipeline</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Track, search and manage every booking</p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-              <div className="relative group flex-1 min-w-[200px]">
-                <HiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-brand-orange transition-colors" />
-                <input 
-                  type="text" 
-                  placeholder="SEARCH BY NAME, MOBILE, EMAIL, OR GEAR..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  className="w-full bg-white border border-slate-100 p-3 pl-10 rounded-xl font-black uppercase text-[12px] tracking-widest focus:border-brand-orange focus:ring-4 focus:ring-orange-50 outline-none transition-all shadow-sm"
-                />
-              </div>
-
-              <div className="relative group min-w-[240px]">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 z-10">
-                  <HiFilter className="text-brand-orange text-xs" />
-                </div>
-                <DatePicker
-                  selectsRange={true}
-                  startDate={startDate}
-                  endDate={endDate}
-                  onChange={(update) => setDateRange(update)}
-                  isClearable={true}
-                  placeholderText="FILTER BY DATES"
-                  className="w-full border border-slate-100 p-3 pl-10 rounded-xl font-black uppercase text-[12px] tracking-widest focus:border-brand-orange outline-none transition-all cursor-pointer bg-white shadow-sm"
-                  wrapperClassName="w-full"
-                  popperProps={{ strategy: "fixed" }}
-                  portalId="root"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-1 mt-8 bg-slate-100/50 p-1 rounded-2xl w-fit">
-            {[
-              { id: 'all', label: 'All Rentals' },
-              { id: 'rented', label: 'Rented Out' },
-              { id: 'returned', label: 'Returned' },
-              { id: 'due', label: 'Return in 3 Days', color: 'text-brand-red' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-2.5 rounded-xl text-[12px] font-black uppercase tracking-widest transition-all ${
-                  activeTab === tab.id 
-                  ? 'bg-white text-brand-navy shadow-md shadow-slate-200/50 scale-105' 
-                  : `text-slate-400 hover:text-slate-600 ${tab.color || ''}`
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-[#f8fafc]/50 text-brand-navy uppercase text-[12px] tracking-[0.2em] font-black">
-                <th className="p-6">Equipment</th>
-                <th className="p-6">Client</th>
-                <th className="p-6">Return Date</th>
-                <th className="p-6 text-center">Status & Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {filteredOrders.length > 0 ? (
-                filteredOrders.map(order => (
-                  <tr key={order._id} className="hover:bg-[#f8fafc]/50 transition-colors group">
-                    <td className="p-6">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-slate-100 rounded-xl overflow-hidden flex-shrink-0 border border-slate-200 p-1">
-                          <img 
-                            src={(order.items && order.items.length > 0 ? (order.items[0].productId?.imageUrl || order.items[0].imageUrl) : (order.productId?.imageUrl || order.imageUrl)) || 'https://via.placeholder.com/40'} 
-                            alt="" 
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-brand-navy font-black uppercase text-[12px] tracking-tight group-hover:text-brand-orange transition-colors">
-                            {order.items && order.items.length > 0 
-                              ? `${order.items.length} Items Order` 
-                              : (order.productId?.name || 'Unknown Item')}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {(order.items && order.items.length > 0 ? order.items : [order.productId]).slice(0, 2).map((item, idx) => (
-                              <span key={idx} className="text-[12px] bg-slate-50 text-slate-400 px-1 py-0.5 rounded uppercase font-black">{item?.name}</span>
-                            ))}
-                            {(order.items?.length > 2) && <span className="text-[12px] text-slate-300 font-black">+{order.items.length - 2}</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <p className="font-black text-brand-navy uppercase text-[12px] tracking-tight">{order.userName}</p>
-                      <p className="text-[12px] text-brand-orange font-black uppercase tracking-widest mt-0.5">{order.userMobile || 'No Contact'}</p>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex flex-col">
-                        <span className="text-brand-navy font-black text-[12px] tracking-tighter">
-                          {new Date(order.endDate).toLocaleDateString('en-GB')}
-                        </span>
-                        <span className="text-[12px] text-slate-400 font-black uppercase mt-0.5">
-                          At {new Date(order.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-6">
-                      <div className="flex items-center justify-center gap-3">
-                        {renderTableStatusAndActions(order)}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="4" className="p-12 text-center">
-                    <div className="flex flex-col items-center">
-                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
-                        <HiFilter className="text-slate-200 text-xl" />
-                      </div>
-                      <p className="text-slate-400 text-[12px] font-black uppercase tracking-widest">No rentals found for this period</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Return Confirmation Popup */}      {isReturnConfirming && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
-          <div className="bg-white max-w-sm w-full p-8 rounded-3xl shadow-2xl border border-slate-100 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl shadow-inner">
-              <HiCheckCircle />
-            </div>
-            <h3 className="text-[18px] font-black text-brand-navy uppercase tracking-tight mb-2">Equipment Return</h3>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6">
-              Please verify the condition of the equipment before confirming the return.
-            </p>
-
-            <div className="space-y-6 mb-8 text-left">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Physical Condition</label>
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => setReturnCondition('Good')}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${returnCondition === 'Good' ? 'bg-white text-emerald-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Good Condition
-                  </button>
-                  <button 
-                    onClick={() => setReturnCondition('Bad')}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${returnCondition === 'Bad' ? 'bg-white text-red-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Found Issues
-                  </button>
-                </div>
-              </div>
-
-              <div className={`transition-all duration-300 ${returnCondition === 'Bad' ? 'opacity-100 translate-y-0 h-auto' : 'opacity-0 -translate-y-2 h-0 overflow-hidden'}`}>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Issue Details</label>
-                <textarea 
-                  value={returnNotes}
-                  onChange={(e) => setReturnNotes(e.target.value)}
-                  placeholder="DESCRIBE THE DAMAGE OR ISSUE..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none transition-all resize-none h-24"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => {
-                  setIsReturnConfirming(null)
-                  setReturnCondition('Good')
-                  setReturnNotes('')
-                }}
-                className="py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[12px] uppercase tracking-widest hover:bg-slate-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes)
-                  setIsReturnConfirming(null)
-                  setReturnCondition('Good')
-                  setReturnNotes('')
-                }}
-                className={`py-3 text-white rounded-xl font-black text-[12px] uppercase tracking-widest transition-all shadow-lg ${returnCondition === 'Bad' ? 'bg-red-500 hover:bg-red-600 shadow-red-100' : 'bg-brand-navy hover:bg-emerald-600 shadow-emerald-100'}`}
-              >
-                Confirm Return
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Return Details Modal */}
-      {editingNotes.id && (
-        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 text-center animate-in zoom-in-95 duration-200">
-            <h3 className="text-[18px] font-black text-brand-navy uppercase tracking-tight mb-2">Edit Return Info</h3>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6">
-              Update the condition or notes for this equipment.
-            </p>
-
-            <div className="space-y-6 mb-8 text-left">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Physical Condition</label>
-                <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
-                  <button 
-                    onClick={() => setEditingNotes(prev => ({ ...prev, condition: 'Good' }))}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${editingNotes.condition === 'Good' ? 'bg-white text-emerald-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Good
-                  </button>
-                  <button 
-                    onClick={() => setEditingNotes(prev => ({ ...prev, condition: 'Bad' }))}
-                    className={`flex-1 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${editingNotes.condition === 'Bad' ? 'bg-white text-red-500 shadow-md border border-slate-100' : 'text-slate-400 hover:text-brand-navy'}`}
-                  >
-                    Bad
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Notes</label>
-                <textarea 
-                  value={editingNotes.notes}
-                  onChange={(e) => setEditingNotes(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="ADD ANY NOTES..."
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl p-4 text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-brand-navy/10 focus:border-brand-navy outline-none transition-all resize-none h-24"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setEditingNotes({ id: null, notes: '', condition: '' })}
-                className="flex-1 px-6 py-3 bg-slate-50 text-slate-400 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-slate-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  updateBookingStatus(editingNotes.id, 'Returned', editingNotes.condition, editingNotes.notes)
-                  setEditingNotes({ id: null, notes: '', condition: '' })
-                }}
-                className="flex-1 px-6 py-3 bg-brand-navy text-white rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
     </div>
   )
 }

@@ -1,13 +1,18 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
 import toast from 'react-hot-toast'
+import { io } from 'socket.io-client'
 
 const GlobalContext = createContext()
 
 export const API_URL = import.meta.env.VITE_API_URL || 'https://lensmen-backend.onrender.com/api'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://lensmen-backend.onrender.com'
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [authMode, setAuthMode] = useState('none')
+  const [cartOpen, setCartOpen] = useState(false)
+  const [rentalQty, setRentalQty] = useState(1)
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('rental_user')
     return saved ? JSON.parse(saved) : null
@@ -29,7 +34,73 @@ export const GlobalProvider = ({ children }) => {
   const [allOrders, setAllOrders] = useState([])
   const [adminProductList, setAdminProductList] = useState([])
   const [userOrders, setUserOrders] = useState([])
-  const [allUsers, setAllUsers] = useState([])
+  const [allUsers, setAllUsers]               = useState([])
+  const [accountsSummary, setAccountsSummary] = useState(null)
+  const [revenueData, setRevenueData]         = useState([])
+  const [notifications, setNotifications]     = useState([])
+
+  // ── Socket.IO real-time connection ─────────────────────────────────
+  const socketRef = useRef(null)
+
+  const fetchNotifications = async (recipient) => {
+    if (!recipient) return
+    try {
+      const res  = await fetch(`${API_URL}/notifications/${encodeURIComponent(recipient)}`)
+      const data = await res.json()
+      if (Array.isArray(data)) setNotifications(data)
+    } catch {}
+  }
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] })
+    socketRef.current = socket
+
+    if (user) {
+      // Join personal room (email or 'admin')
+      const room = user.role === 'admin' ? 'admin' : user.email
+      socket.emit('join', { room })
+      fetchNotifications(room)
+    }
+
+    // New notification pushed from server
+    socket.on('notification:new', (notification) => {
+      setNotifications(prev => [notification, ...prev])
+    })
+
+    // booking:new → refresh order lists
+    socket.on('booking:new', ({ userEmail }) => {
+      fetchProducts()
+      if (user?.role === 'admin') {
+        fetch(`${API_URL}/admin/bookings`)
+          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      }
+      if (user && user.email === userEmail) fetchUserOrders()
+    })
+
+    // booking:updated → refresh order lists
+    socket.on('booking:updated', ({ userEmail }) => {
+      if (user?.role === 'admin') {
+        fetch(`${API_URL}/admin/bookings`)
+          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      }
+      if (user && user.email === userEmail) fetchUserOrders()
+    })
+
+    // booking:cancelled
+    socket.on('booking:cancelled', ({ userEmail }) => {
+      fetchProducts()
+      if (user?.role === 'admin') {
+        fetch(`${API_URL}/admin/bookings`)
+          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      }
+      if (user && user.email === userEmail) fetchUserOrders()
+    })
+
+    // product:updated
+    socket.on('product:updated', () => fetchProducts())
+
+    return () => socket.disconnect()
+  }, [user])
 
   useEffect(() => {
     if (user) localStorage.setItem('rental_user', JSON.stringify(user))
@@ -87,16 +158,33 @@ export const GlobalProvider = ({ children }) => {
         const res = await fetch(`${API_URL}/admin/users`)
         const data = await res.json()
         setAllUsers(data)
+      } else if (path === '/admin/accounts') {
+        await fetchAccounts()
       }
     } catch (error) {
       console.error('Fetch admin data error:', error)
     }
   }
 
+  const fetchAccounts = async (period = 'daily') => {
+    try {
+      const [summaryRes, revenueRes] = await Promise.all([
+        fetch(`${API_URL}/payments/accounts/summary`),
+        fetch(`${API_URL}/payments/accounts/revenue?period=${period}`),
+      ])
+      const summary = await summaryRes.json()
+      const revenue = await revenueRes.json()
+      setAccountsSummary(summary)
+      setRevenueData(revenue)
+    } catch (err) {
+      console.error('fetchAccounts error:', err)
+    }
+  }
+
   const fetchUserOrders = async () => {
     if (!user) return
     try {
-      const res = await fetch(`${API_URL}/user/bookings/${user.email}`)
+      const res = await fetch(`${API_URL}/bookings/user/${user.email}`)
       const data = await res.json()
       setUserOrders(data)
     } catch (error) {
@@ -105,17 +193,55 @@ export const GlobalProvider = ({ children }) => {
   }
 
   const addToCart = (product) => {
-    if (cart.find(item => item._id === product._id)) {
-      toast.error('Item already in cart')
+    if (!user) {
+      setAuthMode('login')
       return
     }
-    setCart([...cart, product])
-    toast.success('Added to cart!')
+    if (cart.find(item => item._id === product._id)) {
+      toast.error('Item already in cart')
+      setCartOpen(true)
+      return
+    }
+    setCart([...cart, { ...product, cartQty: 1 }])
+    setCartOpen(true)
   }
 
   const removeFromCart = (id) => {
     setCart(cart.filter(item => item._id !== id))
     toast.success('Removed from cart')
+  }
+
+  const markNotificationRead = async (id) => {
+    setNotifications(prev => prev.map(n => n._id === id ? { ...n, read: true } : n))
+    try { await fetch(`${API_URL}/notifications/${id}/read`, { method: 'PUT' }) } catch {}
+  }
+
+  const markAllNotificationsRead = async () => {
+    if (!user) return
+    const recipient = user.role === 'admin' ? 'admin' : user.email
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+    try { await fetch(`${API_URL}/notifications/read-all/${encodeURIComponent(recipient)}`, { method: 'PUT' }) } catch {}
+  }
+
+  const deleteNotification = async (id) => {
+    setNotifications(prev => prev.filter(n => n._id !== id))
+    try { await fetch(`${API_URL}/notifications/${id}`, { method: 'DELETE' }) } catch {}
+  }
+
+  const clearAllNotifications = async () => {
+    if (!user) return
+    const recipient = user.role === 'admin' ? 'admin' : user.email
+    setNotifications([])
+    try { await fetch(`${API_URL}/notifications/clear/${encodeURIComponent(recipient)}`, { method: 'DELETE' }) } catch {}
+  }
+
+  const updateCartQty = (id, delta) => {
+    setCart(prev => prev.map(item => {
+      if (item._id !== id) return item
+      const max = item.availableQuantity ?? 1
+      const next = Math.min(max, Math.max(1, (item.cartQty || 1) + delta))
+      return { ...item, cartQty: next }
+    }))
   }
 
   const updateProfile = async (profileData) => {
@@ -140,6 +266,8 @@ export const GlobalProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null)
+    setCart([])
+    localStorage.removeItem('rental_cart')
     window.location.href = '/'
   }
 
@@ -147,6 +275,9 @@ export const GlobalProvider = ({ children }) => {
     <GlobalContext.Provider value={{
       products, setProducts,
       categories, setCategories,
+      authMode, setAuthMode,
+      cartOpen, setCartOpen,
+      rentalQty, setRentalQty,
       user, setUser,
       cart, setCart,
       rentalDates, setRentalDates,
@@ -155,11 +286,20 @@ export const GlobalProvider = ({ children }) => {
       adminProductList, setAdminProductList,
       userOrders, setUserOrders,
       allUsers, setAllUsers,
+      accountsSummary, setAccountsSummary,
+      revenueData, setRevenueData,
+      fetchAccounts,
       fetchProducts,
       fetchAdminData,
       fetchUserOrders,
+      notifications, setNotifications,
+      markNotificationRead,
+      markAllNotificationsRead,
+      deleteNotification,
+      clearAllNotifications,
       addToCart,
       removeFromCart,
+      updateCartQty,
       updateProfile,
       logout,
       API_URL

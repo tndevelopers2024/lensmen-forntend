@@ -1,161 +1,186 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { HiUpload } from 'react-icons/hi'
+import { Form, Input, InputNumber, Button, Upload, Card, Divider, Typography } from 'antd'
+import { InboxOutlined, BarcodeOutlined } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
+import PageHeader from '../../components/PageHeader'
+import CategorySelect from '../../components/CategorySelect'
+
+const { TextArea } = Input
+const { Text }     = Typography
+const { Dragger }  = Upload
+
+const NAVY  = '#1e1b4b'
+const BRAND = '#E5550F'
 
 const AddGear = () => {
-  const { fetchProducts, API_URL, products } = useGlobal()
-  const navigate = useNavigate()
-  const [newProduct, setNewProduct] = useState({ name: '', description: '', pricePerDay: '', category: '' })
+  const { fetchProducts, API_URL } = useGlobal()
+  const navigate     = useNavigate()
+  const [form]        = Form.useForm()
   const [productFile, setProductFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState('')
-  const [showDropdown, setShowDropdown] = useState(false)
+  const [previewUrl,  setPreviewUrl]  = useState('')
+  const [loading,     setLoading]     = useState(false)
+  const [totalQty,    setTotalQty]    = useState(1)
 
-  const existingCategories = [...new Set(products.map(p => p.category).filter(Boolean))]
-  const filteredCategories = existingCategories.filter(cat => 
-    cat.toLowerCase().includes(newProduct.category.toLowerCase())
-  )
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setProductFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      toast.success('Image selected');
-    }
+  const handleImageUpload = (file) => {
+    setProductFile(file)
+    setPreviewUrl(URL.createObjectURL(file))
+    return false
   }
 
-  const handleAddProduct = async (e) => {
-    e.preventDefault()
-    const formData = new FormData();
-    formData.append('name', newProduct.name);
-    formData.append('description', newProduct.description);
-    formData.append('pricePerDay', newProduct.pricePerDay);
-    formData.append('category', newProduct.category);
-    if (productFile) formData.append('image', productFile);
+  const handleAddProduct = async (values) => {
+    setLoading(true)
+    const formData = new FormData()
+    Object.entries(values).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') formData.append(k, v)
+    })
+    if (productFile) formData.append('image', productFile)
 
     try {
-      const res = await fetch(`${API_URL}/products`, {
-        method: 'POST',
-        body: formData
-      })
-
+      const res = await fetch(`${API_URL}/products`, { method: 'POST', body: formData })
       if (res.ok) {
-        toast.success('Product added successfully')
+        toast.success('Product added to inventory')
         fetchProducts()
         navigate('/admin/all-products')
       } else {
-        toast.error('Failed to add product')
+        const d = await res.json()
+        toast.error(d.message || 'Failed to add product')
       }
-    } catch (error) {
+    } catch {
       toast.error('Error adding product')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
-        <p className="text-primary font-black uppercase tracking-[0.3em] text-[12px] mb-1">Inventory Expansion</p>
-        <h2 className="text-[16px] font-black text-brand-navy uppercase tracking-widest">Add Gear</h2>
-      </div>
+    <div>
+      <PageHeader
+        eyebrow="Inventory Expansion"
+        title="Add New Product"
+        subtitle="Fill in the details to add a new rental item to your inventory"
+      />
 
-      <div className="bg-white p-8 rounded-2xl shadow-lg border border-slate-50">
-        <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-1">
-            <label className="text-[12px] font-black text-primary uppercase tracking-widest ml-1">Product Name</label>
-            <input 
-              type="text" 
-              placeholder="e.g. ARRI Alexa Mini" 
-              required 
-              value={newProduct.name} 
-              onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} 
-              className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-primary outline-none transition-all placeholder:text-slate-200" 
-            />
+      <Card style={{ borderRadius: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
+        <Form form={form} layout="vertical" onFinish={handleAddProduct} initialValues={{ totalQuantity: 1, availableQuantity: 1 }}>
+
+          {/* ── Basic Info ─────────────────────────────────────────── */}
+          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0 }}>
+            Basic Information
+          </Divider>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+            <Form.Item label="Product Name" name="name" rules={[{ required: true, message: 'Enter product name' }]}>
+              <Input placeholder="e.g. ARRI Alexa Mini" size="large" />
+            </Form.Item>
+
+            <Form.Item label="Daily Rate (₹)" name="pricePerDay" rules={[{ required: true, message: 'Enter daily rate' }]}>
+              <InputNumber placeholder="0" size="large" min={0} style={{ width: '100%' }} prefix="₹" />
+            </Form.Item>
+
+            <Form.Item label="Category" name="category" rules={[{ required: true, message: 'Select a category' }]}>
+              <CategorySelect size="large" placeholder="Select or create a category" style={{ width: '100%' }} />
+            </Form.Item>
+
+            <Form.Item label={<span>SKU <Text type="secondary" style={{ fontSize: 11, fontWeight: 400 }}>(auto-generated if blank)</Text></span>} name="sku">
+              <Input
+                size="large"
+                prefix={<BarcodeOutlined style={{ color: '#9ca3af' }} />}
+                placeholder="e.g. CAM-0042"
+              />
+            </Form.Item>
+
+            <Form.Item label="Description" name="description" style={{ gridColumn: 'span 2' }} rules={[{ required: true, message: 'Enter a description' }]}>
+              <TextArea rows={3} placeholder="Describe features, accessories included, special handling notes..." />
+            </Form.Item>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[12px] font-black text-primary uppercase tracking-widest ml-1">Daily Rate (INR)</label>
-            <input 
-              type="number" 
-              placeholder="0.00" 
-              required 
-              value={newProduct.pricePerDay} 
-              onChange={e => setNewProduct({ ...newProduct, pricePerDay: e.target.value })} 
-              className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-primary outline-none transition-all placeholder:text-slate-200" 
-            />
+          {/* ── Stock Management ───────────────────────────────────── */}
+          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Stock Management
+          </Divider>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px', marginBottom: 8 }}>
+            <Form.Item label={<span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Total Units Owned</span>} name="totalQuantity">
+              <InputNumber
+                min={1}
+                size="large"
+                style={{ width: '100%' }}
+                onChange={v => {
+                  setTotalQty(v || 1)
+                  const cur = form.getFieldValue('availableQuantity') || 0
+                  if (cur > (v || 1)) form.setFieldValue('availableQuantity', v || 1)
+                }}
+              />
+            </Form.Item>
+
+            <Form.Item label={<span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Currently Available</span>} name="availableQuantity">
+              <InputNumber min={0} max={totalQty} size="large" style={{ width: '100%' }} />
+            </Form.Item>
           </div>
 
-          <div className="space-y-1 relative">
-            <label className="text-[12px] font-black text-primary uppercase tracking-widest ml-1">Category (Search or Type)</label>
-            <input 
-              type="text" 
-              placeholder="e.g. CAMERA, LENS, LIGHTING" 
-              required 
-              value={newProduct.category} 
-              onChange={e => {
-                setNewProduct({ ...newProduct, category: e.target.value })
-                setShowDropdown(true)
-              }} 
-              onFocus={() => setShowDropdown(true)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-              className="w-full border-b border-slate-100 p-2 font-black uppercase text-[12px] focus:border-primary outline-none transition-all placeholder:text-slate-200" 
-            />
-            {showDropdown && filteredCategories.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-100 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
-                {filteredCategories.map((cat, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => {
-                      setNewProduct({ ...newProduct, category: cat })
-                      setShowDropdown(false)
-                    }}
-                    className="w-full text-left p-3 hover:bg-slate-50 text-[11px] font-black text-brand-navy uppercase border-b border-slate-50 last:border-0 transition-colors"
-                  >
-                    {cat}
-                  </button>
-                ))}
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.availableQuantity !== cur.availableQuantity || prev.totalQuantity !== cur.totalQuantity}>
+            {({ getFieldValue }) => {
+              const avail = getFieldValue('availableQuantity') ?? 1
+              const total = getFieldValue('totalQuantity') ?? 1
+              const pct   = Math.round((avail / total) * 100)
+              const color = avail === 0 ? '#ef4444' : avail === total ? '#10b981' : '#f59e0b'
+              return (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 0.25s' }} />
+                  </div>
+                  <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 6, display: 'block' }}>
+                    <span style={{ color, fontWeight: 600 }}>{avail}</span> of {total} units available
+                  </Text>
+                </div>
+              )
+            }}
+          </Form.Item>
+
+          {/* ── Product Image ──────────────────────────────────────── */}
+          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Product Image
+          </Divider>
+
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Dragger
+                beforeUpload={handleImageUpload}
+                showUploadList={false}
+                accept="image/*"
+                style={{ borderRadius: 12 }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined style={{ color: BRAND }} />
+                </p>
+                <p className="ant-upload-text">Click or drag image here</p>
+                <p className="ant-upload-hint">JPG, PNG, WEBP — recommended 800×800</p>
+              </Dragger>
+            </div>
+            {previewUrl && (
+              <div style={{ width: 120, height: 120, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', flexShrink: 0 }}>
+                <img src={previewUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" />
               </div>
             )}
           </div>
 
-          <div className="md:col-span-2 space-y-3">
-            <p className="text-[12px] font-black text-primary uppercase tracking-widest ml-1">Upload Image</p>
-            <div className="flex items-center space-x-6">
-              <label className="flex-1 cursor-pointer group">
-                <div className="border border-dashed border-slate-200 p-8 rounded-xl flex flex-col items-center justify-center space-y-2 hover:border-primary hover:bg-slate-50 transition-all group">
-                  <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                    <HiUpload className="text-xl text-slate-300 group-hover:text-primary" />
-                  </div>
-                  <span className="font-black text-[12px] uppercase tracking-[0.2em] text-slate-400 group-hover:text-brand-navy">Select Image File</span>
-                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                </div>
-              </label>
-              {previewUrl && (
-                <div className="w-32 h-32 rounded-xl border border-slate-100 shadow-md overflow-hidden relative group">
-                  <img src={previewUrl} className="w-full h-full object-cover" alt="Preview" />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="md:col-span-2 space-y-1">
-            <label className="text-[12px] font-black text-primary uppercase tracking-widest ml-1">Description</label>
-            <textarea 
-              placeholder="Describe the gear's features and condition..." 
-              required 
-              value={newProduct.description} 
-              onChange={e => setNewProduct({ ...newProduct, description: e.target.value })} 
-              className="w-full border border-slate-100 p-4 rounded-xl font-medium text-[12px] focus:border-primary outline-none h-24 transition-all resize-none" 
-            />
-          </div>
-
-          <button type="submit" className="md:col-span-2 bg-primary text-white p-4 rounded-xl font-black text-[14px] uppercase tracking-[0.1em] hover:shadow-lg transition-all">Add to Products</button>
-        </form>
-      </div>
+          <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="large"
+              loading={loading}
+              block
+              style={{ height: 52, fontSize: 15, fontWeight: 800, background: BRAND, borderColor: BRAND, letterSpacing: '0.04em' }}
+            >
+              Add to Inventory
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
     </div>
-    
   )
 }
 
