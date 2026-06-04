@@ -31,33 +31,35 @@ const Layout = ({ children }) => {
       />
       {isPublic && (
         <nav className="bg-white/90 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto flex justify-between items-center px-6 h-16">
-            <div className="flex items-center gap-6">
-              <Link to="/" className="flex items-center gap-2.5 group">
-                <img src="/logo.jpg" alt="Logo" className="w-9 h-9 rounded-lg object-cover border border-slate-100" />
-                <h1 className="text-[16px] font-bold text-[#1a1a2e] tracking-tight">Lensmen <span className="text-primary">Rentals</span></h1>
-              </Link>
+          <div className="max-w-7xl mx-auto grid grid-cols-3 items-center px-6 h-16">
 
-              {/* Nav links — Home + each category as a separate item */}
-              <div className="hidden lg:flex items-center gap-0.5">
+            {/* Left — Logo */}
+            <Link to="/" className="flex items-center gap-2.5 group w-fit">
+              <img src="/logo.jpg" alt="Logo" className="w-9 h-9 rounded-lg object-cover border border-slate-100" />
+              <h1 className="text-[16px] font-bold text-[#1a1a2e] tracking-tight">Lensmen <span className="text-primary">Rentals</span></h1>
+            </Link>
+
+            {/* Center — Nav links */}
+            <div className="hidden lg:flex items-center justify-center gap-0.5">
+              <button
+                onClick={() => goToCategory('All')}
+                className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all"
+              >
+                Home
+              </button>
+              {categories.map(cat => (
                 <button
-                  onClick={() => goToCategory('All')}
-                  className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all"
+                  key={cat}
+                  onClick={() => goToCategory(cat)}
+                  className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all whitespace-nowrap"
                 >
-                  Home
+                  {cat}
                 </button>
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => goToCategory(cat)}
-                    className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all whitespace-nowrap"
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
-            <div className="flex items-center gap-3">
+
+            {/* Right — Actions */}
+            <div className="flex items-center justify-end gap-2">
               {(!user || user.role !== 'admin') && (
                 <button
                   onClick={() => user ? setCartOpen(true) : setAuthMode('login')}
@@ -71,6 +73,7 @@ const Layout = ({ children }) => {
                   )}
                 </button>
               )}
+
               {user ? (
                 <>
                   {user.role === 'admin' ? (
@@ -84,7 +87,6 @@ const Layout = ({ children }) => {
                       <span className="hidden md:inline">My Orders</span>
                     </Link>
                   )}
-
                   <Link to="/dashboard" title="My Dashboard" className="w-10 h-10 rounded-xl bg-slate-50 text-[#1a1a2e] hover:text-primary hover:bg-orange-50 transition-all flex items-center justify-center">
                     <HiOutlineUser className="text-xl" />
                   </Link>
@@ -101,8 +103,17 @@ const Layout = ({ children }) => {
                     <HiOutlineLogout className="text-lg" />
                   </button>
                 </>
-              ) : null}
+              ) : (
+                <button
+                  onClick={() => setAuthMode('login')}
+                  className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-primary text-white text-[13px] font-semibold px-4 h-10 rounded-xl transition-all"
+                >
+                  <HiOutlineUser className="text-base" />
+                  Sign In
+                </button>
+              )}
             </div>
+
           </div>
         </nav>
       )}

@@ -73,9 +73,17 @@ const AuthModal = ({ mode, setMode }) => {
       })
       const data = await res.json()
       if (res.ok) {
-        // Both register and login now require email OTP verification
-        setView('verify')
-        toast.success('Verification code sent to your email')
+        if (data.user) {
+          // Admin direct login (no OTP)
+          setUser(data.user)
+          setMode('none')
+          toast.success('Welcome back, Admin!')
+          navigate('/admin')
+        } else {
+          // Regular user: go to OTP verify screen
+          setView('verify')
+          toast.success('Verification code sent to your email')
+        }
       } else { toast.error(data.message) }
     } catch { toast.error('Authentication failed') }
     finally { setLoading(false) }
@@ -96,8 +104,8 @@ const AuthModal = ({ mode, setMode }) => {
         }
         setUser(data.user)
         setMode('none')
-        toast.success('Account verified! Welcome to Lensmen.')
-        if (data.user.role === 'admin' && location.pathname === '/') navigate('/admin')
+        toast.success(data.user.role === 'admin' ? 'Welcome back, Admin!' : 'Account verified! Welcome to Lensmen.')
+        if (data.user.role === 'admin') navigate('/admin')
       } else { toast.error(data.message) }
     } catch { toast.error('Verification failed') }
     finally { setLoading(false) }
