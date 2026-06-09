@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useGlobal } from '../../context/GlobalContext'
 import toast from 'react-hot-toast'
+import useWindowWidth from '../../utils/useWindowWidth'
 import {
   HiOutlineUser, HiOutlinePhone, HiOutlineLocationMarker, HiOutlineMail,
   HiOutlineShieldCheck, HiOutlineSparkles, HiOutlineArrowNarrowRight,
@@ -21,6 +22,8 @@ const DashboardAccount = () => {
     mobile:   user?.mobile   || '',
     address:  user?.address  || '',
   })
+  const width    = useWindowWidth()
+  const isMobile = width < 640
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -32,7 +35,7 @@ const DashboardAccount = () => {
   }
 
   const Field = ({ label, icon: Icon, children }) => (
-    <div style={{ marginBottom: 20 }}>
+    <div style={{ marginBottom: 18 }}>
       <label style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 6 }}>
         {label}
       </label>
@@ -53,37 +56,41 @@ const DashboardAccount = () => {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 22 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 6 }}>
           Account Settings
         </div>
-        <h1 style={{ fontSize: 28, fontWeight: 700, color: INK, margin: 0, letterSpacing: '-0.02em' }}>Your Profile</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 28, fontWeight: 700, color: INK, margin: 0, letterSpacing: '-0.02em' }}>Your Profile</h1>
       </div>
 
-      {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
+      {/* Two-column on desktop, stacked on mobile */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.6fr) minmax(0, 1fr)',
+        gap: 16,
+        alignItems: 'start',
+      }}>
 
         {/* ── Left: editable form ──────────────────────────────── */}
         <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${LINE}`, overflow: 'hidden' }}>
-          {/* Identity row */}
-          <div style={{ padding: '22px 24px', borderBottom: `1px solid ${LINE}`, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ padding: '18px 20px', borderBottom: `1px solid ${LINE}`, display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{
-              width: 52, height: 52, borderRadius: '50%',
+              width: 46, height: 46, borderRadius: '50%',
               background: NAVY, color: '#fff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 18, fontWeight: 700, flexShrink: 0,
+              fontSize: 16, fontWeight: 700, flexShrink: 0,
             }}>
               {user?.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{user?.fullName}</div>
-              <div style={{ fontSize: 13, color: MUTED, marginTop: 2 }}>Manage your profile &amp; preferences</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: INK }}>{user?.fullName}</div>
+              <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Manage your profile &amp; preferences</div>
             </div>
           </div>
 
-          <div style={{ padding: 24 }}>
+          <div style={{ padding: isMobile ? 16 : 22 }}>
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
                 <Field label="Full Name" icon={HiOutlineUser}>
                   <input type="text" required value={formData.fullName}
                     onChange={e => setFormData({ ...formData, fullName: e.target.value })} style={inputStyle} />
@@ -94,12 +101,11 @@ const DashboardAccount = () => {
                 </Field>
               </div>
 
-              {/* Email (read-only) */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 18 }}>
                 <label style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 6 }}>
                   Registered Email
                 </label>
-                <div style={{ background: '#f9fafb', border: '1px solid #f0f0f0', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ background: '#f9fafb', border: '1px solid #f0f0f0', borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <HiOutlineMail style={{ color: '#9ca3af', fontSize: 18, flexShrink: 0 }} />
                   <span style={{ fontSize: 13, color: '#6b7280' }}>{user?.email}</span>
                 </div>
@@ -113,7 +119,7 @@ const DashboardAccount = () => {
 
               <button type="submit" disabled={loading}
                 style={{
-                  width: '100%', padding: '13px', marginTop: 8,
+                  width: '100%', padding: '13px', marginTop: 4,
                   background: loading ? '#9ca3af' : NAVY,
                   color: '#fff', border: 'none', borderRadius: 12,
                   fontSize: 13, fontWeight: 800, textTransform: 'uppercase',
@@ -126,41 +132,33 @@ const DashboardAccount = () => {
         </div>
 
         {/* ── Right: account summary ───────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Status card */}
-          <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${LINE}`, padding: 22 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ background: '#fff', borderRadius: 14, border: `1px solid ${LINE}`, padding: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 14 }}>
               Account Status
             </div>
-
             <SummaryRow icon={HiOutlineShieldCheck} label="KYC Verification">
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: kyc.color }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: kyc.color }} />
                 {kyc.label}
               </span>
             </SummaryRow>
-
             <SummaryRow icon={HiOutlineSparkles} label="Membership">
               <span style={{ fontSize: 13, fontWeight: 600, color: INK }}>{user?.customerClass || 'New'}</span>
             </SummaryRow>
-
             <SummaryRow icon={HiOutlineUser} label="Account Role" last>
               <span style={{ fontSize: 13, fontWeight: 600, color: INK, textTransform: 'capitalize' }}>{user?.role || 'user'}</span>
             </SummaryRow>
           </div>
 
-          {/* KYC CTA if not approved */}
           {user?.kycStatus !== 'Approved' && (
             <Link to="/dashboard/kyc" style={{
               background: '#fff', borderRadius: 14, border: `1px solid ${LINE}`,
-              borderLeft: `3px solid ${BRAND}`, padding: '18px 20px',
+              borderLeft: `3px solid ${BRAND}`, padding: '16px 18px',
               textDecoration: 'none', display: 'block',
             }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: INK, marginBottom: 4 }}>
-                Complete verification
-              </div>
-              <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 12, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: INK, marginBottom: 4 }}>Complete verification</div>
+              <div style={{ fontSize: 12.5, color: MUTED, marginBottom: 10, lineHeight: 1.5 }}>
                 Submit your KYC documents to unlock equipment rentals.
               </div>
               <span style={{ fontSize: 13, fontWeight: 600, color: BRAND, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -174,12 +172,10 @@ const DashboardAccount = () => {
   )
 }
 
-// ── Summary row helper ──────────────────────────────────────────────────
 const SummaryRow = ({ icon: Icon, label, children, last }) => (
   <div style={{
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '12px 0',
-    borderBottom: last ? 'none' : `1px solid ${LINE}`,
+    padding: '11px 0', borderBottom: last ? 'none' : `1px solid ${LINE}`,
   }}>
     <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: MUTED }}>
       <Icon style={{ fontSize: 17 }} />
@@ -193,8 +189,7 @@ const inputStyle = {
   width: '100%', padding: '11px 14px 11px 42px',
   background: '#f9fafb', border: '1px solid #f0f0f0',
   borderRadius: 10, fontSize: 13, color: '#111827',
-  outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
+  outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
 
 export default DashboardAccount

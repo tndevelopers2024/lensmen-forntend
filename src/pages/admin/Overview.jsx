@@ -4,7 +4,7 @@ import {
   Input, Modal, Radio, DatePicker, Typography,
 } from 'antd'
 import { SearchOutlined, CheckCircleOutlined } from '@ant-design/icons'
-import { useGlobal } from '../../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import { isWithinInterval, differenceInDays, isSameDay } from 'date-fns'
@@ -129,7 +129,7 @@ const AdminOverview = () => {
   const ScheduleRow = ({ item }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
       <img
-        src={item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl || ''}
+        src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
         style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
         alt=""
       />
@@ -151,7 +151,7 @@ const AdminOverview = () => {
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img
-              src={(items[0]?.productId?.imageUrl || items[0]?.imageUrl) || ''}
+              src={getImageUrl(items[0]?.productId?.imageUrl || items[0]?.imageUrl)}
               style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
               alt=""
             />
@@ -295,7 +295,7 @@ const AdminOverview = () => {
               flattenedIn.map(item => (
                 <div key={item.uniqueKey} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
                   <img
-                    src={item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl || ''}
+                    src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
                     style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
                     alt=""
                   />

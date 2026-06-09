@@ -5,11 +5,18 @@ import { io } from 'socket.io-client'
 const GlobalContext = createContext()
 
 export const API_URL = import.meta.env.VITE_API_URL || 'https://lensmen-backend.onrender.com/api'
+export const BACKEND_URL = API_URL.replace(/\/api$/, '')
+export const getImageUrl = (path) => {
+  if (!path) return ''
+  if (path.startsWith('http')) return path  // legacy absolute URLs still work
+  return `${BACKEND_URL}${path}`
+}
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://lensmen-backend.onrender.com'
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
+  const [offers, setOffers] = useState([])
   const [authMode, setAuthMode] = useState('none')
   const [cartOpen, setCartOpen] = useState(false)
   const [rentalQty, setRentalQty] = useState(1)
@@ -114,6 +121,7 @@ export const GlobalProvider = ({ children }) => {
   useEffect(() => {
     fetchProducts()
     fetchCategories()
+    fetchOffers()
   }, [])
 
   const fetchProducts = async () => {
@@ -124,6 +132,14 @@ export const GlobalProvider = ({ children }) => {
     } catch (error) {
       console.error('Fetch products error:', error)
     }
+  }
+
+  const fetchOffers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/offers/active`)
+      const data = await res.json()
+      if (Array.isArray(data)) setOffers(data)
+    } catch {}
   }
 
   const fetchCategories = async () => {
@@ -264,6 +280,17 @@ export const GlobalProvider = ({ children }) => {
     }
   }
 
+  const refreshUser = async () => {
+    if (!user?.email) return
+    try {
+      const res = await fetch(`${API_URL}/user/me?email=${encodeURIComponent(user.email)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setUser(prev => ({ ...prev, ...data }))
+      }
+    } catch {}
+  }
+
   const logout = () => {
     setUser(null)
     setCart([])
@@ -275,6 +302,7 @@ export const GlobalProvider = ({ children }) => {
     <GlobalContext.Provider value={{
       products, setProducts,
       categories, setCategories,
+      offers, setOffers, fetchOffers,
       authMode, setAuthMode,
       cartOpen, setCartOpen,
       rentalQty, setRentalQty,
@@ -301,6 +329,7 @@ export const GlobalProvider = ({ children }) => {
       removeFromCart,
       updateCartQty,
       updateProfile,
+      refreshUser,
       logout,
       API_URL
     }}>

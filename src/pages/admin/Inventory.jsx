@@ -8,7 +8,7 @@ import {
   BarcodeOutlined, CheckCircleOutlined, InboxOutlined, SyncOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
-import { useGlobal } from '../../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import PageHeader from '../../components/PageHeader'
 import CategorySelect from '../../components/CategorySelect'
 
@@ -28,7 +28,7 @@ const GalleryGrid = ({ existingUrls = [], newFiles = [], onRemoveExisting, onRem
       {/* Existing saved images */}
       {existingUrls.map((url, i) => (
         <div key={`e-${i}`} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb', aspectRatio: '1' }}>
-          <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <img src={getImageUrl(url)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           <button type="button" onClick={() => onRemoveExisting(i)}
             style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, lineHeight: 1 }}>
             ×
@@ -168,7 +168,7 @@ const AdminInventory = () => {
     setEditQty(total)
     setEditGallery(product.galleryImages || [])
     setEditGalleryFiles([])
-    setEditImagePreview(product.imageUrl || '')
+    setEditImagePreview(getImageUrl(product.imageUrl))
     setEditingProduct({ ...product, newImage: null })
     editForm.setFieldsValue({
       name:              product.name,
@@ -263,7 +263,7 @@ const AdminInventory = () => {
       render: (_, item) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Image
-            src={item.imageUrl} alt={item.name} width={44} height={44}
+            src={getImageUrl(item.imageUrl)} alt={item.name} width={44} height={44}
             style={{ objectFit: 'cover', borderRadius: 8, border: '1px solid #f0f0f0', flexShrink: 0 }}
             fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
           />

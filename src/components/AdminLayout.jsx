@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import { Layout, Menu, ConfigProvider, Button, Tooltip } from 'antd'
 import {
   BarChartOutlined, AppstoreOutlined, ShoppingCartOutlined, TeamOutlined,
-  PlusOutlined, QuestionCircleOutlined, SettingOutlined, LogoutOutlined,
+  PlusOutlined, SettingOutlined, LogoutOutlined,
   LeftOutlined, RightOutlined, AccountBookOutlined, FileTextOutlined,
-  TagsOutlined, UnorderedListOutlined, BellOutlined,
+  TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined,
 } from '@ant-design/icons'
 import { useGlobal } from '../context/GlobalContext'
 
@@ -34,6 +34,7 @@ const AdminLayout = ({ children, location }) => {
     { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
     { key: '/admin/accounts', icon: <AccountBookOutlined />,  label: <Link to="/admin/accounts">Accounts</Link> },
     { key: '/admin/quotes',   icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
+    { key: '/admin/offers',   icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
   ]
 
   const utilItems = [
@@ -71,8 +72,7 @@ const AdminLayout = ({ children, location }) => {
         </Link>
       ),
     },
-    { key: '/admin/help',     icon: <QuestionCircleOutlined />, label: <Link to="/admin/help">Help</Link> },
-    { key: '/admin/settings', icon: <SettingOutlined />,        label: <Link to="/admin/settings">Settings</Link> },
+    { key: '/admin/settings', icon: <SettingOutlined />, label: <Link to="/admin/settings">Settings</Link> },
   ]
 
   const initials = user?.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()

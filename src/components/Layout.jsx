@@ -1,122 +1,363 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import {
-  HiOutlineShoppingCart, HiOutlineCalendar, HiOutlineLogout,
-  HiOutlineChartBar, HiOutlineUser,
+  HiOutlineShoppingCart, HiOutlineLogout, HiOutlineChartBar,
+  HiOutlineUser, HiOutlineSearch, HiLocationMarker, HiCalendar, HiPencilAlt, HiX,
 } from 'react-icons/hi'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
+import { differenceInDays } from 'date-fns'
 import { useGlobal } from '../context/GlobalContext'
 import Footer from './Footer'
 
 const Layout = ({ children }) => {
-  const { user, cart, logout, setAuthMode, setCartOpen, categories } = useGlobal()
+  const { user, cart, logout, setAuthMode, setCartOpen, categories, rentalDates, setRentalDates } = useGlobal()
   const navigate = useNavigate()
   const location = useLocation()
+  const [showDatePicker, setShowDatePicker] = useState(false)
 
   const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/dashboard')
+  const activeCategory = new URLSearchParams(location.search).get('category') || 'All'
 
   const goToCategory = (cat) => {
     navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`)
-    setTimeout(() => document.getElementById('inventory')?.scrollIntoView({ behavior: 'smooth' }), 100)
+    setTimeout(() => document.getElementById('inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
+  const fmtDate = (d) => {
+    if (!d) return '—'
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  }
+
+  const handleDateChange = (dates) => {
+    const [start, end] = dates
+    if (start && end) {
+      if (differenceInDays(end, start) > 10) {
+        toast.error('Rental period cannot exceed 10 days')
+        setRentalDates({ from: start, to: null })
+        return
+      }
+      setRentalDates({ from: start, to: end })
+      setShowDatePicker(false)
+    } else {
+      setRentalDates({ from: start, to: null })
+    }
+  }
+
+  const rentalDays = rentalDates.from && rentalDates.to
+    ? Math.max(1, differenceInDays(rentalDates.to, rentalDates.from))
+    : null
+
+  /* ─── Reusable chip/button pieces ────────────────────────── */
+  const locationChip = (
+    <button className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-white text-[12px] font-medium transition-colors shrink-0">
+      <HiLocationMarker className="text-[#E5550F] text-sm shrink-0" />
+      <span className="hidden sm:inline">Chennai</span>
+      <svg className="w-3 h-3 ml-0.5 opacity-50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
+  )
+
+  const deliveryChip = (
+    <button
+      onClick={() => setShowDatePicker(true)}
+      className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-[12px] transition-colors shrink-0"
+    >
+      <HiCalendar className="text-white/50 text-sm shrink-0" />
+      <span className="text-white/60 hidden sm:inline">Delivery:</span>
+      <span className="text-white font-semibold">{fmtDate(rentalDates.from)}</span>
+    </button>
+  )
+
+  const pickupChip = (
+    <button
+      onClick={() => setShowDatePicker(true)}
+      className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-[12px] transition-colors shrink-0"
+    >
+      <HiCalendar className="text-white/50 text-sm shrink-0" />
+      <span className="text-white/60 hidden sm:inline">Pickup:</span>
+      <span className="text-white font-semibold">{fmtDate(rentalDates.to)}</span>
+    </button>
+  )
+
+  const editBtn = (
+    <button
+      onClick={() => setShowDatePicker(true)}
+      className="flex items-center gap-1.5 border border-[#E5550F] text-[#E5550F] rounded-full px-3 h-[28px] text-[12px] font-semibold hover:bg-[#E5550F]/10 transition-colors shrink-0"
+    >
+      <HiPencilAlt className="text-sm" /> Edit
+    </button>
+  )
+
+  const rightActions = (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button className="w-8 h-8 flex items-center justify-center text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+        <HiOutlineSearch className="text-[17px]" />
+      </button>
+
+      {(!user || user.role !== 'admin') && (
+        <button
+          onClick={() => user ? setCartOpen(true) : setAuthMode('login')}
+          className="relative w-8 h-8 flex items-center justify-center text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+        >
+          <HiOutlineShoppingCart className="text-[17px]" />
+          {cart.length > 0 && (
+            <span className="absolute top-0 right-0 bg-[#E5550F] text-white text-[8px] font-bold w-3.5 h-3.5 flex items-center justify-center rounded-full">
+              {cart.length}
+            </span>
+          )}
+        </button>
+      )}
+
+      {user ? (
+        <>
+          <Link
+            to="/dashboard"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          >
+            <HiOutlineUser className="text-[15px]" />
+          </Link>
+          <span className="text-white text-[13px] font-medium hidden md:block">
+            Hi, {user.fullName?.split(' ')[0] || 'User'}
+          </span>
+          {user.role === 'admin' && (
+            <Link
+              to="/admin"
+              className="bg-[#E5550F] text-white px-2.5 h-7 rounded-full font-semibold text-[11px] hidden sm:flex items-center gap-1 hover:bg-[#c2410c] transition-colors"
+            >
+              <HiOutlineChartBar className="text-sm" /> Admin
+            </Link>
+          )}
+          <button
+            onClick={logout}
+            className="w-7 h-7 rounded-full text-white/40 hover:text-red-400 hover:bg-white/10 flex items-center justify-center transition-colors"
+          >
+            <HiOutlineLogout className="text-[14px]" />
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => setAuthMode('login')}
+          className="flex items-center gap-1.5 text-white text-[13px] font-medium hover:text-white/80 transition-colors"
+        >
+          <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+            <HiOutlineUser className="text-[15px]" />
+          </div>
+          <span className="hidden md:block">Hi, Login</span>
+        </button>
+      )}
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+    <div className="min-h-screen bg-[#f5f5f7] font-sans text-gray-900">
       <Toaster
         position="top-center"
         toastOptions={{
           className: 'font-medium shadow-lg',
           duration: 4000,
-          style: { borderRadius: '12px', border: '1px solid #ededf1' }
+          style: { borderRadius: '12px', border: '1px solid #ededf1' },
         }}
       />
+
       {isPublic && (
-        <nav className="bg-white/90 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto grid grid-cols-3 items-center px-6 h-16">
+        <nav className="sticky top-0 z-40">
+          <div className="bg-[#1a1a2e]">
 
-            {/* Left — Logo */}
-            <Link to="/" className="flex items-center gap-2.5 group w-fit">
-              <img src="/logo.jpg" alt="Logo" className="w-9 h-9 rounded-lg object-cover border border-slate-100" />
-              <h1 className="text-[16px] font-bold text-[#1a1a2e] tracking-tight">Lensmen <span className="text-primary">Rentals</span></h1>
-            </Link>
+            {/* ── Desktop header (md+): single row ─────────────── */}
+            <div className="hidden md:flex max-w-[1400px] mx-auto items-center justify-between gap-2 px-5 h-[58px]">
+              <Link to="/" className="flex items-center gap-2 shrink-0 mr-1">
+                <img src="/logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
+                <span className="text-white font-bold text-[15px]">
+                  Lensmen <span className="text-[#E5550F]">Rentals</span>
+                </span>
+              </Link>
+              <div className="flex items-center gap-2">
+                {locationChip}
+                {deliveryChip}
+                {pickupChip}
+                {editBtn}
+              </div>
+              
+              {rightActions}
+            </div>
 
-            {/* Center — Nav links */}
-            <div className="hidden lg:flex items-center justify-center gap-0.5">
-              <button
-                onClick={() => goToCategory('All')}
-                className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all"
+            {/* ── Mobile header (<md): two rows ────────────────── */}
+            <div className="md:hidden">
+              {/* Row 1: Logo + actions */}
+              <div className="flex items-center justify-between px-4 h-[48px]">
+                <Link to="/" className="flex items-center gap-2 shrink-0">
+                  <img src="/logo.jpg" alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/10" />
+                  <span className="text-white font-bold text-[14px]">
+                    Lensmen <span className="text-[#E5550F]">Rentals</span>
+                  </span>
+                </Link>
+                {rightActions}
+              </div>
+              {/* Row 2: Location + date chips */}
+              <div
+                className="flex items-center gap-2 px-4 pb-2.5 overflow-x-auto"
+                style={{ scrollbarWidth: 'none' }}
               >
-                Home
-              </button>
-              {categories.map(cat => (
+                {locationChip}
+                {deliveryChip}
+                {pickupChip}
+                {editBtn}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Category tab row ───────────────────────────────── */}
+          <div className="bg-white border-b border-gray-200 shadow-sm">
+            <div
+              className="max-w-[1400px] mx-auto px-3 md:px-5 flex items-center overflow-x-auto"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {['All', ...categories].map(cat => (
                 <button
                   key={cat}
                   onClick={() => goToCategory(cat)}
-                  className="px-3 h-9 flex items-center text-[14px] font-medium text-slate-600 hover:text-primary rounded-lg hover:bg-slate-50 transition-all whitespace-nowrap"
+                  className={`px-4 md:px-6 py-3.5 text-[13px] md:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all shrink-0 ${
+                    activeCategory === cat
+                      ? 'border-[#E5550F] text-[#E5550F]'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                  }`}
                 >
                   {cat}
                 </button>
               ))}
             </div>
-
-            {/* Right — Actions */}
-            <div className="flex items-center justify-end gap-2">
-              {(!user || user.role !== 'admin') && (
-                <button
-                  onClick={() => user ? setCartOpen(true) : setAuthMode('login')}
-                  className="relative w-10 h-10 flex items-center justify-center text-[#1a1a2e] hover:bg-slate-50 rounded-xl transition-all"
-                >
-                  <HiOutlineShoppingCart className="text-xl" />
-                  {cart.length > 0 && (
-                    <span className="absolute top-1 right-1 bg-primary text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                      {cart.length}
-                    </span>
-                  )}
-                </button>
-              )}
-
-              {user ? (
-                <>
-                  {user.role === 'admin' ? (
-                    <Link to="/admin" className="bg-[#1a1a2e] text-white px-4 h-10 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-primary transition-all">
-                      <HiOutlineChartBar className="text-lg" />
-                      <span className="hidden md:inline">Dashboard</span>
-                    </Link>
-                  ) : (
-                    <Link to="/dashboard/orders" className="text-[#1a1a2e] px-4 h-10 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-slate-50 transition-all">
-                      <HiOutlineCalendar className="text-lg" />
-                      <span className="hidden md:inline">My Orders</span>
-                    </Link>
-                  )}
-                  <Link to="/dashboard" title="My Dashboard" className="w-10 h-10 rounded-xl bg-slate-50 text-[#1a1a2e] hover:text-primary hover:bg-orange-50 transition-all flex items-center justify-center">
-                    <HiOutlineUser className="text-xl" />
-                  </Link>
-                  <div className="h-6 w-px bg-slate-200 hidden sm:block" />
-                  <div className="text-right hidden sm:block">
-                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Welcome</p>
-                    <p className="text-[13px] font-semibold text-[#1a1a2e]">{user.fullName}</p>
-                  </div>
-                  <button
-                    onClick={logout}
-                    title="Sign out"
-                    className="w-9 h-9 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center"
-                  >
-                    <HiOutlineLogout className="text-lg" />
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setAuthMode('login')}
-                  className="flex items-center gap-2 bg-[#1a1a2e] hover:bg-primary text-white text-[13px] font-semibold px-4 h-10 rounded-xl transition-all"
-                >
-                  <HiOutlineUser className="text-base" />
-                  Sign In
-                </button>
-              )}
-            </div>
-
           </div>
         </nav>
       )}
+
+      {/* ── Date picker modal ────────────────────────────────── */}
+      {showDatePicker && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          onClick={() => setShowDatePicker(false)}
+        >
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-[3px]" />
+
+          <div
+            className="relative z-10 w-full max-w-[390px] rounded-2xl overflow-hidden shadow-[0_24px_60px_rgba(0,0,0,0.35)]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* ── Dark header ─────────────────────────────── */}
+            <div className="bg-[#1a1a2e] px-5 pt-5 pb-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-white font-bold text-[17px] tracking-tight">Rental Dates</h3>
+                  <p className="text-white/45 text-[11px] mt-0.5">Select delivery & pickup — max 10 days</p>
+                </div>
+                <button
+                  onClick={() => setShowDatePicker(false)}
+                  className="w-8 h-8 flex items-center justify-center text-white/40 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+                >
+                  <HiX className="text-[18px]" />
+                </button>
+              </div>
+
+              {/* Delivery / Pickup chips */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className={`rounded-xl p-3 transition-all ${rentalDates.from ? 'bg-[#E5550F]' : 'bg-white/8 border border-dashed border-white/20'}`}>
+                  <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${rentalDates.from ? 'text-white/70' : 'text-white/35'}`}>
+                    Delivery
+                  </p>
+                  <p className={`text-[15px] font-black leading-none ${rentalDates.from ? 'text-white' : 'text-white/25'}`}>
+                    {rentalDates.from ? fmtDate(rentalDates.from) : '— —'}
+                  </p>
+                </div>
+                <div className={`rounded-xl p-3 transition-all ${rentalDates.to ? 'bg-white/15 border border-white/10' : 'bg-white/5 border border-dashed border-white/20'}`}>
+                  <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${rentalDates.to ? 'text-white/60' : 'text-white/35'}`}>
+                    Pickup
+                  </p>
+                  <p className={`text-[15px] font-black leading-none ${rentalDates.to ? 'text-white' : 'text-white/25'}`}>
+                    {rentalDates.to ? fmtDate(rentalDates.to) : '— —'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="flex gap-1.5 mt-3.5">
+                <div className={`h-[3px] flex-1 rounded-full transition-all duration-300 ${rentalDates.from ? 'bg-[#E5550F]' : 'bg-white/15'}`} />
+                <div className={`h-[3px] flex-1 rounded-full transition-all duration-300 ${rentalDates.to ? 'bg-[#E5550F]' : 'bg-white/15'}`} />
+              </div>
+              <p className="text-white/35 text-[11px] mt-1.5 text-center">
+                {!rentalDates.from
+                  ? '① Pick your delivery date'
+                  : !rentalDates.to
+                  ? '② Now pick your pickup date'
+                  : `✓ ${rentalDays} ${rentalDays === 1 ? 'day' : 'days'} selected`}
+              </p>
+            </div>
+
+            {/* ── Calendar ────────────────────────────────── */}
+            <div className="bg-white px-3 pt-2 pb-1 lmr-datepicker">
+              <style>{`
+                .lmr-datepicker .react-datepicker { border: none; font-family: inherit; width: 100%; }
+                .lmr-datepicker .react-datepicker__month-container { width: 100%; float: none; }
+                .lmr-datepicker .react-datepicker__header { background: #fff; border-bottom: 1px solid #f3f4f6; padding: 10px 0 8px; border-radius: 0; }
+                .lmr-datepicker .react-datepicker__current-month { font-size: 14px; font-weight: 800; color: #111827; letter-spacing: -0.01em; }
+                .lmr-datepicker .react-datepicker__day-names { margin-top: 6px; }
+                .lmr-datepicker .react-datepicker__day-name { color: #9ca3af; font-size: 11px; font-weight: 700; width: 40px; line-height: 28px; }
+                .lmr-datepicker .react-datepicker__week { display: flex; }
+                .lmr-datepicker .react-datepicker__day { width: 40px; height: 40px; line-height: 40px; margin: 1px 0; font-size: 13px; border-radius: 50%; color: #374151; transition: all 0.15s; }
+                .lmr-datepicker .react-datepicker__day:hover:not(.react-datepicker__day--disabled) { background: #fff7ed; color: #E5550F; transform: scale(1.1); }
+                .lmr-datepicker .react-datepicker__day--today { font-weight: 800; color: #E5550F; }
+                .lmr-datepicker .react-datepicker__day--selected { background: #E5550F !important; color: #fff !important; font-weight: 700; border-radius: 50% !important; }
+                .lmr-datepicker .react-datepicker__day--range-start,
+                .lmr-datepicker .react-datepicker__day--range-end { background: #E5550F !important; color: #fff !important; font-weight: 700; }
+                .lmr-datepicker .react-datepicker__day--range-start { border-radius: 50% 0 0 50% !important; }
+                .lmr-datepicker .react-datepicker__day--range-end { border-radius: 0 50% 50% 0 !important; }
+                .lmr-datepicker .react-datepicker__day--range-start.react-datepicker__day--range-end { border-radius: 50% !important; }
+                .lmr-datepicker .react-datepicker__day--in-range { background: #fff3e8; color: #c2410c; border-radius: 0; }
+                .lmr-datepicker .react-datepicker__day--in-selecting-range:not(.react-datepicker__day--range-start) { background: #fff3e8; color: #c2410c; border-radius: 0; }
+                .lmr-datepicker .react-datepicker__day--disabled { color: #e5e7eb !important; cursor: not-allowed; }
+                .lmr-datepicker .react-datepicker__day--disabled:hover { background: transparent !important; transform: none !important; }
+                .lmr-datepicker .react-datepicker__navigation { top: 10px; }
+                .lmr-datepicker .react-datepicker__navigation-icon::before { border-color: #9ca3af; border-width: 2px 2px 0 0; width: 8px; height: 8px; }
+                .lmr-datepicker .react-datepicker__navigation:hover .react-datepicker__navigation-icon::before { border-color: #E5550F; }
+              `}</style>
+              <DatePicker
+                selectsRange
+                startDate={rentalDates.from}
+                endDate={rentalDates.to}
+                onChange={handleDateChange}
+                inline
+                minDate={new Date()}
+              />
+            </div>
+
+            {/* ── Footer ──────────────────────────────────── */}
+            <div className="bg-white px-4 pb-4 pt-2 flex gap-2.5 border-t border-gray-100">
+              <button
+                onClick={() => setRentalDates({ from: null, to: null })}
+                className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setShowDatePicker(false)}
+                disabled={!rentalDates.from || !rentalDates.to}
+                className={`flex-1 py-2.5 rounded-xl text-[13px] font-bold transition-all ${
+                  rentalDates.from && rentalDates.to
+                    ? 'bg-[#E5550F] text-white hover:bg-[#c2410c] shadow-[0_4px_14px_rgba(229,85,15,0.4)]'
+                    : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                {rentalDates.from && rentalDates.to
+                  ? `Confirm — ${rentalDays} ${rentalDays === 1 ? 'day' : 'days'}`
+                  : 'Select both dates'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {children}
       {isPublic && <Footer />}
     </div>

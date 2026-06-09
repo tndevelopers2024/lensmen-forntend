@@ -1,5 +1,5 @@
 import { HiOutlineShoppingCart, HiOutlineTrash, HiArrowRight, HiX, HiMinus, HiPlus } from 'react-icons/hi'
-import { useGlobal } from '../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 
 const CartSidebar = ({ setShowBookingModal }) => {
   const { cart, removeFromCart, updateCartQty, cartOpen, setCartOpen, user, setAuthMode, setRentalQty } = useGlobal()
@@ -68,7 +68,7 @@ const CartSidebar = ({ setShowBookingModal }) => {
               {cart.map(item => (
                 <div key={item._id} className="flex items-center gap-3 bg-slate-50 rounded-2xl p-3 border border-slate-100/80">
                   <img
-                    src={item.imageUrl} alt={item.name}
+                    src={getImageUrl(item.imageUrl)} alt={item.name}
                     className="w-[60px] h-[60px] rounded-xl object-cover flex-shrink-0 bg-slate-200"
                   />
                   <div className="flex-1 min-w-0">

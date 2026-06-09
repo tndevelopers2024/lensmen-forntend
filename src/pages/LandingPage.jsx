@@ -1,341 +1,458 @@
-import { useState, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useState, useMemo } from 'react'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import {
-  HiOutlineShoppingCart, HiOutlineCalendar, HiOutlineClock,
-  HiOutlineSearch, HiArrowRight, HiArrowNarrowRight,
+  HiOutlineHeart, HiHeart, HiTrendingUp, HiPlus, HiChevronDown,
 } from 'react-icons/hi'
-import DatePicker from 'react-datepicker'
-import "react-datepicker/dist/react-datepicker.css"
-import { differenceInDays, addDays } from 'date-fns'
-import { useGlobal } from '../context/GlobalContext'
-import toast from 'react-hot-toast'
+import { MdCameraAlt, MdVideocam, MdFlashOn, MdCategory, MdGridView } from 'react-icons/md'
+import { differenceInDays } from 'date-fns'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 
-const NAVY = '#1e1b4b'
+const OFFER_COLORS = ['#E5550F', '#c94a0d', '#a83b0b', '#7c2d12', '#92400e']
+const offerLabel = (o) =>
+  o.discountType === 'percentage' ? `${o.discountValue}% OFF` : `₹${o.discountValue} OFF`
 
-const HERO_SLIDES = [
-  { image: '/images/hero1.jpeg', title: '', subtitle: '' },
-  { image: '/images/hero2.jpeg', title: '', subtitle: '' },
-  { image: '/images/hero5.jpeg', title: '', subtitle: '' },
+const getCategoryIcon = (cat) => {
+  const s = (cat || '').toLowerCase()
+  if (s === 'all') return <MdGridView className="text-[22px]" />
+  if (s.includes('dslr') || s.includes('camera') || s.includes('canon') || s.includes('nikon') || s.includes('mirrorless'))
+    return <MdCameraAlt className="text-[22px]" />
+  if (s.includes('lens') || s.includes('video') || s.includes('cinema'))
+    return <MdVideocam className="text-[22px]" />
+  if (s.includes('light') || s.includes('flash') || s.includes('strobe'))
+    return <MdFlashOn className="text-[22px]" />
+  return <MdCategory className="text-[22px]" />
+}
+
+const bookedThisMonth = (id = '') => {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0
+  return Math.abs(h % 650) + 80
+}
+
+const FAQS = [
+  {
+    q: 'How do I place a rental request?',
+    a: 'Set your rental dates in the top bar, then browse the inventory. Click "+ Add to Cart" to add items or "Book" to book a single item directly. You\'ll be guided through the booking form.',
+  },
+  {
+    q: 'What is KYC and why do I need it?',
+    a: 'KYC (Know Your Customer) is a one-time identity verification step. Upload photos of your Aadhaar (front & back) and PAN (front & back) from your dashboard. Verified accounts get faster approvals — usually within 1–2 hours.',
+  },
+  {
+    q: 'Where do I pick up my equipment?',
+    a: 'We have two offices in Chennai — Velachery Studio and T. Nagar Office. Once your order is approved, you will be notified with the exact pickup location and address.',
+  },
+  {
+    q: 'Can I rent multiple items together?',
+    a: 'Yes! Add as many items as you need to your cart and check out in a single booking. All items will be on the same rental dates.',
+  },
+  {
+    q: 'What if I need to extend my rental?',
+    a: 'Contact us before your return date. Extensions are subject to availability. You can reach us through the Help & Support section in your dashboard.',
+  },
+  {
+    q: 'How are rental charges calculated?',
+    a: 'Charges are based on the number of rental days × daily rate per item. A minimum of 1 day is always charged. GST is included in the displayed price.',
+  },
+  {
+    q: 'Can I cancel a booking?',
+    a: 'Yes — cancellation is available while your order is in "Request Submitted" or "KYC Pending" stage. Once the order is approved and confirmed, it cannot be cancelled from the app. Please contact us directly.',
+  },
+  {
+    q: 'Do you have promo codes or offers?',
+    a: 'Yes! Active offers are displayed on the home screen. Enter the promo code in the booking form to apply the discount. Discounts are applied before final checkout.',
+  },
 ]
 
+const FAQItem = ({ q, a }) => {
+  const [open, setOpen] = useState(false)
+  return (
+    <div
+      onClick={() => setOpen(o => !o)}
+      className="border-b border-gray-100 cursor-pointer last:border-b-0"
+    >
+      <div className="flex items-center justify-between gap-4 py-4 px-1">
+        <span className={`text-[14px] md:text-[15px] font-semibold leading-snug flex-1 ${open ? 'text-[#E5550F]' : 'text-gray-800'}`}>
+          {q}
+        </span>
+        <HiChevronDown
+          className={`shrink-0 text-gray-400 text-[18px] transition-transform duration-200 ${open ? 'rotate-180 text-[#E5550F]' : ''}`}
+        />
+      </div>
+      {open && (
+        <div className="pb-4 px-1 text-[13px] md:text-[14px] text-gray-500 leading-relaxed">
+          {a}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const LandingPage = ({ setShowBookingModal }) => {
-  const { products, user, addToCart, rentalDates, setRentalDates, categories, setAuthMode } = useGlobal()
-  const [searchParams]      = useSearchParams()
-  const [currentSlide,      setCurrentSlide]      = useState(0)
-  const [selection,         setSelection]         = useState({ from: null, to: null })
-  const [selectedCategory,  setSelectedCategory]  = useState('All')
-  const [datesConfirmed,    setDatesConfirmed]     = useState(false)
+  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categories, setAuthMode, offers } = useGlobal()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [wishlist, setWishlist] = useState(new Set())
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentSlide(prev => (prev + 1) % HERO_SLIDES.length), 5000)
-    return () => clearInterval(timer)
-  }, [])
-
-  // Sync selected category from the URL (?category=...) set by the nav/footer
-  useEffect(() => {
-    const cat = searchParams.get('category')
-    setSelectedCategory(cat || 'All')
-  }, [searchParams])
-
+  const selectedCategory = searchParams.get('category') || 'All'
   const allCategories = ['All', ...categories]
 
-  const filteredProducts = products.filter(p => {
-    const categoryMatch = selectedCategory === 'All' || p.category === selectedCategory
-    return categoryMatch
-  })
+  const rentalDays = useMemo(() => {
+    if (!rentalDates.from || !rentalDates.to) return 1
+    return Math.max(1, differenceInDays(rentalDates.to, rentalDates.from))
+  }, [rentalDates])
 
-  const handleDateChange = (dates) => {
-    const [start, end] = dates
-    setDatesConfirmed(false)
-    setSelection({ from: start, to: end })
-    if (start && end) {
-      if (differenceInDays(end, start) > 10) {
-        toast.error('Rental period cannot exceed 10 days')
-        setSelection({ from: start, to: null })
-        return
-      }
-      const newFrom = new Date(start)
-      const newTo   = new Date(end)
-      if (rentalDates.from) newFrom.setHours(rentalDates.from.getHours(), rentalDates.from.getMinutes())
-      if (rentalDates.to)   newTo.setHours(rentalDates.to.getHours(),   rentalDates.to.getMinutes())
-      setRentalDates({ from: newFrom, to: newTo })
-    }
+  const filteredProducts = products.filter(p =>
+    selectedCategory === 'All' || p.category === selectedCategory
+  )
+
+  const handleCategoryClick = (cat) => {
+    navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`, { replace: true })
+    setTimeout(() => document.getElementById('inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
-  const handleTimeChange = (type, time) => {
-    const updated = { ...rentalDates }
-    if (type === 'from' && updated.from) {
-      const d = new Date(updated.from); d.setHours(time.getHours(), time.getMinutes()); updated.from = d
-    } else if (type === 'to' && updated.to) {
-      const d = new Date(updated.to); d.setHours(time.getHours(), time.getMinutes()); updated.to = d
-    }
-    setRentalDates(updated)
+  const toggleWishlist = (id) => {
+    setWishlist(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
-
-  const handleCheck = (e) => {
-    e.preventDefault()
-    if (rentalDates.from && rentalDates.to) {
-      setDatesConfirmed(true)
-      document.getElementById('inventory').scrollIntoView({ behavior: 'smooth' })
-    } else {
-      toast.error('Please select a date range first')
-    }
-  }
-
-  const clearDates = () => {
-    setSelection({ from: null, to: null })
-    setRentalDates({ from: null, to: null })
-    setDatesConfirmed(false)
-  }
-
-  const inputCls = "w-full bg-white border border-slate-200 py-3 pl-10 pr-3 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-all cursor-pointer"
 
   return (
-    <>
-      {/* ── Hero ───────────────────────────────────────────────────── */}
-      <div className="relative h-[70vh] overflow-hidden bg-slate-900">
-        {HERO_SLIDES.map((slide, i) => (
-          <div key={i} className={`absolute inset-0 transition-opacity duration-1000 ${i === currentSlide ? 'opacity-100' : 'opacity-0'}`}>
-            <img src={slide.image} alt={slide.title} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-900/40 to-transparent" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-              <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight tracking-tight max-w-3xl mb-4">
-                {slide.title}
-              </h1>
-              <p className="text-slate-300 text-lg max-w-md mb-8">
-                {slide.subtitle}
-              </p>
-              <button
-                onClick={() => document.getElementById('inventory').scrollIntoView({ behavior: 'smooth' })}
-                className="bg-white text-slate-900 px-7 py-3 rounded-xl font-semibold text-sm hover:bg-slate-100 transition-all flex items-center gap-2 group"
-              >
-                Browse Equipment
-                <HiArrowNarrowRight className="group-hover:translate-x-1 transition-transform text-base" />
-              </button>
-            </div>
-          </div>
-        ))}
-        {/* Slide dots */}
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex gap-2">
-          {HERO_SLIDES.map((_, i) => (
+    <div>
+      {/* Mobile horizontal category chips */}
+      <div
+        className="md:hidden flex gap-2 overflow-x-auto bg-white border-b border-gray-100 px-4 py-3"
+        style={{ scrollbarWidth: 'none' }}
+      >
+        {allCategories.map(cat => {
+          const active = selectedCategory === cat
+          return (
             <button
-              key={i}
-              onClick={() => setCurrentSlide(i)}
-              className={`h-1 rounded-full transition-all ${i === currentSlide ? 'w-8 bg-white' : 'w-2 bg-white/30 hover:bg-white/60'}`}
-            />
-          ))}
-        </div>
+              key={cat}
+              onClick={() => handleCategoryClick(cat)}
+              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                active ? 'bg-[#E5550F] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── Availability checker ────────────────────────────────────── */}
-      <div id="search-bar" className="max-w-5xl mx-auto px-6 -mt-10 relative z-20">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/50 p-5">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Check Availability</p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label className="text-xs text-slate-500 font-medium block mb-1">Rental Dates</label>
-              <div className="relative">
-                <DatePicker
-                  selectsRange startDate={selection.from} endDate={selection.to}
-                  onChange={handleDateChange} dateFormat="MMM d, yyyy"
-                  minDate={new Date(new Date().setHours(0,0,0,0))}
-                  maxDate={selection.from ? addDays(selection.from, 10) : null}
-                  isClearable placeholderText="Pick date range"
-                  className={inputCls} wrapperClassName="w-full"
-                />
-                <HiOutlineCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 font-medium block mb-1">Pickup Time</label>
-              <div className="relative">
-                <DatePicker
-                  selected={rentalDates.from} onChange={t => handleTimeChange('from', t)}
-                  showTimeSelect showTimeSelectOnly timeIntervals={30} timeCaption="Time" dateFormat="h:mm aa"
-                  minTime={rentalDates.from && rentalDates.from.toDateString() === new Date().toDateString() ? new Date() : new Date(new Date().setHours(0,0,0,0))}
-                  maxTime={new Date(new Date().setHours(23,30,0,0))}
-                  className={inputCls} wrapperClassName="w-full"
-                />
-                <HiOutlineClock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 font-medium block mb-1">Return Time</label>
-              <div className="relative">
-                <DatePicker
-                  selected={rentalDates.to} onChange={t => handleTimeChange('to', t)}
-                  showTimeSelect showTimeSelectOnly timeIntervals={30} timeCaption="Time" dateFormat="h:mm aa"
-                  minTime={rentalDates.to && rentalDates.from && rentalDates.to.toDateString() === rentalDates.from.toDateString() ? rentalDates.from : new Date(new Date().setHours(0,0,0,0))}
-                  maxTime={new Date(new Date().setHours(23,30,0,0))}
-                  className={inputCls} wrapperClassName="w-full"
-                />
-                <HiOutlineClock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base pointer-events-none" />
-              </div>
-            </div>
-            <div className="flex items-end">
+      {/* Sidebar + main layout */}
+      <div className="flex max-w-[1440px] mx-auto">
+
+        {/* Left Sidebar */}
+        <aside className="hidden md:block md:w-[72px] lg:w-[100px] shrink-0 bg-white border-r border-gray-100 sticky top-[104px] self-start overflow-y-auto">
+          {allCategories.map(cat => {
+            const active = selectedCategory === cat
+            return (
               <button
-                onClick={handleCheck}
-                className="w-full bg-slate-900 text-white h-[46px] rounded-xl font-semibold text-sm hover:bg-slate-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                key={cat}
+                onClick={() => handleCategoryClick(cat)}
+                className={`w-full flex flex-col items-center gap-2 py-4 px-1 transition-all border-b border-gray-50 group ${
+                  active
+                    ? 'bg-orange-50 border-l-[3px] border-l-[#E5550F]'
+                    : 'border-l-[3px] border-l-transparent hover:bg-gray-50'
+                }`}
               >
-                <HiOutlineSearch className="text-base" />
-                Check Availability
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors ${
+                  active
+                    ? 'bg-orange-100 text-[#E5550F]'
+                    : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200 group-hover:text-gray-700'
+                }`}>
+                  {getCategoryIcon(cat)}
+                </div>
+                <span className={`hidden lg:block text-[10px] font-semibold text-center leading-tight px-0.5 ${
+                  active ? 'text-[#E5550F]' : 'text-gray-400 group-hover:text-gray-600'
+                }`}>
+                  {cat.length > 10 ? cat.slice(0, 9) + '..' : cat}
+                </span>
               </button>
+            )
+          })}
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0 pb-16">
+
+          {/* Hero banner */}
+          <div
+            className="m-3 md:m-5 rounded-2xl overflow-hidden relative"
+            style={{ background: 'linear-gradient(135deg, #E5550F 0%, #9a2f05 100%)', minHeight: 170 }}
+          >
+            <div
+              className="absolute inset-0 opacity-[0.07]"
+              style={{
+                backgroundImage: 'radial-gradient(circle, white 1.5px, transparent 1.5px)',
+                backgroundSize: '24px 24px',
+              }}
+            />
+            <div className="absolute -right-12 -top-12 w-64 h-64 rounded-full bg-white/10 pointer-events-none" />
+            <div className="absolute right-24 bottom-0 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+
+            <div className="relative z-10 px-6 md:px-10 py-6 md:py-9">
+              <h2 className="text-[26px] md:text-[36px] font-black text-white leading-tight mb-2">
+                {selectedCategory === 'All' ? 'Camera Gear' : selectedCategory}
+              </h2>
+              <p className="text-white/75 text-[13px] md:text-[15px] max-w-md leading-relaxed">
+                Rent premium photography &amp; videography equipment from{' '}
+                <strong className="text-white">Lensmen Rentals</strong>.
+                DSLR, Mirrorless, Lenses &amp; Accessories on rent.
+              </p>
+              <div className="hidden sm:flex flex-wrap gap-5 md:gap-7 mt-4">
+                {['Nikon', 'Canon', 'Sony', 'DJI', 'Sigma'].map(b => (
+                  <span key={b} className="text-white font-bold text-[13px] md:text-[14px] tracking-wide opacity-90">{b}</span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* ── Product catalogue ───────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 pt-14 pb-16" id="inventory">
-
-        {/* Section header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 tracking-widest uppercase mb-1">Our Fleet</p>
-            <h2 className="text-2xl font-bold text-slate-900">Browse Equipment</h2>
-          </div>
-          {datesConfirmed && rentalDates.from && rentalDates.to && (
-            <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5">
-              <div className="text-sm font-medium text-slate-700">
-                {rentalDates.from.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                {' '}&rarr;{' '}
-                {rentalDates.to.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+          {/* Offers */}
+          {offers.length > 0 && (
+            <div className="mx-3 md:mx-5 mt-3 md:mt-5">
+              <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 md:p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-[15px] md:text-[17px] text-gray-800">
+                    Available Offers ({offers.length} Offer{offers.length !== 1 ? 's' : ''})
+                  </h3>
+                  <div className="flex gap-1.5">
+                    <button className="w-8 h-8 rounded-full border border-[#E5550F] text-[#E5550F] flex items-center justify-center text-base hover:bg-[#E5550F] hover:text-white transition-colors">‹</button>
+                    <button className="w-8 h-8 rounded-full border border-[#E5550F] text-[#E5550F] flex items-center justify-center text-base hover:bg-[#E5550F] hover:text-white transition-colors">›</button>
+                  </div>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                  {offers.map((offer, i) => (
+                    <div
+                      key={offer._id}
+                      className="flex-shrink-0 bg-white rounded-xl overflow-hidden border border-orange-100 flex"
+                      style={{ minWidth: 220, maxWidth: 260 }}
+                    >
+                      <div
+                        className="w-9 shrink-0 flex items-center justify-center"
+                        style={{ background: OFFER_COLORS[i % OFFER_COLORS.length], writingMode: 'vertical-rl' }}
+                      >
+                        <span
+                          className="text-white text-[9px] font-black py-2 leading-none"
+                          style={{ transform: 'rotate(180deg)' }}
+                        >
+                          {offerLabel(offer)}
+                        </span>
+                      </div>
+                      <div className="p-3.5 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-base">🪙</span>
+                          <span className="font-bold text-gray-900 text-[13px]">{offer.code}</span>
+                        </div>
+                        <p className="text-gray-500 text-[12px] leading-snug">{offer.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <button onClick={clearDates} className="text-xs text-slate-400 hover:text-slate-600 underline underline-offset-2">
-                clear
+            </div>
+          )}
+
+          {/* Section header */}
+          <div id="inventory" className="scroll-mt-[134px] md:scroll-mt-[110px] mx-3 md:mx-5 mt-6 md:mt-8 flex items-baseline justify-between">
+            <h2 className="text-[18px] md:text-[22px] font-black text-gray-900">
+              {selectedCategory === 'All' ? 'All Gear' : selectedCategory} On Rent
+            </h2>
+            <span className="text-[12px] md:text-[14px] text-gray-400">
+              Total:{' '}
+              <span className="font-semibold text-gray-600">{filteredProducts.length} items</span>
+            </span>
+          </div>
+          <div className="mx-3 md:mx-5 mt-2 h-px bg-gray-200" />
+
+          {/* Product grid */}
+          {filteredProducts.length > 0 ? (
+            <div className="mx-3 md:mx-5 mt-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-5">
+              {filteredProducts.map(product => {
+                const soldOut     = !product.isAvailable || (product.availableQuantity ?? 0) <= 0
+                const booked      = bookedThisMonth(product._id)
+                const isWishlisted = wishlist.has(product._id)
+                const isNew       = parseInt((product._id || '').slice(-2), 16) % 3 === 0
+                const badge       = isNew
+                  ? { label: 'New',      cls: 'border-blue-400 text-blue-600 bg-blue-50' }
+                  : { label: 'Trending', cls: 'border-[#E5550F] text-[#E5550F] bg-orange-50' }
+                const totalPrice  = (product.pricePerDay * rentalDays).toLocaleString('en-IN')
+
+                return (
+                  <div
+                    key={product._id}
+                    className="bg-white rounded-2xl border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-200 flex flex-col overflow-hidden"
+                  >
+                    {/* Image area */}
+                    <div className="relative px-4 md:px-5 pt-4 pb-1">
+                      <span className={`inline-flex items-center px-2.5 py-[3px] rounded-full text-[10px] md:text-[11px] font-semibold border ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+
+                      <button
+                        onClick={() => toggleWishlist(product._id)}
+                        className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-red-500 transition-colors"
+                      >
+                        {isWishlisted
+                          ? <HiHeart className="text-red-500 text-[18px]" />
+                          : <HiOutlineHeart className="text-[18px]" />
+                        }
+                      </button>
+
+                      <Link to={`/product/${product._id}`} className="block mt-2">
+                        <img
+                          src={getImageUrl(product.imageUrl)}
+                          alt={product.name}
+                          className={`w-full h-32 md:h-44 object-contain transition-transform duration-300 hover:scale-105 ${soldOut ? 'grayscale opacity-60' : ''}`}
+                        />
+                      </Link>
+
+                      {soldOut && (
+                        <div className="absolute inset-x-0 bottom-1 flex justify-center">
+                          <span className="bg-red-500 text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">
+                            Unavailable
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card body */}
+                    <div className="px-4 md:px-5 pb-4 md:pb-5 flex flex-col flex-1">
+                      <Link
+                        to={`/product/${product._id}`}
+                        className="font-bold text-[13px] md:text-[15px] text-gray-900 hover:text-[#E5550F] transition-colors leading-snug line-clamp-2 mb-1.5 mt-2"
+                      >
+                        {product.name}
+                      </Link>
+
+                      {!soldOut && (
+                        <div className="flex items-center gap-1 mb-1.5">
+                          <HiTrendingUp className="text-green-500 text-[11px] shrink-0" />
+                          <span className="text-green-600 text-[11px] md:text-[12px] font-medium">
+                            {booked} booked this month
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-gray-500 text-[12px] md:text-[13px]">
+                        Rent for{' '}
+                        <span className="font-bold text-gray-700">{rentalDays}</span>{' '}
+                        {rentalDays === 1 ? 'day' : 'days'}
+                      </p>
+
+                      <div className="mt-auto pt-3">
+                        {soldOut ? (
+                          <p className="text-red-400 text-[12px] font-semibold">Unavailable</p>
+                        ) : (
+                          (() => {
+                            const cartItem = cart.find(i => i._id === product._id)
+                            const qty = cartItem?.cartQty || 0
+                            return (
+                              <div className="flex items-end justify-between gap-2">
+                                <div>
+                                  <p className="font-black text-[18px] md:text-[22px] text-gray-900 leading-none">
+                                    ₹{totalPrice}
+                                  </p>
+                                  <p className="text-gray-400 text-[10px] md:text-[11px] mt-0.5">Incl. of GST</p>
+                                </div>
+
+                                {qty > 0 ? (
+                                  <div className="flex items-center rounded-full border-2 border-gray-800 overflow-hidden shrink-0">
+                                    <button
+                                      onClick={() => qty === 1 ? removeFromCart(product._id) : updateCartQty(product._id, -1)}
+                                      className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center text-gray-800 font-bold text-[18px] hover:bg-gray-100 transition-colors leading-none"
+                                    >
+                                      −
+                                    </button>
+                                    <span className="w-6 text-center text-[14px] font-bold text-gray-900 select-none">
+                                      {qty}
+                                    </span>
+                                    <button
+                                      onClick={() => updateCartQty(product._id, 1)}
+                                      className="w-9 h-9 md:w-10 md:h-10 flex items-center justify-center text-gray-800 font-bold text-[18px] hover:bg-gray-100 transition-colors leading-none"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                      onClick={() => user ? setShowBookingModal(product) : setAuthMode('login')}
+                                      className="text-[11px] md:text-[12px] font-semibold text-[#E5550F] hover:underline"
+                                    >
+                                      Book
+                                    </button>
+                                    <button
+                                      onClick={() => user ? addToCart(product) : setAuthMode('login')}
+                                      className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-gray-800 flex items-center justify-center text-gray-800 font-bold text-[18px] hover:bg-gray-100 transition-all"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="mx-3 md:mx-5 mt-6 flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
+              <MdCameraAlt className="text-5xl text-gray-200 mb-3" />
+              <p className="font-semibold text-gray-400 text-[15px]">No gear in this category</p>
+              <button
+                onClick={() => handleCategoryClick('All')}
+                className="mt-2 text-[14px] text-[#E5550F] font-medium hover:underline"
+              >
+                Show all
               </button>
             </div>
           )}
-        </div>
 
-        {/* Category pills */}
-        {allCategories.length > 1 && (
-          <div className="flex flex-wrap gap-2 mb-8">
-            {allCategories.map(cat => {
-              const active = selectedCategory === cat
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                    active
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-700'
-                  }`}
-                >
-                  {cat}
-                  {active && (
-                    <span className="ml-2 text-xs opacity-60">
-                      {cat === 'All' ? products.length : products.filter(p => p.category === cat).length}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        )}
+          {/* ── FAQ Section ─────────────────────────────────────── */}
+          <div className="mx-3 md:mx-5 mt-12 md:mt-16">
+            <div className="grid md:grid-cols-[1fr_1.8fr] gap-8 md:gap-12 items-start">
 
-        {/* Grid */}
-        {filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredProducts.map(product => {
-              const soldOut = !product.isAvailable || (product.availableQuantity ?? 0) <= 0
-              return (
-              <div
-                key={product._id}
-                className="group bg-white border border-slate-100 rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
-              >
-                {/* Image */}
-                <Link to={`/product/${product._id}`} className="relative block h-48 bg-white overflow-hidden">
-                  <img
-                    src={product.imageUrl || ''}
-                    alt={product.name}
-                    className={`w-full h-full object-contain group-hover:scale-105 transition-transform duration-400 ${soldOut ? 'grayscale opacity-70' : ''}`}
-                  />
-                  {soldOut && (
-                    <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center">
-                      <span className="bg-red-500 text-white text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-lg -rotate-6">
-                        Sold Out
-                      </span>
-                    </div>
-                  )}
-                  <div className="absolute top-3 right-3 bg-white rounded-lg px-2.5 py-1.5 shadow-sm">
-                    <span className="font-bold text-slate-900 text-sm">₹{product.pricePerDay?.toLocaleString()}</span>
-                    <span className="text-slate-400 text-[10px] ml-0.5">/day</span>
-                  </div>
-                  {!soldOut && (
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-white rounded-full pl-2 pr-2.5 py-1 shadow-sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <span className="text-[10px] font-semibold text-emerald-700">
-                        {(product.availableQuantity ?? 1) <= 2
-                          ? `${product.availableQuantity} left`
-                          : 'Available'}
-                      </span>
-                    </div>
-                  )}
-                </Link>
-
-                {/* Body */}
-                <div className="p-4 flex flex-col flex-1">
-                  <Link
-                    to={`/product/${product._id}`}
-                    className="font-semibold text-[15px] text-slate-900 hover:text-slate-600 transition-colors line-clamp-1 mb-1"
+              {/* Left: title block */}
+              <div className="md:sticky md:top-[130px]">
+                <p className="text-[11px] font-bold text-[#E5550F] uppercase tracking-widest mb-2">Help Center</p>
+                <h2 className="text-[26px] md:text-[32px] font-black text-[#1e1b4b] leading-tight mb-4">
+                  Frequently Asked<br />Questions
+                </h2>
+                <p className="text-[14px] text-gray-500 leading-relaxed mb-6">
+                  Everything you need to know about renting camera gear with Lensmen Rentals.
+                </p>
+                <div className="bg-[#1e1b4b] rounded-2xl p-5">
+                  <div className="text-[13px] font-bold text-white mb-1">Still have questions?</div>
+                  <div className="text-[12px] text-white/50 mb-3">We're happy to help.</div>
+                  <a
+                    href="mailto:support@lensmenrentals.com"
+                    className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#E5550F] hover:underline"
                   >
-                    {product.name}
-                  </Link>
-                  {product.category && (
-                    <span className="self-start text-[11px] text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md mb-2">
-                      {product.category}
-                    </span>
-                  )}
-                  <p className="text-slate-400 text-[13px] leading-relaxed line-clamp-2 mb-4 flex-1">
-                    {product.description}
-                  </p>
-                  <div className="flex gap-2">
-                    {soldOut ? (
-                      <button
-                        disabled
-                        className="flex-1 bg-slate-100 text-slate-400 py-2 rounded-xl text-[13px] font-medium cursor-not-allowed"
-                      >
-                        Currently Unavailable
-                      </button>
-                    ) : (
-                      <>
-                        {(!user || user.role !== 'admin') && (
-                          <button
-                            onClick={() => addToCart(product)}
-                            className="flex-1 border border-slate-200 text-slate-500 py-2 rounded-xl text-[13px] font-medium hover:border-slate-400 hover:text-slate-700 transition-all flex items-center justify-center gap-1.5"
-                          >
-                            <HiOutlineShoppingCart className="text-sm" /> Cart
-                          </button>
-                        )}
-                        <button
-                          onClick={() => user ? setShowBookingModal(product) : setAuthMode('login')}
-                          className="flex-1 bg-slate-900 text-white py-2 rounded-xl text-[13px] font-medium hover:bg-slate-700 transition-all"
-                        >
-                          Rent Now
-                        </button>
-                      </>
-                    )}
-                  </div>
+                    support@lensmenrentals.com
+                  </a>
                 </div>
               </div>
-            )})}
+
+              {/* Right: FAQ accordion */}
+              <div className="bg-white rounded-2xl border border-gray-100 px-6 md:px-8 py-2 shadow-sm">
+                {FAQS.map((faq, i) => (
+                  <FAQItem key={i} q={faq.q} a={faq.a} />
+                ))}
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-dashed border-slate-200">
-            <HiOutlineSearch className="text-4xl text-slate-200 mb-4" />
-            <p className="text-base font-semibold text-slate-500">No gear in this category</p>
-            <button
-              onClick={() => setSelectedCategory('All')}
-              className="mt-3 text-slate-500 font-medium text-sm hover:text-slate-800 underline underline-offset-2"
-            >
-              Show all
-            </button>
-          </div>
-        )}
+
+        </main>
       </div>
-    </>
+    </div>
   )
 }
 

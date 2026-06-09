@@ -6,10 +6,12 @@ import {
 import {
   EyeOutlined, SafetyCertificateOutlined, CheckCircleOutlined,
   ArrowRightOutlined, SearchOutlined, FilterOutlined, CloseOutlined,
+  PrinterOutlined, EnvironmentOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
-import { useGlobal } from '../../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../../context/GlobalContext'
+import { getAdminSettings } from './Settings'
 import PageHeader from '../../components/PageHeader'
 import PaymentModal from '../../components/PaymentModal'
 
@@ -41,6 +43,7 @@ const RETURNED_STATUSES = ['Returned', 'Closed']
 // ── Main component ───────────────────────────────────────────────────
 const OrdersMonitor = () => {
   const { allOrders, API_URL } = useGlobal()
+  const pickupLocs = getAdminSettings().pickupLocations || []
 
   const [selectedOrder,     setSelectedOrder]     = useState(null)
   const [searchQuery,       setSearchQuery]       = useState('')
@@ -58,6 +61,125 @@ const OrdersMonitor = () => {
   const [paymentTarget,     setPaymentTarget]     = useState(null)
   const [rejectTarget,      setRejectTarget]      = useState(null) // { orderId, targetStatus }
   const [rejectReason,      setRejectReason]      = useState('')
+  const [approveTarget,     setApproveTarget]     = useState(null)   // { orderId, targetStatus, keepOpen }
+  const [approveLocation,   setApproveLocation]   = useState(() => pickupLocs[0]?.id || '')
+
+  // ── Print order ────────────────────────────────────────────────────
+  const printOrder = (order) => {
+    if (!order) return
+    const items = order.items?.length ? order.items : [order.productId]
+    const fmt   = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const fmtT  = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+    const html = `<!DOCTYPE html><html><head><title>Order #${order._id?.slice(-8).toUpperCase()}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; padding: 32px; max-width: 680px; margin: 0 auto; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #1e1b4b; margin-bottom: 24px; }
+  .brand { font-size: 20px; font-weight: 900; color: #1e1b4b; }
+  .brand span { color: #E5550F; }
+  .ref { text-align: right; }
+  .ref .id { font-size: 18px; font-weight: 700; color: #1e1b4b; }
+  .ref .date { font-size: 12px; color: #6b7280; margin-top: 3px; }
+  .status-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 5px; background: #f0fdf4; color: #16a34a; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+  h3 { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .section { margin-bottom: 22px; }
+  .item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .item:last-child { border-bottom: none; }
+  .item-name { font-size: 13px; font-weight: 600; color: #111; }
+  .item-rate { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .item-total { font-size: 13px; font-weight: 700; color: #1e1b4b; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .info-box { background: #f8fafc; border-radius: 10px; padding: 14px; }
+  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #6b7280; }
+  .info-val { font-weight: 600; color: #111; }
+  .total-box { background: #1e1b4b; border-radius: 12px; padding: 18px 20px; color: #fff; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .total-label { font-size: 11px; color: rgba(255,255,255,0.6); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+  .total-amount { font-size: 28px; font-weight: 900; margin-top: 4px; }
+  .pay-row { display: flex; justify-content: space-between; font-size: 12px; margin-top: 10px; }
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #9ca3af; }
+  @media print { body { padding: 16px; } }
+</style></head><body>
+  <div class="header">
+    <div>
+      <div class="brand">Lensmen <span>Rentals</span></div>
+      <div style="font-size:11px;color:#6b7280;margin-top:4px;">Rental Order Receipt</div>
+    </div>
+    <div class="ref">
+      <div class="id">#${order._id?.slice(-8).toUpperCase()}</div>
+      <div class="date">Printed ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+      <div class="status-badge">${order.status}</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="section">
+      <h3>Equipment</h3>
+      <div class="info-box">
+        ${items.map(item => `
+          <div class="item">
+            <div>
+              <div class="item-name">${item?.name || 'Unknown'}${(item?.quantity > 1) ? ` ×${item.quantity}` : ''}</div>
+              <div class="item-rate">₹${item?.pricePerDay}/day</div>
+            </div>
+            <div class="item-total">₹${((item?.pricePerDay || 0) * (order.totalDays || 1) * (item?.quantity || 1)).toLocaleString()}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="section">
+      <h3>Customer</h3>
+      <div class="info-box">
+        <div class="info-row"><span class="info-label">Name</span><span class="info-val">${order.userName || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Mobile</span><span class="info-val">${order.userMobile || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Email</span><span class="info-val">${order.userEmail || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Address</span><span class="info-val">${order.userAddress || '—'}</span></div>
+        <div class="info-row"><span class="info-label">Type</span><span class="info-val">${order.accountType || 'Private'}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Rental Period</h3>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">Pickup</span><span class="info-val">${fmt(order.startDate)} at ${fmtT(order.startDate)}</span></div>
+      <div class="info-row"><span class="info-label">Return</span><span class="info-val">${fmt(order.endDate)} at ${fmtT(order.endDate)}</span></div>
+      <div class="info-row"><span class="info-label">Duration</span><span class="info-val">${order.totalDays || 1} day${(order.totalDays || 1) !== 1 ? 's' : ''}</span></div>
+    </div>
+  </div>
+
+  <div class="total-box">
+    <div>
+      <div class="total-label">Total Amount</div>
+      <div class="total-amount">₹${order.totalPrice?.toLocaleString()}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="pay-row"><span style="color:rgba(255,255,255,0.5);font-size:11px">COLLECTED</span><span style="color:#4ade80;font-weight:700;font-size:13px;margin-left:20px">₹${(order.totalPaid || 0).toLocaleString()}</span></div>
+      <div class="pay-row"><span style="color:rgba(255,255,255,0.5);font-size:11px">PENDING</span><span style="color:${(order.pendingAmount || 0) > 0 ? '#f87171' : '#4ade80'};font-weight:700;font-size:13px;margin-left:20px">₹${(order.pendingAmount || 0).toLocaleString()}</span></div>
+    </div>
+  </div>
+
+  ${order.pickupLocation ? (() => {
+      const loc = pickupLocs.find(l => l.id === order.pickupLocation)
+      const label   = loc?.label   || order.pickupLocation
+      const address = loc?.address || ''
+      return `<div class="section" style="margin-top:16px"><h3>Pickup Location</h3><div class="info-box"><div class="info-row"><span class="info-label">Office</span><span class="info-val">${label}</span></div>${address ? `<div class="info-row"><span class="info-label">Address</span><span class="info-val">${address}</span></div>` : ''}</div></div>`
+    })() : ''}
+
+  ${order.notes ? `<div class="section" style="margin-top:16px"><h3>Customer Notes</h3><div class="info-box"><p style="font-size:13px;color:#374151;font-style:italic">"${order.notes}"</p></div></div>` : ''}
+
+  <div class="footer">
+    Lensmen Rentals · support@lensmenrentals.com · Generated ${new Date().toLocaleString('en-GB')}
+  </div>
+</body></html>`
+
+    const win = window.open('', '_blank', 'width=760,height=900')
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print() }, 400)
+  }
 
   // ── API helpers ────────────────────────────────────────────────────
   const updateBookingStatus = async (id, newStatus, condition = 'Good', notes = '') => {
@@ -71,7 +193,7 @@ const OrdersMonitor = () => {
     } catch { toast.error('Update failed') }
   }
 
-  const handleTransition = async (orderId, targetStatus, extraBody = {}) => {
+  const handleTransition = async (orderId, targetStatus, extraBody = {}, opts = {}) => {
     setActionLoading(true)
     try {
       const res = await fetch(`${API_URL}/admin/bookings/${orderId}/status`, {
@@ -79,8 +201,10 @@ const OrdersMonitor = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: targetStatus, ...extraBody }),
       })
-      if (res.ok) { toast.success(`→ ${targetStatus}`); setSelectedOrder(null) }
-      else toast.error('Failed')
+      if (res.ok) {
+        toast.success(opts.keepOpen ? 'Location updated' : `→ ${targetStatus}`)
+        if (!opts.keepOpen) setSelectedOrder(null)
+      } else toast.error('Failed')
     } catch { toast.error('Error') }
     finally { setActionLoading(false) }
   }
@@ -167,7 +291,7 @@ const OrdersMonitor = () => {
         {(s === 'KYC Pending' || s === 'Request Submitted') && (
           <>
             <button
-              onClick={() => handleTransition(order._id, 'Approved')}
+              onClick={() => { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }}
               style={{ fontSize: 12, fontWeight: 700, color: '#fff', background: '#10b981', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}
             >Approve</button>
             <button
@@ -227,6 +351,7 @@ const OrdersMonitor = () => {
             onClick={() => {
               if (a.modal) { setIsReturnConfirming(order._id) }
               else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
+              else if (a.target === 'Approved') { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }
               else handleTransition(order._id, a.target)
             }}
           >{a.label}</Button>
@@ -293,7 +418,7 @@ const OrdersMonitor = () => {
             {items.slice(0, 3).map((item, i) => (
               <img
                 key={i}
-                src={item?.productId?.imageUrl || item?.imageUrl || ''}
+                src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
                 alt=""
                 style={{
                   width: 36, height: 36, borderRadius: 7,
@@ -512,21 +637,31 @@ const OrdersMonitor = () => {
         width={1140}
         styles={{ body: { padding: '0 28px 28px' } }}
         title={
-          <Space>
-            <span style={{ color: '#1e1b4b', fontWeight: 700, fontSize: 16 }}>Order Details</span>
-            <Text type="secondary" style={{ fontSize: 12 }}>#{selectedOrder?._id?.slice(-8).toUpperCase()}</Text>
-            {selectedOrder && (
-              <span style={{
-                fontSize: 11, fontWeight: 700,
-                color: cfg(selectedOrder.status).color,
-                background: cfg(selectedOrder.status).bg,
-                border: `1px solid ${cfg(selectedOrder.status).color}30`,
-                borderRadius: 6, padding: '2px 10px',
-              }}>
-                {cfg(selectedOrder.status).label}
-              </span>
-            )}
-          </Space>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 32 }}>
+            <Space>
+              <span style={{ color: '#1e1b4b', fontWeight: 700, fontSize: 16 }}>Order Details</span>
+              <Text type="secondary" style={{ fontSize: 12 }}>#{selectedOrder?._id?.slice(-8).toUpperCase()}</Text>
+              {selectedOrder && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700,
+                  color: cfg(selectedOrder.status).color,
+                  background: cfg(selectedOrder.status).bg,
+                  border: `1px solid ${cfg(selectedOrder.status).color}30`,
+                  borderRadius: 6, padding: '2px 10px',
+                }}>
+                  {cfg(selectedOrder.status).label}
+                </span>
+              )}
+            </Space>
+            <Button
+              icon={<PrinterOutlined />}
+              size="small"
+              onClick={() => printOrder(selectedOrder)}
+              style={{ fontWeight: 600, fontSize: 12 }}
+            >
+              Print
+            </Button>
+          </div>
         }
         destroyOnHidden
       >
@@ -614,7 +749,7 @@ const OrdersMonitor = () => {
                   <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {(selectedOrder.items?.length ? selectedOrder.items : [selectedOrder.productId]).map((item, i) => (
                       <div key={i} style={{ display: 'flex', gap: 12, padding: 12, background: '#fafafa', borderRadius: 12, border: '1px solid #f0f0f0' }}>
-                        <img src={item?.productId?.imageUrl || item?.imageUrl || ''} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'contain', background: '#fff', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }} />
+                        <img src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'contain', background: '#fff', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }} />
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: '#1e1b4b' }}>
                             {item?.name}
@@ -665,6 +800,41 @@ const OrdersMonitor = () => {
                     <Descriptions.Item label="Email">{selectedOrder.userEmail}</Descriptions.Item>
                     <Descriptions.Item label="Address">{selectedOrder.userAddress}</Descriptions.Item>
                   </Descriptions>
+                  {(['Approved', 'Ready for Pickup', 'Picked Up', 'During Rental', 'Return Pending'].includes(selectedOrder.status)) && (
+                    <div style={{ marginTop: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                          📍 Pickup Location
+                        </div>
+                        <button
+                          onClick={() => {
+                            setApproveLocation(selectedOrder.pickupLocation || pickupLocs[0]?.id || '')
+                            setApproveTarget({ orderId: selectedOrder._id, targetStatus: selectedOrder.status, keepOpen: true })
+                          }}
+                          style={{
+                            fontSize: 11, fontWeight: 700, color: '#4338ca', background: 'none',
+                            border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline',
+                          }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                      {selectedOrder.pickupLocation ? (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e1b4b' }}>
+                            {pickupLocs.find(l => l.id === selectedOrder.pickupLocation)?.label || selectedOrder.pickupLocation}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#4b5563', marginTop: 2 }}>
+                            {pickupLocs.find(l => l.id === selectedOrder.pickupLocation)?.address}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ fontSize: 12, color: '#6366f1', fontStyle: 'italic' }}>
+                          Not assigned yet — click Change to set
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Col>
 
                 {/* Revenue & Actions */}
@@ -812,6 +982,74 @@ const OrdersMonitor = () => {
             onChange={e => setRejectReason(e.target.value)}
             placeholder="e.g. KYC document is blurry, requested dates unavailable, gear under maintenance..."
           />
+        </div>
+      </Modal>
+
+      {/* ── Pickup Location Picker Modal ─────────────────────────────── */}
+      <Modal
+        open={!!approveTarget}
+        onCancel={() => setApproveTarget(null)}
+        title={
+          <Space>
+            <span style={{ color: '#6366f1', fontSize: 18, display: 'flex', alignItems: 'center' }}>
+              <EnvironmentOutlined />
+            </span>
+            <span style={{ color: '#1e1b4b', fontWeight: 700 }}>Select Pickup Location</span>
+          </Space>
+        }
+        okText={approveTarget?.keepOpen ? 'Update Location' : 'Confirm & Approve'}
+        okButtonProps={{ style: { background: '#E5550F', borderColor: '#E5550F' }, loading: actionLoading }}
+        cancelText="Cancel"
+        onOk={async () => {
+          const loc = pickupLocs.find(l => l.id === approveLocation)
+          if (!loc) return
+          const keepOpen = !!approveTarget?.keepOpen
+          await handleTransition(
+            approveTarget.orderId,
+            approveTarget.targetStatus,
+            { pickupLocation: loc.id },
+            { keepOpen },
+          )
+          setApproveTarget(null)
+          if (keepOpen) {
+            setSelectedOrder(prev => prev ? { ...prev, pickupLocation: loc.id } : prev)
+          }
+        }}
+        centered
+        destroyOnHidden
+      >
+        <div style={{ paddingBlock: 12 }}>
+          <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 16 }}>
+            Choose the office where the customer will collect the equipment. They will be notified with this location.
+          </Text>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pickupLocs.map(loc => (
+              <div
+                key={loc.id}
+                onClick={() => setApproveLocation(loc.id)}
+                style={{
+                  border: `2px solid ${approveLocation === loc.id ? '#6366f1' : '#e5e7eb'}`,
+                  borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+                  background: approveLocation === loc.id ? '#eef2ff' : '#fafafa',
+                  transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'flex-start', gap: 12,
+                }}
+              >
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                  border: `2px solid ${approveLocation === loc.id ? '#6366f1' : '#d1d5db'}`,
+                  background: approveLocation === loc.id ? '#6366f1' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {approveLocation === loc.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 14 }}>{loc.label}</div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{loc.address}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </Modal>
 

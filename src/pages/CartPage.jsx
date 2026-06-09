@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { HiOutlineShoppingCart, HiOutlineTrash, HiArrowRight } from 'react-icons/hi'
-import { useGlobal } from '../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 
 const INK   = '#1a1a2e'
 
@@ -39,7 +39,7 @@ const CartPage = ({ setShowBookingModal }) => {
           <div className="lg:col-span-2 space-y-3">
             {cart.map(item => (
               <div key={item._id} className="group bg-white p-4 flex items-center gap-4 border border-slate-100 rounded-2xl hover:shadow-md hover:shadow-slate-200/50 transition-all">
-                <img src={item.imageUrl} alt={item.name} className="w-20 h-20 object-cover rounded-xl bg-slate-100 flex-shrink-0" />
+                <img src={getImageUrl(item.imageUrl)} alt={item.name} className="w-20 h-20 object-cover rounded-xl bg-slate-100 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <h3 className="text-[15px] font-semibold text-[#1a1a2e] truncate">{item.name}</h3>
                   <span className="inline-block text-[11px] font-medium bg-slate-50 text-slate-500 px-2 py-0.5 rounded-md mt-1">

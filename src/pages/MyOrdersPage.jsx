@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { HiCalendar, HiX, HiUser, HiPhone, HiMail, HiLocationMarker, HiClock, HiArrowRight, HiCheckCircle, HiExclamationCircle } from 'react-icons/hi'
 import toast from 'react-hot-toast'
-import { useGlobal } from '../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 import TablePagination from '../components/TablePagination'
 
 const renderStatusBadge = (status) => {
@@ -175,7 +175,7 @@ const MyOrdersPage = () => {
                     {(order.items && order.items.length > 0 ? order.items : [order.productId]).slice(0, 3).map((item, idx) => (
                       <div key={idx} className="relative">
                         <img 
-                          src={item?.productId?.imageUrl || item?.imageUrl || 'https://via.placeholder.com/200'} 
+                          src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
                           alt="" 
                           className="w-16 h-16 object-cover border-2 border-white shadow-lg rounded-xl bg-white group-hover:scale-105 transition-transform" 
                         />
@@ -276,7 +276,7 @@ const MyOrdersPage = () => {
                       {(selectedOrder.items && selectedOrder.items.length > 0 ? selectedOrder.items : [selectedOrder.productId]).map((item, idx) => (
                         <div key={idx} className="flex items-center space-x-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                           <img 
-                            src={item?.productId?.imageUrl || item?.imageUrl || 'https://via.placeholder.com/200'} 
+                            src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
                             alt="" 
                             className="w-16 h-16 object-cover rounded-xl shadow-lg"
                           />

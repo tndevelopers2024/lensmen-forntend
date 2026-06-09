@@ -32,10 +32,11 @@ import UsersPage from './pages/admin/Users'
 import AccountsPage from './pages/admin/Accounts'
 import QuotesPage from './pages/admin/Quotes'
 import CategoriesPage from './pages/admin/Categories'
-import AdminHelp from './pages/admin/Help'
+import OffersPage from './pages/admin/Offers'
 import AdminSettings from './pages/admin/Settings'
 import AdminNotifications from './pages/admin/Notifications'
 import DashboardNotifications from './pages/dashboard/DashboardNotifications'
+import DashboardHelp from './pages/dashboard/DashboardHelp'
 
 function AppContent() {
   const location = useLocation()
@@ -124,11 +125,6 @@ function AppContent() {
           </AdminLayout>
         ) : <Navigate to="/" />} />
 
-        <Route path="/admin/help" element={user?.role === 'admin' ? (
-          <AdminLayout location={location}>
-            <AdminHelp />
-          </AdminLayout>
-        ) : <Navigate to="/" />} />
 
         <Route path="/admin/settings" element={user?.role === 'admin' ? (
           <AdminLayout location={location}>
@@ -142,8 +138,17 @@ function AppContent() {
           </AdminLayout>
         ) : <Navigate to="/" />} />
 
+        <Route path="/admin/offers" element={user?.role === 'admin' ? (
+          <AdminLayout location={location}>
+            <OffersPage />
+          </AdminLayout>
+        ) : <Navigate to="/" />} />
+
         <Route path="/dashboard/notifications" element={user ? (
           <DashboardLayout><DashboardNotifications /></DashboardLayout>
+        ) : <Navigate to="/" />} />
+        <Route path="/dashboard/help" element={user ? (
+          <DashboardLayout><DashboardHelp /></DashboardLayout>
         ) : <Navigate to="/" />} />
       </Routes>
 
