@@ -4,14 +4,14 @@ import { io } from 'socket.io-client'
 
 const GlobalContext = createContext()
 
-export const API_URL = import.meta.env.VITE_API_URL || 'https://lensmen-backend.onrender.com/api'
+export const API_URL = import.meta.env.VITE_API_URL || 'https://api.lensmenrentals.in/api'
 export const BACKEND_URL = API_URL.replace(/\/api$/, '')
 export const getImageUrl = (path) => {
   if (!path) return ''
   if (path.startsWith('http')) return path  // legacy absolute URLs still work
   return `${BACKEND_URL}${path}`
 }
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://lensmen-backend.onrender.com'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://api.lensmenrentals.in'
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
