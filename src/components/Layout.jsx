@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import toast from 'react-hot-toast'
@@ -8,7 +8,7 @@ import {
 } from 'react-icons/hi'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { differenceInDays } from 'date-fns'
+import { differenceInCalendarDays } from 'date-fns'
 import { useGlobal } from '../context/GlobalContext'
 import Footer from './Footer'
 
@@ -17,9 +17,37 @@ const Layout = ({ children }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchInput, setSearchInput] = useState('')
 
   const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/dashboard')
   const activeCategory = new URLSearchParams(location.search).get('category') || 'All'
+
+  useEffect(() => {
+    if (!showSearch) return
+    const onKey = (e) => { if (e.key === 'Escape') closeSearch() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showSearch])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    const q = searchInput.trim()
+    if (q) navigate(`/?q=${encodeURIComponent(q)}`)
+    else navigate('/')
+    setShowSearch(false)
+    setSearchInput('')
+  }
+
+  const openSearch = () => {
+    setShowSearch(true)
+    setTimeout(() => document.getElementById('header-search-input')?.focus(), 50)
+  }
+
+  const closeSearch = () => {
+    setShowSearch(false)
+    setSearchInput('')
+  }
 
   const goToCategory = (cat) => {
     navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`)
@@ -34,7 +62,8 @@ const Layout = ({ children }) => {
   const handleDateChange = (dates) => {
     const [start, end] = dates
     if (start && end) {
-      if (differenceInDays(end, start) > 10) {
+      const calDays = differenceInCalendarDays(end, start) + 1
+      if (calDays > 10) {
         toast.error('Rental period cannot exceed 10 days')
         setRentalDates({ from: start, to: null })
         return
@@ -47,7 +76,7 @@ const Layout = ({ children }) => {
   }
 
   const rentalDays = rentalDates.from && rentalDates.to
-    ? Math.max(1, differenceInDays(rentalDates.to, rentalDates.from))
+    ? differenceInCalendarDays(rentalDates.to, rentalDates.from) + 1
     : null
 
   /* ─── Reusable chip/button pieces ────────────────────────── */
@@ -67,7 +96,7 @@ const Layout = ({ children }) => {
       className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-[12px] transition-colors shrink-0"
     >
       <HiCalendar className="text-white/50 text-sm shrink-0" />
-      <span className="text-white/60 hidden sm:inline">Delivery:</span>
+      <span className="text-white/60 hidden sm:inline">Pickup:</span>
       <span className="text-white font-semibold">{fmtDate(rentalDates.from)}</span>
     </button>
   )
@@ -78,7 +107,7 @@ const Layout = ({ children }) => {
       className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-[12px] transition-colors shrink-0"
     >
       <HiCalendar className="text-white/50 text-sm shrink-0" />
-      <span className="text-white/60 hidden sm:inline">Pickup:</span>
+      <span className="text-white/60 hidden sm:inline">Deliver:</span>
       <span className="text-white font-semibold">{fmtDate(rentalDates.to)}</span>
     </button>
   )
@@ -94,7 +123,7 @@ const Layout = ({ children }) => {
 
   const rightActions = (
     <div className="flex items-center gap-1.5 shrink-0">
-      <button className="w-8 h-8 flex items-center justify-center text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors">
+      <button onClick={openSearch} className="w-8 h-8 flex items-center justify-center text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors">
         <HiOutlineSearch className="text-[17px]" />
       </button>
 
@@ -265,7 +294,7 @@ const Layout = ({ children }) => {
               <div className="grid grid-cols-2 gap-2.5">
                 <div className={`rounded-xl p-3 transition-all ${rentalDates.from ? 'bg-[#E5550F]' : 'bg-white/8 border border-dashed border-white/20'}`}>
                   <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${rentalDates.from ? 'text-white/70' : 'text-white/35'}`}>
-                    Delivery
+                    Pickup
                   </p>
                   <p className={`text-[15px] font-black leading-none ${rentalDates.from ? 'text-white' : 'text-white/25'}`}>
                     {rentalDates.from ? fmtDate(rentalDates.from) : '— —'}
@@ -273,7 +302,7 @@ const Layout = ({ children }) => {
                 </div>
                 <div className={`rounded-xl p-3 transition-all ${rentalDates.to ? 'bg-white/15 border border-white/10' : 'bg-white/5 border border-dashed border-white/20'}`}>
                   <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${rentalDates.to ? 'text-white/60' : 'text-white/35'}`}>
-                    Pickup
+                    Deliver
                   </p>
                   <p className={`text-[15px] font-black leading-none ${rentalDates.to ? 'text-white' : 'text-white/25'}`}>
                     {rentalDates.to ? fmtDate(rentalDates.to) : '— —'}
@@ -355,6 +384,49 @@ const Layout = ({ children }) => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Search overlay ─────────────────────────────────── */}
+      {showSearch && (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center pt-[80px] px-4"
+          onClick={closeSearch}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" />
+          <form
+            onSubmit={handleSearch}
+            onClick={e => e.stopPropagation()}
+            className="relative z-10 w-full max-w-[560px]"
+          >
+            <div className="flex items-center bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] overflow-hidden">
+              <HiOutlineSearch className="text-gray-400 text-[20px] ml-4 shrink-0" />
+              <input
+                id="header-search-input"
+                type="text"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                placeholder="Search cameras, lenses, accessories..."
+                className="flex-1 py-4 px-3 text-[15px] text-gray-900 placeholder-gray-400 outline-none bg-transparent"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="p-2 mr-1 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <HiX className="text-[18px]" />
+                </button>
+              )}
+              <button
+                type="submit"
+                className="m-1.5 px-5 py-2.5 bg-[#E5550F] text-white text-[13px] font-bold rounded-xl hover:bg-[#c2410c] transition-colors shrink-0"
+              >
+                Search
+              </button>
+            </div>
+            <p className="text-white/50 text-[12px] mt-2.5 ml-1">Press Enter to search · Esc to close</p>
+          </form>
         </div>
       )}
 

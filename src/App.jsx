@@ -31,10 +31,12 @@ import OrdersMonitor from './pages/admin/Orders'
 import UsersPage from './pages/admin/Users'
 import AccountsPage from './pages/admin/Accounts'
 import QuotesPage from './pages/admin/Quotes'
+import QuoteFormPage from './pages/admin/QuoteFormPage'
 import CategoriesPage from './pages/admin/Categories'
 import OffersPage from './pages/admin/Offers'
 import AdminSettings from './pages/admin/Settings'
 import AdminNotifications from './pages/admin/Notifications'
+import InvoicesPage from './pages/admin/Invoices'
 import DashboardNotifications from './pages/dashboard/DashboardNotifications'
 import DashboardHelp from './pages/dashboard/DashboardHelp'
 
@@ -119,6 +121,18 @@ function AppContent() {
           </AdminLayout>
         ) : <Navigate to="/" />} />
 
+        <Route path="/admin/quotes/new" element={user?.role === 'admin' ? (
+          <AdminLayout location={location}>
+            <QuoteFormPage />
+          </AdminLayout>
+        ) : <Navigate to="/" />} />
+
+        <Route path="/admin/quotes/:id/edit" element={user?.role === 'admin' ? (
+          <AdminLayout location={location}>
+            <QuoteFormPage />
+          </AdminLayout>
+        ) : <Navigate to="/" />} />
+
         <Route path="/admin/categories" element={user?.role === 'admin' ? (
           <AdminLayout location={location}>
             <CategoriesPage />
@@ -141,6 +155,12 @@ function AppContent() {
         <Route path="/admin/offers" element={user?.role === 'admin' ? (
           <AdminLayout location={location}>
             <OffersPage />
+          </AdminLayout>
+        ) : <Navigate to="/" />} />
+
+        <Route path="/admin/invoices" element={user?.role === 'admin' ? (
+          <AdminLayout location={location}>
+            <InvoicesPage />
           </AdminLayout>
         ) : <Navigate to="/" />} />
 

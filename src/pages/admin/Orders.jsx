@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import {
   Input, Button, Modal, Typography, Radio, DatePicker, Image,
-  Row, Col, Descriptions, Pagination, Space, Tooltip
+  Row, Col, Descriptions, Table, Space, Tooltip, Popconfirm
 } from 'antd'
 import {
   EyeOutlined, SafetyCertificateOutlined, CheckCircleOutlined,
   ArrowRightOutlined, SearchOutlined, FilterOutlined, CloseOutlined,
-  PrinterOutlined, EnvironmentOutlined,
+  PrinterOutlined, EnvironmentOutlined, ExclamationCircleOutlined, DeleteOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
@@ -31,18 +31,19 @@ const STATUS_CFG = {
   'Return Pending':    { color: '#f97316', bg: '#fff7ed', label: 'Return Pending' },
   'Returned':          { color: '#22c55e', bg: '#f0fdf4', label: 'Returned' },
   'Closed':            { color: '#22c55e', bg: '#f0fdf4', label: 'Closed' },
+  'Reopened':          { color: '#f97316', bg: '#fff7ed', label: 'Reopened' },
   'Rejected':          { color: '#ef4444', bg: '#fef2f2', label: 'Rejected' },
 }
 
 const cfg = (status) => STATUS_CFG[status] || { color: '#94a3b8', bg: '#f8fafc', label: status }
 
 // ── Active rental statuses ───────────────────────────────────────────
-const ACTIVE_STATUSES   = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+const ACTIVE_STATUSES   = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup', 'Reopened']
 const RETURNED_STATUSES = ['Returned', 'Closed']
 
 // ── Main component ───────────────────────────────────────────────────
 const OrdersMonitor = () => {
-  const { allOrders, API_URL } = useGlobal()
+  const { allOrders, setAllOrders, API_URL } = useGlobal()
   const pickupLocs = getAdminSettings().pickupLocations || []
 
   const [selectedOrder,     setSelectedOrder]     = useState(null)
@@ -63,122 +64,225 @@ const OrdersMonitor = () => {
   const [rejectReason,      setRejectReason]      = useState('')
   const [approveTarget,     setApproveTarget]     = useState(null)   // { orderId, targetStatus, keepOpen }
   const [approveLocation,   setApproveLocation]   = useState(() => pickupLocs[0]?.id || '')
+  const [reopenTarget,      setReopenTarget]      = useState(null)   // orderId
+  const [reopenNotes,       setReopenNotes]       = useState('')
 
   // ── Print order ────────────────────────────────────────────────────
   const printOrder = (order) => {
     if (!order) return
-    const items = order.items?.length ? order.items : [order.productId]
-    const fmt   = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const fmtT  = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const items = order.items?.length ? order.items : [order.productId ? [order.productId] : []].flat()
+    const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')
+    const invoiceDate = fmtDate(order.createdAt || new Date())
+    const invoiceNo   = order.bookingCode || ('#' + order._id?.slice(-8).toUpperCase())
+    const days        = order.totalDays || 1
+    const discount    = order.discountAmount || 0
+    const subTotal    = items.reduce((s, it) => s + (it?.pricePerDay || 0) * days * (it?.quantity || 1), 0)
+    const total       = order.totalPrice || (subTotal - discount)
+    const balanceDue  = order.pendingAmount ?? total
 
-    const html = `<!DOCTYPE html><html><head><title>Order #${order._id?.slice(-8).toUpperCase()}</title>
+    const amountInWords = (n) => {
+      const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
+      const b = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']
+      const inWords = (num) => {
+        if (num === 0) return ''
+        if (num < 20) return a[num] + ' '
+        if (num < 100) return b[Math.floor(num/10)] + (num%10 ? ' ' + a[num%10] : '') + ' '
+        if (num < 1000) return a[Math.floor(num/100)] + ' Hundred ' + inWords(num%100)
+        if (num < 100000) return inWords(Math.floor(num/1000)) + 'Thousand ' + inWords(num%1000)
+        if (num < 10000000) return inWords(Math.floor(num/100000)) + 'Lakh ' + inWords(num%100000)
+        return inWords(Math.floor(num/10000000)) + 'Crore ' + inWords(num%10000000)
+      }
+      const rupees = Math.floor(n)
+      const paise  = Math.round((n - rupees) * 100)
+      let words = 'Indian Rupee ' + inWords(rupees).trim()
+      if (paise) words += ' and ' + inWords(paise).trim() + ' Paise'
+      return words + ' Only'
+    }
+
+    const logoUrl = `${window.location.origin}/logo.jpg`
+
+    const html = `<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<title>${invoiceNo}</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #111; padding: 32px; max-width: 680px; margin: 0 auto; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #1e1b4b; margin-bottom: 24px; }
-  .brand { font-size: 20px; font-weight: 900; color: #1e1b4b; }
-  .brand span { color: #E5550F; }
-  .ref { text-align: right; }
-  .ref .id { font-size: 18px; font-weight: 700; color: #1e1b4b; }
-  .ref .date { font-size: 12px; color: #6b7280; margin-top: 3px; }
-  .status-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 5px; background: #f0fdf4; color: #16a34a; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
-  h3 { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
-  .section { margin-bottom: 22px; }
-  .item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-  .item:last-child { border-bottom: none; }
-  .item-name { font-size: 13px; font-weight: 600; color: #111; }
-  .item-rate { font-size: 12px; color: #6b7280; margin-top: 2px; }
-  .item-total { font-size: 13px; font-weight: 700; color: #1e1b4b; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .info-box { background: #f8fafc; border-radius: 10px; padding: 14px; }
-  .info-row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; }
-  .info-row:last-child { border-bottom: none; }
-  .info-label { color: #6b7280; }
-  .info-val { font-weight: 600; color: #111; }
-  .total-box { background: #1e1b4b; border-radius: 12px; padding: 18px 20px; color: #fff; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
-  .total-label { font-size: 11px; color: rgba(255,255,255,0.6); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-  .total-amount { font-size: 28px; font-weight: 900; margin-top: 4px; }
-  .pay-row { display: flex; justify-content: space-between; font-size: 12px; margin-top: 10px; }
-  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #9ca3af; }
-  @media print { body { padding: 16px; } }
-</style></head><body>
-  <div class="header">
-    <div>
-      <div class="brand">Lensmen <span>Rentals</span></div>
-      <div style="font-size:11px;color:#6b7280;margin-top:4px;">Rental Order Receipt</div>
-    </div>
-    <div class="ref">
-      <div class="id">#${order._id?.slice(-8).toUpperCase()}</div>
-      <div class="date">Printed ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-      <div class="status-badge">${order.status}</div>
-    </div>
-  </div>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; background: #fff; }
+  .page { max-width: 750px; margin: 0 auto; padding: 32px 28px; border: 1px solid #ccc; }
 
-  <div class="grid-2">
-    <div class="section">
-      <h3>Equipment</h3>
-      <div class="info-box">
-        ${items.map(item => `
-          <div class="item">
-            <div>
-              <div class="item-name">${item?.name || 'Unknown'}${(item?.quantity > 1) ? ` ×${item.quantity}` : ''}</div>
-              <div class="item-rate">₹${item?.pricePerDay}/day</div>
-            </div>
-            <div class="item-total">₹${((item?.pricePerDay || 0) * (order.totalDays || 1) * (item?.quantity || 1)).toLocaleString()}</div>
-          </div>`).join('')}
+  /* Header */
+  .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #ccc; padding-bottom: 16px; margin-bottom: 0; }
+  .inv-header-left { display: flex; align-items: flex-start; gap: 16px; }
+  .inv-header-left img { width: 90px; height: auto; object-fit: contain; }
+  .company-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .company-addr { font-size: 11px; line-height: 1.55; color: #333; max-width: 340px; }
+  .tax-invoice-label { font-size: 30px; font-weight: 400; letter-spacing: 1px; color: #111; align-self: flex-end; }
+
+  /* Meta table */
+  .meta-table { width: 100%; border-collapse: collapse; border: 1px solid #ccc; margin-top: 0; }
+  .meta-table td { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; vertical-align: top; }
+  .meta-table .meta-label { color: #555; width: 110px; }
+  .meta-table .meta-val { font-weight: 600; }
+
+  /* Bill To */
+  .bill-to-header { background: #e8e8e8; padding: 5px 10px; font-size: 12px; font-weight: 600; border: 1px solid #ccc; border-top: none; }
+  .bill-to-name { padding: 6px 10px 10px; font-size: 13px; font-weight: 700; border: 1px solid #ccc; border-top: none; }
+
+  /* Items table */
+  .items-table { width: 100%; border-collapse: collapse; margin-top: 0; }
+  .items-table th { background: #e8e8e8; font-size: 12px; font-weight: 700; padding: 7px 10px; border: 1px solid #ccc; text-align: left; }
+  .items-table th.num { width: 36px; text-align: center; }
+  .items-table th.qty { width: 70px; text-align: right; }
+  .items-table th.rate { width: 90px; text-align: right; }
+  .items-table th.amt { width: 90px; text-align: right; }
+  .items-table td { padding: 8px 10px; border: 1px solid #ccc; font-size: 12px; vertical-align: top; }
+  .items-table td.num { text-align: center; }
+  .items-table td.qty { text-align: right; }
+  .items-table td.rate { text-align: right; }
+  .items-table td.amt { text-align: right; }
+
+  /* Footer split */
+  .footer-split { display: flex; border: 1px solid #ccc; border-top: none; }
+  .footer-left { flex: 1; padding: 12px 10px; border-right: 1px solid #ccc; font-size: 12px; }
+  .footer-right { width: 260px; font-size: 12px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #ccc; }
+  .totals-row.bold { font-weight: 700; font-size: 13px; }
+  .sig-box { padding: 12px 10px; text-align: center; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; }
+
+  @media print {
+    body { margin: 0; }
+    .page { border: none; padding: 20px; max-width: 100%; }
+  }
+</style>
+</head><body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="inv-header">
+    <div class="inv-header-left">
+      <img src="${logoUrl}" alt="Lens Men Logo" />
+      <div>
+        <div class="company-name">LENS MEN</div>
+        <div class="company-addr">
+          flat no S3, 2nd floor, Sri Niketan Apartment, Sasi Nagar<br>
+          Main road, Sasinagar Old no 7 new no 16, near Anbu Hospital, Velachery.<br>
+          Chennai Tamil Nadu 600042<br>
+          India<br>
+          +919080086600<br>
+          lensmen@live.com
+        </div>
       </div>
     </div>
-    <div class="section">
-      <h3>Customer</h3>
-      <div class="info-box">
-        <div class="info-row"><span class="info-label">Name</span><span class="info-val">${order.userName || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Mobile</span><span class="info-val">${order.userMobile || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Email</span><span class="info-val">${order.userEmail || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Address</span><span class="info-val">${order.userAddress || '—'}</span></div>
-        <div class="info-row"><span class="info-label">Type</span><span class="info-val">${order.accountType || 'Private'}</span></div>
+    <div class="tax-invoice-label">TAX INVOICE</div>
+  </div>
+
+  <!-- Invoice Meta -->
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">#</td>
+      <td class="meta-val">${invoiceNo}</td>
+      <td rowspan="4" style="width:50%"></td>
+    </tr>
+    <tr>
+      <td class="meta-label">Invoice Date</td>
+      <td class="meta-val">${invoiceDate}</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Terms</td>
+      <td class="meta-val">Due on Receipt</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Due Date</td>
+      <td class="meta-val">${invoiceDate}</td>
+    </tr>
+  </table>
+
+  <!-- Bill To -->
+  <div class="bill-to-header">Bill To</div>
+  <div class="bill-to-name">${order.userName || '—'}</div>
+
+  <!-- Items Table -->
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>Item &amp; Description</th>
+        <th class="qty">Qty</th>
+        <th class="rate">Rate</th>
+        <th class="amt">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items.map((item, i) => {
+        const qty  = (item?.quantity || 1)
+        const rate = (item?.pricePerDay || 0) * days
+        const amt  = qty * rate
+        return `<tr>
+          <td class="num">${i + 1}</td>
+          <td>${item?.name || 'Unknown'}<br><span style="font-size:11px;color:#666;">${days} day${days !== 1 ? 's' : ''} rental</span></td>
+          <td class="qty">${qty}.0</td>
+          <td class="rate">${rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td class="amt">${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        </tr>`
+      }).join('')}
+    </tbody>
+  </table>
+
+  <!-- Footer split -->
+  <div class="footer-split">
+    <div class="footer-left">
+      <div style="margin-bottom:8px;">
+        <div style="font-size:11px;color:#555;margin-bottom:2px;">Total In Words</div>
+        <div style="font-weight:700;font-style:italic;">${amountInWords(total)}</div>
+      </div>
+      <div style="margin-bottom:32px;">
+        <div style="font-size:11px;color:#555;margin-bottom:2px;">Notes</div>
+        <div>${order.notes || 'Thanks for your business.'}</div>
+      </div>
+      <div style="font-size:11px;color:#555;margin-top:8px;">Customer Signature.</div>
+    </div>
+    <div class="footer-right">
+      <div class="totals-row">
+        <span>Sub Total</span>
+        <span>${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      </div>
+      ${discount > 0 ? `<div class="totals-row">
+        <span>Discount</span>
+        <span>(-) ${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      </div>` : ''}
+      <div class="totals-row bold">
+        <span>Total</span>
+        <span>₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="totals-row bold" style="border-bottom:none;">
+        <span>Balance Due</span>
+        <span>₹${balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="sig-box" style="border-top:1px solid #ccc;">
+        <div style="font-size:12px;margin-bottom:8px;">N Indrakumar</div>
+        <div style="font-size:11px;color:#555;">Authorized Signature</div>
       </div>
     </div>
   </div>
 
-  <div class="section">
-    <h3>Rental Period</h3>
-    <div class="info-box">
-      <div class="info-row"><span class="info-label">Pickup</span><span class="info-val">${fmt(order.startDate)} at ${fmtT(order.startDate)}</span></div>
-      <div class="info-row"><span class="info-label">Return</span><span class="info-val">${fmt(order.endDate)} at ${fmtT(order.endDate)}</span></div>
-      <div class="info-row"><span class="info-label">Duration</span><span class="info-val">${order.totalDays || 1} day${(order.totalDays || 1) !== 1 ? 's' : ''}</span></div>
-    </div>
-  </div>
-
-  <div class="total-box">
-    <div>
-      <div class="total-label">Total Amount</div>
-      <div class="total-amount">₹${order.totalPrice?.toLocaleString()}</div>
-    </div>
-    <div style="text-align:right">
-      <div class="pay-row"><span style="color:rgba(255,255,255,0.5);font-size:11px">COLLECTED</span><span style="color:#4ade80;font-weight:700;font-size:13px;margin-left:20px">₹${(order.totalPaid || 0).toLocaleString()}</span></div>
-      <div class="pay-row"><span style="color:rgba(255,255,255,0.5);font-size:11px">PENDING</span><span style="color:${(order.pendingAmount || 0) > 0 ? '#f87171' : '#4ade80'};font-weight:700;font-size:13px;margin-left:20px">₹${(order.pendingAmount || 0).toLocaleString()}</span></div>
-    </div>
-  </div>
-
-  ${order.pickupLocation ? (() => {
-      const loc = pickupLocs.find(l => l.id === order.pickupLocation)
-      const label   = loc?.label   || order.pickupLocation
-      const address = loc?.address || ''
-      return `<div class="section" style="margin-top:16px"><h3>Pickup Location</h3><div class="info-box"><div class="info-row"><span class="info-label">Office</span><span class="info-val">${label}</span></div>${address ? `<div class="info-row"><span class="info-label">Address</span><span class="info-val">${address}</span></div>` : ''}</div></div>`
-    })() : ''}
-
-  ${order.notes ? `<div class="section" style="margin-top:16px"><h3>Customer Notes</h3><div class="info-box"><p style="font-size:13px;color:#374151;font-style:italic">"${order.notes}"</p></div></div>` : ''}
-
-  <div class="footer">
-    Lensmen Rentals · support@lensmenrentals.com · Generated ${new Date().toLocaleString('en-GB')}
-  </div>
+</div>
 </body></html>`
 
-    const win = window.open('', '_blank', 'width=760,height=900')
+    const win = window.open('', '_blank', 'width=820,height=960')
     win.document.write(html)
     win.document.close()
     win.focus()
-    setTimeout(() => { win.print() }, 400)
+    setTimeout(() => { win.print() }, 600)
+  }
+
+  const handleDeleteOrder = async (orderId) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${orderId}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Order deleted')
+        setSelectedOrder(null)
+        setAllOrders(prev => prev.filter(o => o._id !== orderId))
+      } else toast.error('Delete failed')
+    } catch { toast.error('Error') }
   }
 
   // ── API helpers ────────────────────────────────────────────────────
@@ -242,8 +346,6 @@ const OrdersMonitor = () => {
     }).length,
   }
 
-  const paginated = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-
   // ── Row: inline status actions ─────────────────────────────────────
   const InlineStatus = ({ order }) => {
     const s = order.status
@@ -276,7 +378,23 @@ const OrdersMonitor = () => {
     )
 
     if (s === 'Closed') return (
-      <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>Closed</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>Closed</span>
+        <button
+          onClick={() => { setReopenNotes(''); setReopenTarget(order._id) }}
+          style={{ fontSize: 11, fontWeight: 700, color: '#f97316', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, padding: '2px 9px', cursor: 'pointer' }}
+        >Reopen</button>
+      </div>
+    )
+
+    if (s === 'Reopened') return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#f97316', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, padding: '2px 8px' }}>Reopened</span>
+        <button
+          onClick={() => setIsReturnConfirming(order._id)}
+          style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#1e1b4b', border: 'none', borderRadius: 6, padding: '2px 9px', cursor: 'pointer' }}
+        >Return</button>
+      </div>
     )
 
     return (
@@ -335,6 +453,8 @@ const OrdersMonitor = () => {
       map[s] = [{ label: 'Mark Returned', target: 'Returned', modal: true }]
     }
     if (s === 'Returned') map[s] = [{ label: 'Close Order', target: 'Closed', primary: true }]
+    if (s === 'Closed')   map[s] = [{ label: 'Reopen Order', target: 'Reopened', needsNotes: true }]
+    if (s === 'Reopened') map[s] = [{ label: 'Mark Returned', target: 'Returned', modal: true }, { label: 'Close Order', target: 'Closed', primary: true }]
 
     const actions = map[s] || []
     if (!actions.length) return <Text type="secondary" style={{ fontSize: 12 }}>No pending actions</Text>
@@ -351,6 +471,7 @@ const OrdersMonitor = () => {
             onClick={() => {
               if (a.modal) { setIsReturnConfirming(order._id) }
               else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
+              else if (a.needsNotes) { setReopenNotes(''); setReopenTarget(order._id) }
               else if (a.target === 'Approved') { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }
               else handleTransition(order._id, a.target)
             }}
@@ -391,152 +512,162 @@ const OrdersMonitor = () => {
     )
   }
 
-  // ── Order row ──────────────────────────────────────────────────────
-  const OrderRow = ({ order }) => {
-    const items = order.items?.length ? order.items : [order.productId]
-    const hasKyc = order.userKyc?.kycDocuments &&
-      (order.userKyc.kycDocuments.aadhaarFront || order.userKyc.kycDocuments.panFront)
-
-    return (
-      <div
-        style={{
-          display: 'flex', alignItems: 'center',
-          borderBottom: '1px solid #f3f4f6',
-          padding: '14px 20px 14px 18px',
-          gap: 0,
-          background: '#fff',
-          transition: 'background 0.12s',
-          cursor: 'pointer',
-        }}
-        onClick={() => setSelectedOrder(order)}
-        onMouseEnter={e => (e.currentTarget.style.background = '#fafafa')}
-        onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-      >
-        {/* Equipment */}
-        <div style={{ flex: '0 0 300px', display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
-            {items.slice(0, 3).map((item, i) => (
-              <img
-                key={i}
-                src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
-                alt=""
-                style={{
-                  width: 36, height: 36, borderRadius: 7,
-                  objectFit: 'cover', objectPosition: 'center',
-                  border: '1px solid #f0f0f0', background: '#f9f9f9',
-                }}
-              />
-            ))}
-          </div>
-          <div style={{ minWidth: 0 }}>
+  // ── Table columns ─────────────────────────────────────────────────
+  const tableColumns = [
+    {
+      title: 'Date',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 100,
+      sorter: (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+      defaultSortOrder: 'descend',
+      render: d => (
+        <span style={{ fontSize: 12, color: '#6b7280' }}>
+          {new Date(d).toLocaleDateString('en-GB')}
+        </span>
+      ),
+    },
+    {
+      title: 'Invoice #',
+      dataIndex: 'bookingCode',
+      key: 'bookingCode',
+      width: 115,
+      render: (code, record) => (
+        <span
+          style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#E5550F', cursor: 'pointer' }}
+          onClick={e => { e.stopPropagation(); setSelectedOrder(record) }}
+        >
+          {code || '#' + record._id?.slice(-8).toUpperCase()}
+        </span>
+      ),
+    },
+    {
+      title: 'Customer',
+      dataIndex: 'userName',
+      key: 'userName',
+      width: 160,
+      sorter: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
+      render: (name, record) => (
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{name}</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>{record.userMobile}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Equipment',
+      key: 'equipment',
+      width: 190,
+      render: (_, record) => {
+        const items = record.items?.length ? record.items : [record.productId]
+        return (
+          <div>
             {items.slice(0, 2).map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#d1d5db', flexShrink: 0 }} />
-                <span style={{
-                  fontSize: 13, fontWeight: 600, color: '#111827',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {item?.name || 'Unknown Item'}
+              <div key={i} style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#d1d5db', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item?.name || '—'}
                 </span>
               </div>
             ))}
             {items.length > 2 && (
-              <div style={{ fontSize: 11, color: '#9ca3af', marginLeft: 11, marginTop: 2 }}>
-                +{items.length - 2} More Items
-              </div>
+              <div style={{ fontSize: 11, color: '#9ca3af' }}>+{items.length - 2} more</div>
             )}
           </div>
-        </div>
-
-        {/* Client */}
-        <div style={{ flex: '0 0 220px', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{order.userName}</span>
-            <span style={{
-              fontSize: 10, fontWeight: 600,
-              background: '#f3f4f6', color: '#6b7280',
-              padding: '1px 6px', borderRadius: 4,
-            }}>
-              {order.accountType || 'Private'}
-            </span>
-          </div>
-          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 1 }}>
-            {order.userMobile || '—'}
-          </div>
-          <div style={{ fontSize: 12, color: '#9ca3af' }}>{order.userEmail}</div>
-        </div>
-
-        {/* Return date */}
-        <div style={{ flex: '0 0 140px' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
-            {new Date(order.endDate).toLocaleDateString('en-GB')}
-          </div>
-          <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 1 }}>
-            At {new Date(order.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
-          </div>
-        </div>
-
-        {/* Actions + Status */}
-        <div
-          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}
-          onClick={e => e.stopPropagation()}
-        >
-          <Tooltip title="View Order Details">
-            <button
-              onClick={() => setSelectedOrder(order)}
-              style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: '#f9fafb', border: '1px solid #f0f0f0',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: '#9ca3af',
-                transition: 'all 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f0f0f0'; e.currentTarget.style.color = '#374151' }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#f9fafb'; e.currentTarget.style.color = '#9ca3af' }}
-            >
-              <EyeOutlined style={{ fontSize: 14 }} />
-            </button>
-          </Tooltip>
-
-          {hasKyc && (
-            <Tooltip title="View KYC Documents">
-              <button
-                onClick={() => setSelectedKycOrder(order)}
-                style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: '#f9fafb', border: '1px solid #e5e7eb',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', color: '#6b7280',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <SafetyCertificateOutlined style={{ fontSize: 14 }} />
-              </button>
+        )
+      },
+    },
+    {
+      title: 'Rental Status',
+      key: 'status',
+      width: 180,
+      render: (_, record) => <InlineStatus order={record} />,
+    },
+    {
+      title: 'Payment',
+      key: 'payment',
+      width: 130,
+      render: (_, record) => {
+        const overdue = (record.pendingAmount || 0) > 0 && new Date(record.endDate) < new Date()
+        const overdueDays = overdue
+          ? Math.floor((new Date() - new Date(record.endDate)) / (1000 * 60 * 60 * 24))
+          : 0
+        if ((record.pendingAmount || 0) === 0 || record.paymentStatus === 'Fully Paid')
+          return <span style={{ color: '#10b981', fontWeight: 700, fontSize: 12 }}>PAID</span>
+        if (overdue)
+          return <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 12 }}>OVERDUE {overdueDays}d</span>
+        if (record.paymentStatus === 'Advance Paid')
+          return <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 12 }}>PARTIAL</span>
+        return <span style={{ color: '#9ca3af', fontWeight: 700, fontSize: 12 }}>UNPAID</span>
+      },
+    },
+    {
+      title: 'Return Date',
+      dataIndex: 'endDate',
+      key: 'endDate',
+      width: 100,
+      sorter: (a, b) => new Date(a.endDate) - new Date(b.endDate),
+      render: d => (
+        <span style={{ fontSize: 12, color: '#374151' }}>
+          {new Date(d).toLocaleDateString('en-GB')}
+        </span>
+      ),
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'totalPrice',
+      key: 'totalPrice',
+      width: 95,
+      sorter: (a, b) => (a.totalPrice || 0) - (b.totalPrice || 0),
+      render: amt => <span style={{ fontWeight: 600, fontSize: 13 }}>₹{(amt || 0).toLocaleString()}</span>,
+    },
+    {
+      title: 'Balance',
+      dataIndex: 'pendingAmount',
+      key: 'pendingAmount',
+      width: 95,
+      sorter: (a, b) => (a.pendingAmount || 0) - (b.pendingAmount || 0),
+      render: amt => (
+        <span style={{ fontWeight: 600, fontSize: 13, color: (amt || 0) > 0 ? '#ef4444' : '#10b981' }}>
+          ₹{(amt || 0).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      title: 'Days',
+      dataIndex: 'totalDays',
+      key: 'totalDays',
+      width: 60,
+      sorter: (a, b) => (a.totalDays || 0) - (b.totalDays || 0),
+      render: d => <span style={{ fontSize: 13, color: '#374151' }}>{d || 1}</span>,
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 90,
+      render: (_, record) => {
+        const hasKyc = record.userKyc?.kycDocuments &&
+          (record.userKyc.kycDocuments.aadhaarFront || record.userKyc.kycDocuments.panFront)
+        return (
+          <Space size={4} onClick={e => e.stopPropagation()}>
+            <Tooltip title="View Details">
+              <Button size="small" icon={<EyeOutlined />} onClick={() => setSelectedOrder(record)} />
             </Tooltip>
-          )}
-
-          <InlineStatus order={order} />
-
-          {/* Payment button — shown for financially active orders */}
-          {['Ready for Pickup', 'During Rental', 'Picked Up', 'Return Pending', 'Returned', 'Closed', 'Active'].includes(order.status) && (
-            <Tooltip title={order.pendingAmount > 0 ? `₹${order.pendingAmount?.toLocaleString()} pending` : 'Fully Paid'}>
-              <button
-                onClick={() => setPaymentTarget(order)}
-                style={{
-                  width: 32, height: 32, borderRadius: 8, fontWeight: 800, fontSize: 13,
-                  background: '#f9fafb',
-                  border: '1px solid #e5e7eb',
-                  color: order.pendingAmount > 0 ? '#374151' : '#6b7280',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
-              >₹</button>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-    )
-  }
+            {hasKyc && (
+              <Tooltip title="KYC Docs">
+                <Button size="small" icon={<SafetyCertificateOutlined />} onClick={() => setSelectedKycOrder(record)} />
+              </Tooltip>
+            )}
+            {['Ready for Pickup', 'During Rental', 'Picked Up', 'Return Pending', 'Returned', 'Closed', 'Reopened', 'Active'].includes(record.status) && (
+              <Tooltip title={record.pendingAmount > 0 ? `₹${record.pendingAmount?.toLocaleString()} pending` : 'Fully Paid'}>
+                <Button size="small" style={{ fontWeight: 800 }} onClick={() => setPaymentTarget(record)}>₹</Button>
+              </Tooltip>
+            )}
+          </Space>
+        )
+      },
+    },
+  ]
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
@@ -574,7 +705,7 @@ const OrdersMonitor = () => {
         <TabPill id="due"      label="Return in 3 Days" />
       </div>
 
-      {/* Order list card */}
+      {/* Order list table */}
       <div style={{
         background: '#fff',
         borderRadius: 16,
@@ -582,51 +713,36 @@ const OrdersMonitor = () => {
         overflow: 'hidden',
         border: '1px solid #f0f0f0',
       }}>
-        {/* Column headers */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          padding: '10px 20px 10px 22px',
-          background: '#fafafa',
-          borderBottom: '1px solid #f0f0f0',
-          gap: 0,
-        }}>
-          <div style={{ flex: '0 0 300px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Equipment Details</div>
-          <div style={{ flex: '0 0 220px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Client & Contact</div>
-          <div style={{ flex: '0 0 140px', fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Return Schedule</div>
-          <div style={{ flex: 1,          fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Actions & Status</div>
-        </div>
-
-        {/* Rows */}
-        {paginated.length === 0 ? (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: '#d1d5db' }}>
-            <FilterOutlined style={{ fontSize: 32, marginBottom: 12, display: 'block' }} />
-            <div style={{ fontSize: 13, fontWeight: 600 }}>No orders match your filters</div>
-          </div>
-        ) : (
-          paginated.map(order => <OrderRow key={order._id} order={order} />)
-        )}
-
-        {/* Pagination */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 20px',
-          borderTop: '1px solid #f3f4f6',
-          background: '#fafafa',
-        }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Showing {filteredOrders.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredOrders.length)} of {filteredOrders.length}
-          </Text>
-          <Pagination
-            current={currentPage}
-            pageSize={pageSize}
-            total={filteredOrders.length}
-            onChange={(p, ps) => { setCurrentPage(p); setPageSize(ps) }}
-            showSizeChanger
-            pageSizeOptions={['5', '10', '20', '50']}
-            size="small"
-          />
-        </div>
+        <Table
+          columns={tableColumns}
+          dataSource={filteredOrders}
+          rowKey="_id"
+          size="small"
+          scroll={{ x: 1280 }}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total: filteredOrders.length,
+            onChange: (p, ps) => { setCurrentPage(p); setPageSize(ps) },
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50'],
+            showTotal: (total, range) => `${range[0]}–${range[1]} of ${total} orders`,
+            size: 'small',
+            style: { padding: '10px 16px' },
+          }}
+          onRow={record => ({
+            onClick: () => setSelectedOrder(record),
+            style: { cursor: 'pointer' },
+          })}
+          locale={{
+            emptyText: (
+              <div style={{ padding: '60px 0', textAlign: 'center', color: '#d1d5db' }}>
+                <FilterOutlined style={{ fontSize: 32, marginBottom: 12, display: 'block' }} />
+                <div style={{ fontSize: 13, fontWeight: 600 }}>No orders match your filters</div>
+              </div>
+            ),
+          }}
+        />
       </div>
 
       {/* ── Order Detail Modal ───────────────────────────────────────── */}
@@ -638,9 +754,9 @@ const OrdersMonitor = () => {
         styles={{ body: { padding: '0 28px 28px' } }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: 32 }}>
-            <Space>
+            <Space align="center" wrap>
               <span style={{ color: '#1e1b4b', fontWeight: 700, fontSize: 16 }}>Order Details</span>
-              <Text type="secondary" style={{ fontSize: 12 }}>#{selectedOrder?._id?.slice(-8).toUpperCase()}</Text>
+              <Text type="secondary" style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700 }}>{selectedOrder?.bookingCode || '#' + selectedOrder?._id?.slice(-8).toUpperCase()}</Text>
               {selectedOrder && (
                 <span style={{
                   fontSize: 11, fontWeight: 700,
@@ -652,6 +768,11 @@ const OrdersMonitor = () => {
                   {cfg(selectedOrder.status).label}
                 </span>
               )}
+              {selectedOrder?.createdAt && (
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  Placed {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                </Text>
+              )}
             </Space>
             <Button
               icon={<PrinterOutlined />}
@@ -661,6 +782,17 @@ const OrdersMonitor = () => {
             >
               Print
             </Button>
+            <Popconfirm
+              title="Delete this order?"
+              description="This permanently removes the order record. Cannot be undone."
+              onConfirm={() => handleDeleteOrder(selectedOrder._id)}
+              okText="Delete"
+              okButtonProps={{ danger: true }}
+            >
+              <Button icon={<DeleteOutlined />} size="small" danger style={{ fontWeight: 600, fontSize: 12 }}>
+                Delete
+              </Button>
+            </Popconfirm>
           </div>
         }
         destroyOnHidden
@@ -671,7 +803,7 @@ const OrdersMonitor = () => {
             { label: 'KYC Done',   statuses: ['KYC Approved'] },
             { label: 'Approved',   statuses: ['Approved'] },
             { label: 'Ready',      statuses: ['Ready for Pickup'] },
-            { label: 'Active',     statuses: ['Picked Up', 'During Rental', 'Return Pending', 'Active'] },
+            { label: 'Active',     statuses: ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Reopened'] },
             { label: 'Closed',     statuses: ['Returned', 'Closed'] },
           ]
           const isRejected   = selectedOrder.status === 'Rejected'
@@ -769,6 +901,12 @@ const OrdersMonitor = () => {
                         <div style={{ fontSize: 12, color: '#78350f' }}>{selectedOrder.notes}</div>
                       </div>
                     )}
+                    {selectedOrder.reopenNotes && (
+                      <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 10, padding: '10px 12px' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Reopen Notes</div>
+                        <div style={{ fontSize: 12, color: '#9a3412' }}>{selectedOrder.reopenNotes}</div>
+                      </div>
+                    )}
                   </div>
                 </Col>
 
@@ -799,6 +937,15 @@ const OrdersMonitor = () => {
                     <Descriptions.Item label="Mobile">{selectedOrder.userMobile}</Descriptions.Item>
                     <Descriptions.Item label="Email">{selectedOrder.userEmail}</Descriptions.Item>
                     <Descriptions.Item label="Address">{selectedOrder.userAddress}</Descriptions.Item>
+                    {selectedOrder.createdAt && (
+                      <Descriptions.Item label="Order Placed">
+                        {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {' '}
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </Descriptions.Item>
+                    )}
                   </Descriptions>
                   {(['Approved', 'Ready for Pickup', 'Picked Up', 'During Rental', 'Return Pending'].includes(selectedOrder.status)) && (
                     <div style={{ marginTop: 12, background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '10px 14px' }}>
@@ -981,6 +1128,43 @@ const OrdersMonitor = () => {
             value={rejectReason}
             onChange={e => setRejectReason(e.target.value)}
             placeholder="e.g. KYC document is blurry, requested dates unavailable, gear under maintenance..."
+          />
+        </div>
+      </Modal>
+
+      {/* ── Reopen Notes Modal ──────────────────────────────────────── */}
+      <Modal
+        open={!!reopenTarget}
+        onCancel={() => { setReopenTarget(null); setReopenNotes('') }}
+        title={
+          <Space>
+            <span style={{ color: '#f97316', fontSize: 18, display: 'flex', alignItems: 'center' }}>
+              <ExclamationCircleOutlined />
+            </span>
+            <span style={{ color: '#1e1b4b', fontWeight: 700 }}>Reopen Order</span>
+          </Space>
+        }
+        okText="Confirm Reopen"
+        okButtonProps={{ loading: actionLoading }}
+        cancelText="Cancel"
+        onOk={() => {
+          handleTransition(reopenTarget, 'Reopened', reopenNotes.trim() ? { reopenNotes: reopenNotes.trim() } : {})
+          setReopenTarget(null)
+          setReopenNotes('')
+        }}
+        centered
+        destroyOnHidden
+      >
+        <div style={{ paddingBlock: 8 }}>
+          <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 12 }}>
+            Optionally add a note explaining why this order is being reopened.
+          </Text>
+          <TextArea
+            rows={4}
+            autoFocus
+            value={reopenNotes}
+            onChange={e => setReopenNotes(e.target.value)}
+            placeholder="e.g. Customer returned early, gear needs re-inspection, extended rental agreed..."
           />
         </div>
       </Modal>

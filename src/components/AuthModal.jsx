@@ -35,7 +35,7 @@ const AuthModal = ({ mode, setMode }) => {
   const [kycFiles, setKycFiles] = useState({ aadhaarFront: null, aadhaarBack: null, panFront: null, panBack: null })
   const [authData, setAuthData] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
-    mobile: '', address: '', accountType: 'Private',
+    mobile: '', secondMobile: '', companyName: '', address: '', accountType: 'Private',
   })
   const [resetData, setResetData] = useState({
     email: '', otp: '', newPassword: '', confirmNewPassword: '',
@@ -314,6 +314,21 @@ const AuthModal = ({ mode, setMode }) => {
                               value={authData.mobile} onChange={e => setAuthData({ ...authData, mobile: e.target.value })}
                               className={field} />
                           </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Second Mobile <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
+                          <div className="relative">
+                            <HiOutlinePhone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[15px]" />
+                            <input type="tel" placeholder="+91 00000 00000"
+                              value={authData.secondMobile || ''} onChange={e => setAuthData({ ...authData, secondMobile: e.target.value })}
+                              className={field} />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Company Name <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
+                          <input type="text" placeholder="Your company or studio name"
+                            value={authData.companyName || ''} onChange={e => setAuthData({ ...authData, companyName: e.target.value })}
+                            className={field} />
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Address / City</label>

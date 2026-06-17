@@ -95,6 +95,7 @@ const LandingPage = ({ setShowBookingModal }) => {
   const [wishlist, setWishlist] = useState(new Set())
 
   const selectedCategory = searchParams.get('category') || 'All'
+  const searchQuery = (searchParams.get('q') || '').toLowerCase().trim()
   const allCategories = ['All', ...categories]
 
   const rentalDays = useMemo(() => {
@@ -102,9 +103,11 @@ const LandingPage = ({ setShowBookingModal }) => {
     return Math.max(1, differenceInDays(rentalDates.to, rentalDates.from))
   }, [rentalDates])
 
-  const filteredProducts = products.filter(p =>
-    selectedCategory === 'All' || p.category === selectedCategory
-  )
+  const filteredProducts = products.filter(p => {
+    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory
+    const matchesSearch = !searchQuery || (p.name || '').toLowerCase().includes(searchQuery)
+    return matchesCategory && matchesSearch
+  })
 
   const handleCategoryClick = (cat) => {
     navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`, { replace: true })
@@ -257,11 +260,14 @@ const LandingPage = ({ setShowBookingModal }) => {
           )}
 
           {/* Section header */}
-          <div id="inventory" className="scroll-mt-[134px] md:scroll-mt-[110px] mx-3 md:mx-5 mt-6 md:mt-8 flex items-baseline justify-between">
-            <h2 className="text-[18px] md:text-[22px] font-black text-gray-900">
-              {selectedCategory === 'All' ? 'All Gear' : selectedCategory} On Rent
+          <div id="inventory" className="scroll-mt-[134px] md:scroll-mt-[110px] mx-3 md:mx-5 mt-6 md:mt-8 flex items-baseline justify-between gap-3">
+            <h2 className="text-[18px] md:text-[22px] font-black text-gray-900 truncate">
+              {searchQuery
+                ? <>Results for "<span className="text-[#E5550F]">{searchParams.get('q')}</span>"</>
+                : <>{selectedCategory === 'All' ? 'All Gear' : selectedCategory} On Rent</>
+              }
             </h2>
-            <span className="text-[12px] md:text-[14px] text-gray-400">
+            <span className="text-[12px] md:text-[14px] text-gray-400 shrink-0">
               Total:{' '}
               <span className="font-semibold text-gray-600">{filteredProducts.length} items</span>
             </span>
@@ -406,9 +412,11 @@ const LandingPage = ({ setShowBookingModal }) => {
           ) : (
             <div className="mx-3 md:mx-5 mt-6 flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
               <MdCameraAlt className="text-5xl text-gray-200 mb-3" />
-              <p className="font-semibold text-gray-400 text-[15px]">No gear in this category</p>
+              <p className="font-semibold text-gray-400 text-[15px]">
+                {searchQuery ? `No results for "${searchParams.get('q')}"` : 'No gear in this category'}
+              </p>
               <button
-                onClick={() => handleCategoryClick('All')}
+                onClick={() => navigate('/')}
                 className="mt-2 text-[14px] text-[#E5550F] font-medium hover:underline"
               >
                 Show all

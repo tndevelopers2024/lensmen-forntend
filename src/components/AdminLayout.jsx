@@ -5,7 +5,7 @@ import {
   BarChartOutlined, AppstoreOutlined, ShoppingCartOutlined, TeamOutlined,
   PlusOutlined, SettingOutlined, LogoutOutlined,
   LeftOutlined, RightOutlined, AccountBookOutlined, FileTextOutlined,
-  TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined,
+  TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined, AuditOutlined,
 } from '@ant-design/icons'
 import { useGlobal } from '../context/GlobalContext'
 
@@ -32,9 +32,10 @@ const AdminLayout = ({ children, location }) => {
     },
     { key: '/admin/orders',   icon: <ShoppingCartOutlined />, label: <Link to="/admin/orders">Orders</Link> },
     { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
-    { key: '/admin/accounts', icon: <AccountBookOutlined />,  label: <Link to="/admin/accounts">Accounts</Link> },
-    { key: '/admin/quotes',   icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
-    { key: '/admin/offers',   icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
+    { key: '/admin/accounts',  icon: <AccountBookOutlined />,  label: <Link to="/admin/accounts">Accounts</Link> },
+    { key: '/admin/invoices',  icon: <AuditOutlined />,        label: <Link to="/admin/invoices">Invoices</Link> },
+    { key: '/admin/quotes',    icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
+    { key: '/admin/offers',    icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
   ]
 
   const utilItems = [

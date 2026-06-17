@@ -44,10 +44,18 @@ const divStyle = {
   textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0,
 }
 
+const ORDER_STATUS_COLOR = {
+  'Request Submitted': '#94a3b8', 'KYC Pending': '#f59e0b', 'KYC Approved': '#10b981',
+  'Approved': '#10b981', 'Ready for Pickup': '#6366f1', 'Picked Up': '#3b82f6',
+  'During Rental': '#3b82f6', 'Active': '#3b82f6', 'Return Pending': '#f97316',
+  'Returned': '#22c55e', 'Closed': '#22c55e', 'Rejected': '#ef4444',
+}
+
 const UsersPage = () => {
-  const { allUsers, fetchAdminData, API_URL } = useGlobal()
+  const { allUsers, allOrders, fetchAdminData, API_URL } = useGlobal()
   const [searchTerm, setSearchTerm]       = useState('')
-  const [selectedUser, setSelectedUser]   = useState(null)   // user detail modal
+  const [selectedUser, setSelectedUser]   = useState(null)
+  const [drawerTab, setDrawerTab]         = useState('overview')
   const [kycReason, setKycReason]         = useState('')
   const [kycLoading, setKycLoading]       = useState(false)
   const [deleteTarget, setDeleteTarget]   = useState(null)
@@ -62,7 +70,8 @@ const UsersPage = () => {
   const filteredUsers = allUsers.filter(u =>
     u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.mobile?.includes(searchTerm)
+    u.mobile?.includes(searchTerm) ||
+    u.userId?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   // sync selectedUser when allUsers refreshes
@@ -72,6 +81,11 @@ const UsersPage = () => {
       if (fresh) setSelectedUser(fresh)
     }
   }, [allUsers])
+
+  // reset tab when a new user is opened
+  useEffect(() => {
+    if (selectedUser) setDrawerTab('overview')
+  }, [selectedUser?._id])
 
   const handleClassChange = async (userId, newClass) => {
     try {
@@ -151,6 +165,12 @@ const UsersPage = () => {
   const fieldCls = "w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 px-3 text-[13px] text-slate-800 placeholder-slate-400 outline-none focus:border-[#1e1b4b] focus:bg-white transition-all"
 
   const columns = [
+    {
+      title: 'User ID', key: 'userId',
+      render: (_, u) => u.userId
+        ? <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#E5550F', background: '#fff7ed', padding: '2px 8px', borderRadius: 6, border: '1px solid #fed7aa' }}>{u.userId}</span>
+        : <span style={{ color: '#d1d5db', fontSize: 12 }}>—</span>,
+    },
     {
       title: 'User', key: 'user',
       render: (_, u) => (
@@ -267,167 +287,343 @@ const UsersPage = () => {
         open={!!selectedUser}
         onClose={() => { setSelectedUser(null); setKycReason('') }}
         placement="right"
-        width={540}
+        width={720}
         destroyOnHidden
         styles={{ body: { padding: 0 }, header: { display: 'none' } }}
       >
-        {selectedUser && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {selectedUser && (() => {
+          const userOrders = (allOrders || []).filter(o =>
+            o.userEmail === selectedUser.email || o.userMobile === selectedUser.mobile
+          ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-            {/* ── Sticky Header ── */}
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <Avatar
-                  size={48}
-                  style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)', fontWeight: 800, fontSize: 20, flexShrink: 0 }}
-                  icon={<UserOutlined />}
+          const userTransactions = userOrders
+            .flatMap(o => (o.payments || []).map(p => ({
+              ...p,
+              bookingCode: o.bookingCode,
+              orderId: o._id,
+            })))
+            .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt))
+
+          const totalSpent   = userOrders.reduce((s, o) => s + (o.totalPaid || 0), 0)
+          const totalBalance = userOrders.reduce((s, o) => s + (o.pendingAmount || 0), 0)
+
+          const TABS = [
+            { key: 'overview',      label: 'Overview' },
+            { key: 'orders',        label: `Orders (${userOrders.length})` },
+            { key: 'transactions',  label: `Transactions (${userTransactions.length})` },
+          ]
+
+          const orderCols = [
+            {
+              title: 'Date', dataIndex: 'createdAt', width: 90,
+              render: d => <span style={{ fontSize: 11, color: '#6b7280' }}>{new Date(d).toLocaleDateString('en-GB')}</span>,
+            },
+            {
+              title: 'Invoice #', dataIndex: 'bookingCode', width: 110,
+              render: code => <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#E5550F' }}>{code || '—'}</span>,
+            },
+            {
+              title: 'Equipment', key: 'equip',
+              render: (_, o) => {
+                const items = o.items?.length ? o.items : [o.productId]
+                return (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{items[0]?.name || '—'}</div>
+                    {items.length > 1 && <div style={{ fontSize: 11, color: '#9ca3af' }}>+{items.length - 1} more</div>}
+                  </div>
+                )
+              },
+            },
+            {
+              title: 'Status', dataIndex: 'status', width: 110,
+              render: s => (
+                <span style={{ fontSize: 11, fontWeight: 700, color: ORDER_STATUS_COLOR[s] || '#94a3b8' }}>{s}</span>
+              ),
+            },
+            {
+              title: 'Amount', dataIndex: 'totalPrice', width: 85,
+              render: v => <span style={{ fontSize: 12, fontWeight: 600 }}>₹{(v || 0).toLocaleString()}</span>,
+            },
+            {
+              title: 'Due', dataIndex: 'pendingAmount', width: 80,
+              render: v => (
+                <span style={{ fontSize: 12, fontWeight: 600, color: (v || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                  ₹{(v || 0).toLocaleString()}
+                </span>
+              ),
+            },
+          ]
+
+          const txnCols = [
+            {
+              title: 'Date', dataIndex: 'collectedAt', width: 90,
+              render: d => <span style={{ fontSize: 11, color: '#6b7280' }}>{new Date(d).toLocaleDateString('en-GB')}</span>,
+            },
+            {
+              title: 'Invoice', dataIndex: 'bookingCode', width: 110,
+              render: code => <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#E5550F' }}>{code || '—'}</span>,
+            },
+            {
+              title: 'Type', dataIndex: 'type', width: 80,
+              render: t => <span style={{ fontSize: 11, textTransform: 'capitalize', color: '#374151' }}>{t}</span>,
+            },
+            {
+              title: 'Mode', dataIndex: 'mode', width: 110,
+              render: m => <span style={{ fontSize: 11, color: '#6b7280' }}>{m}</span>,
+            },
+            {
+              title: 'Notes', dataIndex: 'notes',
+              render: n => <span style={{ fontSize: 11, color: '#9ca3af' }}>{n || '—'}</span>,
+            },
+            {
+              title: 'Amount', dataIndex: 'amount', width: 90,
+              render: v => <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>₹{(v || 0).toLocaleString()}</span>,
+            },
+          ]
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+
+              {/* ── Sticky Header ── */}
+              <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <Avatar
+                    size={48}
+                    style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)', fontWeight: 800, fontSize: 20, flexShrink: 0 }}
+                    icon={<UserOutlined />}
+                  >
+                    {selectedUser.fullName?.charAt(0)}
+                  </Avatar>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: '#1e1b4b' }}>{selectedUser.fullName}</span>
+                      <Tag color={selectedUser.role === 'admin' ? 'geekblue' : 'default'} style={{ fontSize: 11 }}>{selectedUser.role}</Tag>
+                      <Tag color={kycTagProp.color} icon={kycTagProp.icon} style={{ fontSize: 11 }}>{kycStatus}</Tag>
+                      {selectedUser.userId && (
+                        <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#E5550F', background: '#fff7ed', border: '1px solid #fed7aa', padding: '1px 7px', borderRadius: 4 }}>
+                          {selectedUser.userId}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                      {selectedUser.accountType || 'Private'} · {selectedUser.customerClass || 'New'} · Joined {new Date(selectedUser.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setSelectedUser(null); setKycReason('') }}
+                  style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 16, flexShrink: 0 }}
                 >
-                  {selectedUser.fullName?.charAt(0)}
-                </Avatar>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#1e1b4b' }}>{selectedUser.fullName}</span>
-                    <Tag color={selectedUser.role === 'admin' ? 'geekblue' : 'default'} style={{ fontSize: 11 }}>{selectedUser.role}</Tag>
-                    <Tag color={kycTagProp.color} icon={kycTagProp.icon} style={{ fontSize: 11 }}>{kycStatus}</Tag>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
-                    {selectedUser.accountType || 'Private'} · {selectedUser.customerClass || 'New'} · Joined {new Date(selectedUser.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => { setSelectedUser(null); setKycReason('') }}
-                style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 16, flexShrink: 0 }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* ── Scrollable Body ── */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 24px' }}>
-
-              {/* Profile Information */}
-              <Divider orientation="left" style={divStyle}>Profile Information</Divider>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px', marginBottom: 4 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <MailOutlined /> Email Address
-                  </div>
-                  <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{selectedUser.email}</div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <PhoneOutlined /> Mobile Number
-                  </div>
-                  <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{selectedUser.mobile || '—'}</div>
-                </div>
-
-                <div style={{ gridColumn: 'span 2' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <EnvironmentOutlined /> Address
-                  </div>
-                  <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500, lineHeight: 1.6 }}>{selectedUser.address || '—'}</div>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Account Type</div>
-                  <Tag style={{ fontSize: 12 }}>{selectedUser.accountType || 'Private'}</Tag>
-                </div>
-
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Customer Class</div>
-                  <Select
-                    value={selectedUser.customerClass || 'New'}
-                    style={{ width: 150 }}
-                    onChange={val => handleClassChange(selectedUser._id, val)}
-                    options={CLASSES.map(c => ({ value: c, label: c }))}
-                  />
-                </div>
+                  ×
+                </button>
               </div>
 
-              {/* KYC Documents */}
-              <Divider orientation="left" style={divStyle}>KYC Documents</Divider>
-
-              {/* Status banner */}
-              <div style={{
-                background: kycStatus === 'Approved' ? '#f0fdf4' : kycStatus === 'Pending' ? '#fffbeb' : kycStatus === 'Rejected' ? '#fef2f2' : '#f9fafb',
-                border: `1px solid ${kycStatus === 'Approved' ? '#bbf7d0' : kycStatus === 'Pending' ? '#fde68a' : kycStatus === 'Rejected' ? '#fecaca' : '#e5e7eb'}`,
-                borderRadius: 10, padding: '10px 14px', marginBottom: 16,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-              }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
-                  {kycStatus === 'Approved'     && '✓ KYC Verified & Approved'}
-                  {kycStatus === 'Pending'       && '⏳ Pending Admin Review'}
-                  {kycStatus === 'Rejected'      && '✗ Documents Rejected'}
-                  {kycStatus === 'Not Uploaded'  && 'No documents submitted yet'}
-                </div>
-                <Tag color={kycTagProp.color} icon={kycTagProp.icon}>{kycStatus}</Tag>
+              {/* ── Stats bar ── */}
+              <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', background: '#fafafa', flexShrink: 0 }}>
+                {[
+                  { label: 'Total Orders',   value: userOrders.length },
+                  { label: 'Total Spent',    value: `₹${totalSpent.toLocaleString()}` },
+                  { label: 'Outstanding',    value: `₹${totalBalance.toLocaleString()}`, red: totalBalance > 0 },
+                ].map((s, i) => (
+                  <div key={s.label} style={{
+                    flex: 1, padding: '10px 16px',
+                    borderRight: i < 2 ? '1px solid #f1f5f9' : 'none',
+                    textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: s.red ? '#ef4444' : '#1e1b4b' }}>{s.value}</div>
+                    <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+                  </div>
+                ))}
               </div>
-              {kycStatus === 'Rejected' && selectedUser.kycRejectionReason && (
-                <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, paddingLeft: 4 }}>
-                  Rejection reason: {selectedUser.kycRejectionReason}
-                </div>
-              )}
 
-              {/* Document images 2×2 */}
-              {hasDocs ? (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                  {KYC_DOCS.map(doc => {
-                    const url = selectedUser.kycDocuments?.[doc.key]
-                    return (
-                      <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 10, padding: 12, border: '1px solid #e5e7eb' }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-                          {doc.label}
+              {/* ── Tab Bar ── */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', padding: '0 24px', background: '#fff', flexShrink: 0 }}>
+                {TABS.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setDrawerTab(t.key)}
+                    style={{
+                      padding: '11px 16px',
+                      fontSize: 13, fontWeight: drawerTab === t.key ? 700 : 500,
+                      color: drawerTab === t.key ? '#1e1b4b' : '#9ca3af',
+                      background: 'none', border: 'none', outline: 'none',
+                      borderBottom: drawerTab === t.key ? '2px solid #1e1b4b' : '2px solid transparent',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                      marginBottom: -1,
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Tab Content ── */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 32px' }}>
+
+                {/* OVERVIEW */}
+                {drawerTab === 'overview' && (
+                  <div>
+                    <Divider orientation="left" style={divStyle}>Profile Information</Divider>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px', marginBottom: 4 }}>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <MailOutlined /> Email Address
                         </div>
-                        {url ? (
-                          <Image src={url} alt={doc.label} height={110} width="100%"
-                            style={{ objectFit: 'contain', borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff' }} />
-                        ) : (
-                          <div style={{ height: 110, border: '2px dashed #e5e7eb', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Text type="secondary" style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Not submitted</Text>
-                          </div>
-                        )}
+                        <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{selectedUser.email}</div>
                       </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '28px 0', background: '#f9fafb', borderRadius: 10, border: '2px dashed #e5e7eb', marginBottom: 20 }}>
-                  <IdcardOutlined style={{ fontSize: 28, color: '#d1d5db', display: 'block', marginBottom: 8 }} />
-                  <Text type="secondary" style={{ fontSize: 13 }}>No KYC documents have been submitted.</Text>
-                </div>
-              )}
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <PhoneOutlined /> Mobile Number
+                        </div>
+                        <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{selectedUser.mobile || '—'}</div>
+                      </div>
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <EnvironmentOutlined /> Address
+                        </div>
+                        <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500, lineHeight: 1.6 }}>{selectedUser.address || '—'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Account Type</div>
+                        <Tag style={{ fontSize: 12 }}>{selectedUser.accountType || 'Private'}</Tag>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Customer Class</div>
+                        <Select
+                          value={selectedUser.customerClass || 'New'}
+                          style={{ width: 150 }}
+                          onChange={val => handleClassChange(selectedUser._id, val)}
+                          options={CLASSES.map(c => ({ value: c, label: c }))}
+                        />
+                      </div>
+                    </div>
 
-              {/* Approve / Reject */}
-              {kycStatus === 'Pending' && (
-                <div style={{ background: '#f8fafc', borderRadius: 10, padding: 16, border: '1px solid #e5e7eb' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-                    Rejection Reason{' '}
-                    <span style={{ fontWeight: 400, color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}>(required only if rejecting)</span>
+                    <Divider orientation="left" style={divStyle}>KYC Documents</Divider>
+                    <div style={{
+                      background: kycStatus === 'Approved' ? '#f0fdf4' : kycStatus === 'Pending' ? '#fffbeb' : kycStatus === 'Rejected' ? '#fef2f2' : '#f9fafb',
+                      border: `1px solid ${kycStatus === 'Approved' ? '#bbf7d0' : kycStatus === 'Pending' ? '#fde68a' : kycStatus === 'Rejected' ? '#fecaca' : '#e5e7eb'}`,
+                      borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                    }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>
+                        {kycStatus === 'Approved'    && '✓ KYC Verified & Approved'}
+                        {kycStatus === 'Pending'      && '⏳ Pending Admin Review'}
+                        {kycStatus === 'Rejected'     && '✗ Documents Rejected'}
+                        {kycStatus === 'Not Uploaded' && 'No documents submitted yet'}
+                      </div>
+                      <Tag color={kycTagProp.color} icon={kycTagProp.icon}>{kycStatus}</Tag>
+                    </div>
+                    {kycStatus === 'Rejected' && selectedUser.kycRejectionReason && (
+                      <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 12, paddingLeft: 4 }}>
+                        Rejection reason: {selectedUser.kycRejectionReason}
+                      </div>
+                    )}
+
+                    {hasDocs ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                        {KYC_DOCS.map(doc => {
+                          const url = selectedUser.kycDocuments?.[doc.key]
+                          return (
+                            <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 10, padding: 12, border: '1px solid #e5e7eb' }}>
+                              <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{doc.label}</div>
+                              {url ? (
+                                <Image src={url} alt={doc.label} height={110} width="100%"
+                                  style={{ objectFit: 'contain', borderRadius: 6, border: '1px solid #e5e7eb', background: '#fff' }} />
+                              ) : (
+                                <div style={{ height: 110, border: '2px dashed #e5e7eb', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text type="secondary" style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Not submitted</Text>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '28px 0', background: '#f9fafb', borderRadius: 10, border: '2px dashed #e5e7eb', marginBottom: 20 }}>
+                        <IdcardOutlined style={{ fontSize: 28, color: '#d1d5db', display: 'block', marginBottom: 8 }} />
+                        <Text type="secondary" style={{ fontSize: 13 }}>No KYC documents have been submitted.</Text>
+                      </div>
+                    )}
+
+                    {kycStatus === 'Pending' && (
+                      <div style={{ background: '#f8fafc', borderRadius: 10, padding: 16, border: '1px solid #e5e7eb' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+                          Rejection Reason{' '}
+                          <span style={{ fontWeight: 400, color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}>(required only if rejecting)</span>
+                        </div>
+                        <TextArea
+                          rows={3} value={kycReason} onChange={e => setKycReason(e.target.value)}
+                          placeholder="Explain why the documents are being rejected..."
+                          style={{ marginBottom: 12 }}
+                        />
+                        <Space>
+                          <Button danger loading={kycLoading} disabled={!kycReason.trim()}
+                            onClick={() => handleKycReview('Rejected', kycReason)}>Reject</Button>
+                          <Button type="primary" loading={kycLoading}
+                            style={{ background: '#10b981', borderColor: '#10b981' }}
+                            onClick={() => handleKycReview('Approved', '')}>Approve KYC</Button>
+                        </Space>
+                      </div>
+                    )}
                   </div>
-                  <TextArea
-                    rows={3} value={kycReason} onChange={e => setKycReason(e.target.value)}
-                    placeholder="Explain why the documents are being rejected..."
-                    style={{ marginBottom: 12 }}
-                  />
-                  <Space>
-                    <Button danger loading={kycLoading} disabled={!kycReason.trim()}
-                      onClick={() => handleKycReview('Rejected', kycReason)}>
-                      Reject
-                    </Button>
-                    <Button type="primary" loading={kycLoading}
-                      style={{ background: '#10b981', borderColor: '#10b981' }}
-                      onClick={() => handleKycReview('Approved', '')}>
-                      Approve KYC
-                    </Button>
-                  </Space>
-                </div>
-              )}
+                )}
+
+                {/* ORDERS */}
+                {drawerTab === 'orders' && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+                      All Rentals — {userOrders.length} order{userOrders.length !== 1 ? 's' : ''}
+                    </div>
+                    {userOrders.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '48px 0', color: '#d1d5db' }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>No orders yet</div>
+                      </div>
+                    ) : (
+                      <Table
+                        dataSource={userOrders}
+                        columns={orderCols}
+                        rowKey="_id"
+                        size="small"
+                        pagination={{ pageSize: 10, simple: true, size: 'small' }}
+                        scroll={{ x: 600 }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* TRANSACTIONS */}
+                {drawerTab === 'transactions' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Payment History
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                        Total collected ₹{totalSpent.toLocaleString()}
+                      </span>
+                    </div>
+                    {userTransactions.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '48px 0', color: '#d1d5db' }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>₹</div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>No payment records</div>
+                      </div>
+                    ) : (
+                      <Table
+                        dataSource={userTransactions}
+                        columns={txnCols}
+                        rowKey={(_, i) => i}
+                        size="small"
+                        pagination={{ pageSize: 15, simple: true, size: 'small' }}
+                        scroll={{ x: 600 }}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </Drawer>
 
       {/* ══ DELETE CONFIRMATION ════════════════════════════════════════ */}

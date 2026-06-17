@@ -19,11 +19,10 @@ const bookedThisMonth = (id = '') => {
 }
 
 const FAQS = [
-  { q: 'How do I rent from Lensmen Rentals?', a: 'Browse our catalog, select your dates using the header date picker, add to cart and complete KYC verification. We deliver to your doorstep.' },
   { q: 'What documents are needed for KYC?', a: 'A valid government-issued photo ID (Aadhaar, PAN, Passport or Driving License) is required for first-time renters.' },
-  { q: 'When does the rental period start?', a: 'Your rental period starts from the date of delivery. The clock starts when the gear reaches you.' },
-  { q: 'Is there a security deposit?', a: 'No security deposit required. Rentals are fully insured and covered under our damage protection policy.' },
-  { q: 'What is the maximum rental duration?', a: 'You can rent for up to 10 consecutive days per booking. For longer rentals, please contact us directly.' },
+  { q: 'When does the rental period start?', a: 'You can pick up your gear anytime between 7AM and 11PM. Returns are accepted from 8AM to 8PM on the return date. Each calendar day (12AM–11PM) counts as one rental day.' },
+  { q: 'Is there a security deposit?', a: 'No security deposit required.' },
+  { q: 'What is the maximum rental duration?', a: 'Standard bookings go up to 10 days. For rentals longer than 10 days, please contact us directly.' },
 ]
 
 const FaqItem = ({ q, a }) => {
@@ -367,29 +366,6 @@ const ProductDetails = ({ setShowBookingModal }) => {
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 py-1.5">
                 <HiOutlineCheckCircle className="text-[#E5550F] text-sm shrink-0" />
-                <span className="text-[12px] text-gray-600">{item}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Damages Covered ───────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-9 h-9 rounded-xl bg-pink-50 flex items-center justify-center shrink-0">
-                <HiOutlineShieldCheck className="text-pink-500 text-lg" />
-              </div>
-              <div>
-                <p className="text-[13px] font-bold text-gray-900">Damages Covered</p>
-                <p className="text-[11px] text-pink-500 font-semibold">Rest Assured.</p>
-              </div>
-            </div>
-            {[
-              'Accidental damages covered',
-              'Easy opt-in at checkout',
-              'Waiver auto-applied if needed',
-            ].map((item, i) => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                <HiOutlineCheckCircle className="text-green-500 text-sm shrink-0" />
                 <span className="text-[12px] text-gray-600">{item}</span>
               </div>
             ))}

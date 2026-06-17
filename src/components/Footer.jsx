@@ -89,16 +89,32 @@ const Footer = () => {
           <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-4">Get in Touch</h4>
           <ul className="space-y-3">
             <li className="flex items-start gap-2.5 text-[13px] text-slate-400">
-              <HiOutlineLocationMarker className="text-base text-primary mt-0.5 flex-shrink-0" />
-              123 Creative Studio Street, Film City, Chennai - 600001
+              <HiOutlineLocationMarker className="text-base text-primary mt-[2px] flex-shrink-0" />
+              <div className="flex flex-col gap-1">
+                <a
+                  href="https://maps.app.goo.gl/velachery"
+                  target="_blank" rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors leading-snug"
+                >
+                  flat no S3, 2nd floor, Sri Niketan Apartment,<br />
+                  Sasi Nagar, Velachery, Chennai – 600042
+                </a>
+                <a
+                  href="https://maps.app.goo.gl/saligramam"
+                  target="_blank" rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors leading-snug mt-1"
+                >
+                  Saligramam, Chennai – 600093
+                </a>
+              </div>
             </li>
             <li className="flex items-center gap-2.5 text-[13px] text-slate-400">
               <HiOutlinePhone className="text-base text-primary flex-shrink-0" />
-              <a href="tel:+914412345678" className="hover:text-primary transition-colors">+91 44 1234 5678</a>
+              <a href="tel:+919080086600" className="hover:text-primary transition-colors">+91 90800 86600</a>
             </li>
             <li className="flex items-center gap-2.5 text-[13px] text-slate-400">
               <HiOutlineMail className="text-base text-primary flex-shrink-0" />
-              <a href="mailto:hello@lensmenrentals.com" className="hover:text-primary transition-colors">hello@lensmenrentals.com</a>
+              <a href="mailto:lensmen@live.com" className="hover:text-primary transition-colors">lensmen@live.com</a>
             </li>
           </ul>
         </div>

@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
-  Table, Button, Tag, Modal, Form, Input, InputNumber, Select,
-  DatePicker, Space, Typography, Drawer, Divider, Popconfirm, Tooltip,
+  Table, Button, Tag, Modal, Space, Typography, Popconfirm, Tooltip,
 } from 'antd'
 import {
   PlusOutlined, FilePdfOutlined, WhatsAppOutlined, MailOutlined,
   CheckOutlined, EditOutlined, DeleteOutlined, EyeOutlined, CopyOutlined,
 } from '@ant-design/icons'
-import dayjs from 'dayjs'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
 import PageHeader from '../../components/PageHeader'
 import { downloadQuotePDF } from '../../utils/quotePDF'
 
 const { Text } = Typography
-const { TextArea } = Input
-const { RangePicker } = DatePicker
 
 const BRAND = '#E5550F'
 const NAVY  = '#1e1b4b'
@@ -27,6 +24,7 @@ const buildWAText = (q) => encodeURIComponent([
   `*LENSMEN RENTALS — QUOTATION*`,
   `Quote #: ${q.quoteCode}`,
   `Date: ${new Date(q.createdAt).toLocaleDateString('en-GB')}`,
+  q.raisedBy ? `Raised by: ${q.raisedBy}` : '',
   ``,
   `*Customer:* ${q.customerName}`,
   `*Rental:* ${new Date(q.startDate).toLocaleDateString('en-GB')} → ${new Date(q.endDate).toLocaleDateString('en-GB')} (${q.totalDays} day${q.totalDays !== 1 ? 's' : ''})`,
@@ -36,6 +34,7 @@ const buildWAText = (q) => encodeURIComponent([
   ``,
   (q.discountAmount || 0) > 0 ? `Subtotal: ₹${(q.subtotal || 0).toLocaleString()}` : '',
   (q.discountAmount || 0) > 0 ? `Discount: -₹${q.discountAmount.toLocaleString()}` : '',
+  q.gstEnabled ? `GST (${q.gstPercent || 18}%): ₹${(q.gstAmount || 0).toLocaleString()}` : '',
   `*TOTAL: ₹${(q.totalPrice || 0).toLocaleString()}*`,
   q.notes ? `\n_Note: ${q.notes}_` : '',
 ].filter(Boolean).join('\n'))
@@ -72,6 +71,21 @@ const QuotePreview = ({ quote, onClose, onConvert, onEdit }) => {
           </div>
         </div>
       </div>
+      {(quote.raisedBy || quote.gstEnabled) && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          {quote.raisedBy && (
+            <div style={{ background: '#f0f0ff', border: '1px solid #e0e0ff', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: NAVY }}>
+              <span style={{ color: '#9ca3af', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', marginRight: 6 }}>Raised By</span>
+              <span style={{ fontWeight: 600 }}>{quote.raisedBy}</span>
+            </div>
+          )}
+          {quote.gstEnabled && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '6px 12px', fontSize: 12, color: '#166534' }}>
+              <span style={{ fontWeight: 700 }}>GST {quote.gstPercent || 18}% included</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Items */}
       <div style={{ border: '1px solid #f0f0f0', borderRadius: 10, overflow: 'hidden', marginBottom: 14 }}>
@@ -101,6 +115,12 @@ const QuotePreview = ({ quote, onClose, onConvert, onEdit }) => {
           <div style={{ display: 'flex', gap: 48 }}>
             <Text type="secondary" style={{ fontSize: 13 }}>Discount</Text>
             <Text style={{ fontSize: 13, color: '#10b981', minWidth: 90, textAlign: 'right' }}>-₹{quote.discountAmount.toLocaleString()}</Text>
+          </div>
+        )}
+        {quote.gstEnabled && (
+          <div style={{ display: 'flex', gap: 48 }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>GST ({quote.gstPercent || 18}%)</Text>
+            <Text style={{ fontSize: 13, color: '#6b7280', minWidth: 90, textAlign: 'right' }}>+₹{(quote.gstAmount || 0).toLocaleString()}</Text>
           </div>
         )}
         <div style={{ display: 'flex', gap: 48, background: NAVY, padding: '10px 16px', borderRadius: 10, marginTop: 4 }}>
@@ -148,14 +168,25 @@ const QuotePreview = ({ quote, onClose, onConvert, onEdit }) => {
 }
 
 // ── Quote Form Drawer ─────────────────────────────────────────────────
-const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
+const QuoteDrawer = ({ open, onClose, initial, onSaved, products, knownRaisers }) => {
   const { API_URL } = useGlobal()
-  const [form]    = Form.useForm()
-  const [items,   setItems]   = useState([])
-  const [dates,   setDates]   = useState(null)
-  const [days,    setDays]    = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [discount,setDiscount]= useState(0)
+  const [form]        = Form.useForm()
+  const [items,       setItems]       = useState([])
+  const [dates,       setDates]       = useState(null)
+  const [days,        setDays]        = useState(1)
+  const [loading,     setLoading]     = useState(false)
+  const [discount,    setDiscount]    = useState(0)
+  const [gstEnabled,  setGstEnabled]  = useState(false)
+  const [raisedBy,    setRaisedBy]    = useState('')
+  const [regUsers,    setRegUsers]    = useState([])
+  const [nameInput,   setNameInput]   = useState('')
+
+  useEffect(() => {
+    fetch(`${API_URL}/admin/users`)
+      .then(r => r.json())
+      .then(d => setRegUsers(Array.isArray(d) ? d : []))
+      .catch(() => {})
+  }, [API_URL])
 
   useEffect(() => {
     if (!open) return
@@ -163,8 +194,13 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
     setDates(initial ? [dayjs(initial.startDate), dayjs(initial.endDate)] : null)
     setDays(initial?.totalDays || 1)
     setDiscount(initial?.discountAmount || 0)
+    setGstEnabled(initial?.gstEnabled || false)
+    const savedRaisedBy = localStorage.getItem('lmr_quote_raisedBy') || ''
+    setRaisedBy(initial?.raisedBy || savedRaisedBy)
+    const name = initial?.customerName || ''
+    setNameInput(name)
     form.setFieldsValue({
-      customerName:   initial?.customerName   || '',
+      customerName:   name,
       customerMobile: initial?.customerMobile || '',
       customerEmail:  initial?.customerEmail  || '',
       notes:          initial?.notes          || '',
@@ -172,8 +208,44 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
     })
   }, [open, initial])
 
-  const subtotal   = items.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * days, 0)
-  const totalPrice = Math.max(0, subtotal - discount)
+  const userOptions = nameInput.trim().length > 0
+    ? regUsers
+        .filter(u =>
+          u.fullName?.toLowerCase().includes(nameInput.toLowerCase()) ||
+          u.email?.toLowerCase().includes(nameInput.toLowerCase()) ||
+          (u.mobile || '').includes(nameInput) ||
+          (u.userId || '').toLowerCase().includes(nameInput.toLowerCase())
+        )
+        .slice(0, 6)
+        .map(u => ({
+          value: u.fullName,
+          label: (
+            <div style={{ padding: '2px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>{u.fullName}</span>
+                {u.userId && <span style={{ fontFamily: 'monospace', fontSize: 10, color: BRAND, background: '#fff7ed', padding: '1px 6px', borderRadius: 4, border: '1px solid #fed7aa' }}>{u.userId}</span>}
+              </div>
+              <div style={{ fontSize: 11, color: '#9ca3af' }}>{[u.mobile, u.email].filter(Boolean).join(' · ')}</div>
+            </div>
+          ),
+          _user: u,
+        }))
+    : []
+
+  const handleSelectUser = (value, option) => {
+    const u = option._user
+    setNameInput(u.fullName)
+    form.setFieldsValue({
+      customerName:   u.fullName,
+      customerMobile: u.mobile || '',
+      customerEmail:  u.email  || '',
+    })
+  }
+
+  const subtotal      = items.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * days, 0)
+  const afterDiscount = Math.max(0, subtotal - discount)
+  const gstAmount     = gstEnabled ? Math.round(afterDiscount * 18 / 100) : 0
+  const totalPrice    = afterDiscount + gstAmount
 
   const addProduct = (productId) => {
     const p = products.find(x => x._id === productId)
@@ -182,8 +254,9 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
     setItems(prev => [...prev, { productId: p._id, name: p.name, pricePerDay: p.pricePerDay, imageUrl: p.imageUrl, quantity: 1 }])
   }
 
-  const updateQty   = (idx, qty) => setItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, qty || 1) } : it))
-  const removeItem  = (idx)      => setItems(prev => prev.filter((_, i) => i !== idx))
+  const updateQty   = (idx, qty)   => setItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(1, qty || 1) } : it))
+  const updatePrice = (idx, price) => setItems(prev => prev.map((it, i) => i === idx ? { ...it, pricePerDay: Math.max(0, price || 0) } : it))
+  const removeItem  = (idx)        => setItems(prev => prev.filter((_, i) => i !== idx))
 
   const handleSave = async () => {
     const values = await form.validateFields()
@@ -191,7 +264,8 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
     if (items.length === 0) { toast.error('Add at least one item'); return }
     setLoading(true)
     try {
-      const payload = { ...values, items, startDate: dates[0].toDate(), endDate: dates[1].toDate() }
+      if (raisedBy.trim()) localStorage.setItem('lmr_quote_raisedBy', raisedBy.trim())
+      const payload = { ...values, items, startDate: dates[0].toDate(), endDate: dates[1].toDate(), gstEnabled, gstPercent: 18, raisedBy: raisedBy.trim() }
       const url    = initial ? `${API_URL}/quotes/${initial._id}` : `${API_URL}/quotes`
       const method = initial ? 'PUT' : 'POST'
       const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -212,10 +286,32 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
       destroyOnHidden
     >
       <Form form={form} layout="vertical">
+        <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af' }}>QUOTE META</Divider>
+
+        <Form.Item label="Raised By">
+          <AutoComplete
+            options={[...new Set(knownRaisers.filter(Boolean))].map(n => ({ value: n, label: n }))}
+            value={raisedBy}
+            onChange={setRaisedBy}
+            placeholder="Who is creating this quote?"
+            allowClear
+            filterOption={(input, opt) => opt.value.toLowerCase().includes(input.toLowerCase())}
+          />
+        </Form.Item>
+
         <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af' }}>CUSTOMER DETAILS</Divider>
 
         <Form.Item label="Customer Name" name="customerName" rules={[{ required: true, message: 'Name is required' }]}>
-          <Input placeholder="Full name" size="large" />
+          <AutoComplete
+            options={userOptions}
+            value={nameInput}
+            onChange={(val) => { setNameInput(val); form.setFieldValue('customerName', val) }}
+            onSelect={handleSelectUser}
+            placeholder="Name, mobile, or email..."
+            size="large"
+            style={{ width: '100%' }}
+            notFoundContent={nameInput.trim().length > 0 ? <span style={{ fontSize: 12, color: '#9ca3af', padding: '4px 8px', display: 'block' }}>No registered user found — fill manually</span> : null}
+          />
         </Form.Item>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -235,7 +331,7 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
             onChange={(d) => {
               setDates(d)
               if (d?.[0] && d?.[1]) {
-                setDays(Math.max(1, Math.ceil(Math.abs(d[1].toDate() - d[0].toDate()) / (1000 * 60 * 60 * 24))))
+                setDays(Math.max(1, Math.round(Math.abs(new Date(d[1].toDate().toDateString()) - new Date(d[0].toDate().toDateString())) / 86400000) + 1))
               }
             }}
             showTime
@@ -277,7 +373,18 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, color: NAVY, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>₹{item.pricePerDay}/day × {days} days</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>₹</span>
+                    <InputNumber
+                      min={0}
+                      value={item.pricePerDay}
+                      onChange={(v) => updatePrice(idx, v)}
+                      size="small"
+                      style={{ width: 80 }}
+                      controls={false}
+                    />
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>/day × {days} days</span>
+                  </div>
                 </div>
                 <InputNumber min={1} max={20} value={item.quantity} onChange={(v) => updateQty(idx, v)} size="small" style={{ width: 60 }} />
                 <div style={{ minWidth: 72, textAlign: 'right', fontWeight: 700, fontSize: 13, color: NAVY }}>
@@ -295,6 +402,17 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
           <InputNumber min={0} max={subtotal} style={{ width: '100%' }} prefix="₹" onChange={(v) => setDiscount(v || 0)} />
         </Form.Item>
 
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f9fafb', border: '1px solid #f0f0f0', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>GST (18%)</div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>{gstEnabled ? `+₹${gstAmount.toLocaleString()} will be added` : 'Not included in total'}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: gstEnabled ? '#10b981' : '#9ca3af', fontWeight: 600 }}>{gstEnabled ? 'With GST' : 'Without GST'}</span>
+            <Switch checked={gstEnabled} onChange={setGstEnabled} style={{ background: gstEnabled ? '#10b981' : undefined }} />
+          </div>
+        </div>
+
         {/* Live total */}
         <div style={{ background: NAVY, borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -305,6 +423,12 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
             <div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 700, textTransform: 'uppercase' }}>Discount</div>
               <div style={{ fontSize: 15, color: '#86efac', fontWeight: 700 }}>-₹{discount.toLocaleString()}</div>
+            </div>
+          )}
+          {gstEnabled && (
+            <div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: 700, textTransform: 'uppercase' }}>GST 18%</div>
+              <div style={{ fontSize: 15, color: '#6ee7b7', fontWeight: 700 }}>+₹{gstAmount.toLocaleString()}</div>
             </div>
           )}
           <div>
@@ -324,10 +448,9 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products }) => {
 // ── Main Page ─────────────────────────────────────────────────────────
 const Quotes = () => {
   const { API_URL, products, fetchProducts } = useGlobal()
+  const navigate = useNavigate()
   const [quotes,       setQuotes]       = useState([])
   const [loading,      setLoading]      = useState(true)
-  const [drawerOpen,   setDrawerOpen]   = useState(false)
-  const [editingQuote, setEditingQuote] = useState(null)
   const [previewQuote, setPreviewQuote] = useState(null)
 
   const loadQuotes = async () => {
@@ -446,7 +569,7 @@ const Quotes = () => {
             </Tooltip>
           )}
           {q.status !== 'Converted' && (
-            <Tooltip title="Edit"><Button size="small" icon={<EditOutlined />} onClick={() => { setEditingQuote(q); setDrawerOpen(true) }} /></Tooltip>
+            <Tooltip title="Edit"><Button size="small" icon={<EditOutlined />} onClick={() => navigate(`/admin/quotes/${q._id}/edit`)} /></Tooltip>
           )}
           {q.status !== 'Converted' && (
             <Tooltip title="Convert to Order">
@@ -470,7 +593,7 @@ const Quotes = () => {
         title="Quotation Management"
         subtitle="Create, share and convert quotes for walk-in customers"
         actions={
-          <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => { setEditingQuote(null); setDrawerOpen(true) }}>
+          <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => navigate('/admin/quotes/new')}>
             New Quote
           </Button>
         }
@@ -506,19 +629,11 @@ const Quotes = () => {
         />
       </div>
 
-      <QuoteDrawer
-        open={drawerOpen}
-        onClose={() => { setDrawerOpen(false); setEditingQuote(null) }}
-        initial={editingQuote}
-        onSaved={() => { loadQuotes(); setEditingQuote(null) }}
-        products={products}
-      />
-
       <QuotePreview
         quote={previewQuote}
         onClose={() => setPreviewQuote(null)}
         onConvert={() => handleConvert(previewQuote)}
-        onEdit={() => { setEditingQuote(previewQuote); setPreviewQuote(null); setDrawerOpen(true) }}
+        onEdit={() => { navigate(`/admin/quotes/${previewQuote._id}/edit`); setPreviewQuote(null) }}
       />
     </div>
   )

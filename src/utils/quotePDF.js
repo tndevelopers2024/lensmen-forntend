@@ -8,6 +8,7 @@ const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-US', { hour: '2-di
 export const downloadQuotePDF = (quote) => {
   const items    = quote.items || []
   const hasDisc  = (quote.discountAmount || 0) > 0
+  const hasGst   = !!quote.gstEnabled
 
   const rows = items.map((item, i) => `
     <tr style="background:${i % 2 === 0 ? '#fff' : '#f9fafb'}">
@@ -112,6 +113,7 @@ export const downloadQuotePDF = (quote) => {
         <div class="name">${quote.customerName || '—'}</div>
         ${quote.customerMobile ? `<div class="phone">${quote.customerMobile}</div>` : ''}
         ${quote.customerEmail  ? `<div class="email">${quote.customerEmail}</div>`  : ''}
+        ${quote.raisedBy ? `<div style="margin-top:8px;font-size:11px;color:#9ca3af">Raised by: <strong style="color:${NAVY}">${quote.raisedBy}</strong></div>` : ''}
       </div>
       <div class="info-box">
         <span class="section-label">Rental Period</span>
@@ -141,8 +143,9 @@ export const downloadQuotePDF = (quote) => {
         <span>₹${fmt(quote.subtotal)}</span>
       </div>
       ${hasDisc ? `<div class="total-row"><span>Discount</span><span style="color:#10b981">-₹${fmt(quote.discountAmount)}</span></div>` : ''}
+      ${hasGst ? `<div class="total-row"><span>GST (${quote.gstPercent || 18}%)</span><span style="color:#6b7280">+₹${fmt(quote.gstAmount)}</span></div>` : ''}
       <div class="total-final">
-        <span>TOTAL PAYABLE</span>
+        <span>TOTAL PAYABLE${hasGst ? ' (Incl. GST)' : ''}</span>
         <span>₹${fmt(quote.totalPrice)}</span>
       </div>
     </div>

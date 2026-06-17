@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
-  Table, Button, Tag, Drawer, Form, Input, InputNumber,
+  Table, Button, Tag, Drawer, Form, Input, InputNumber, Select,
   Upload, Space, Popconfirm, Image, Tooltip, Divider,
 } from 'antd'
 import {
-  EditOutlined, DeleteOutlined, PlusOutlined,
+  EditOutlined, DeleteOutlined, PlusOutlined, SearchOutlined,
   BarcodeOutlined, CheckCircleOutlined, InboxOutlined, SyncOutlined,
+  FilterOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
@@ -144,6 +145,30 @@ const ProductForm = ({ form, totalQty, setTotalQty, imagePreview, onImageChange,
 const AdminInventory = () => {
   const { adminProductList, fetchAdminData, fetchProducts, API_URL } = useGlobal()
 
+  // Search / filter state
+  const [search,         setSearch]         = useState('')
+  const [filterCategory, setFilterCategory] = useState('all')
+  const [filterStatus,   setFilterStatus]   = useState('all')
+
+  const allCategories = useMemo(() =>
+    [...new Set(adminProductList.map(p => p.category).filter(Boolean))].sort()
+  , [adminProductList])
+
+  const displayList = useMemo(() => {
+    return adminProductList.filter(p => {
+      const q = search.toLowerCase()
+      const matchSearch = !q ||
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.sku  || '').toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q)
+      const matchCat    = filterCategory === 'all' || p.category === filterCategory
+      const matchStatus = filterStatus   === 'all' ||
+        (filterStatus === 'in-stock'    &&  p.isAvailable) ||
+        (filterStatus === 'rented-out'  && !p.isAvailable)
+      return matchSearch && matchCat && matchStatus
+    })
+  }, [adminProductList, search, filterCategory, filterStatus])
+
   // Edit state
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm]  = Form.useForm()
@@ -260,6 +285,7 @@ const AdminInventory = () => {
     {
       title: 'Product',
       key: 'product',
+      sorter: (a, b) => (a.name || '').localeCompare(b.name || ''),
       render: (_, item) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Image
@@ -282,12 +308,14 @@ const AdminInventory = () => {
       title: 'Category',
       dataIndex: 'category',
       key: 'category',
+      sorter: (a, b) => (a.category || '').localeCompare(b.category || ''),
       render: cat => <Tag style={{ borderRadius: 6 }}>{cat || 'Uncategorised'}</Tag>,
     },
     {
       title: 'Daily Rate',
       dataIndex: 'pricePerDay',
       key: 'pricePerDay',
+      sorter: (a, b) => (a.pricePerDay || 0) - (b.pricePerDay || 0),
       render: price => (
         <span style={{ fontWeight: 700, color: NAVY }}>
           <span style={{ color: '#9ca3af' }}>₹</span>{price}
@@ -298,6 +326,7 @@ const AdminInventory = () => {
     {
       title: 'Stock',
       key: 'stock',
+      sorter: (a, b) => (a.availableQuantity ?? 0) - (b.availableQuantity ?? 0),
       render: (_, item) => {
         const avail = item.availableQuantity ?? (item.isAvailable ? 1 : 0)
         const total = item.totalQuantity || 1
@@ -359,9 +388,48 @@ const AdminInventory = () => {
         }
       />
 
+      {/* ── Search / Filter toolbar ───────────────────────────── */}
+      <div style={{
+        display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16,
+        background: '#fff', borderRadius: 14, padding: '14px 16px',
+        border: '1px solid #f0f0f0', alignItems: 'center',
+      }}>
+        <Input
+          prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
+          placeholder="Search by name, SKU or category…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          allowClear
+          style={{ flex: 1, minWidth: 200, maxWidth: 340 }}
+        />
+        <Select
+          value={filterCategory}
+          onChange={setFilterCategory}
+          style={{ width: 160 }}
+          options={[
+            { value: 'all', label: 'All Categories' },
+            ...allCategories.map(c => ({ value: c, label: c })),
+          ]}
+          suffixIcon={<FilterOutlined style={{ color: '#9ca3af' }} />}
+        />
+        <Select
+          value={filterStatus}
+          onChange={setFilterStatus}
+          style={{ width: 140 }}
+          options={[
+            { value: 'all',        label: 'All Status'   },
+            { value: 'in-stock',   label: '✓ In Stock'   },
+            { value: 'rented-out', label: '○ Rented Out' },
+          ]}
+        />
+        <span style={{ fontSize: 12, color: '#9ca3af', marginLeft: 4 }}>
+          {displayList.length} of {adminProductList.length} products
+        </span>
+      </div>
+
       <Table
         columns={columns}
-        dataSource={adminProductList}
+        dataSource={displayList}
         rowKey="_id"
         pagination={{
           defaultPageSize: 10, showSizeChanger: true,
