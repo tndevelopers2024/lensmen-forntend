@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Table, Button, Tag, Modal, Space, Typography, Popconfirm, Tooltip,
+  Drawer, Avatar, Divider as AntDivider,
 } from 'antd'
 import {
   PlusOutlined, FilePdfOutlined, WhatsAppOutlined, MailOutlined,
   CheckOutlined, EditOutlined, DeleteOutlined, EyeOutlined, CopyOutlined,
+  UserOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
@@ -445,13 +447,17 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products, knownRaisers }
   )
 }
 
+const fmtDateQ = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+const KYC_CLR  = { Approved: '#10b981', Pending: '#f59e0b', Rejected: '#ef4444', 'Not Uploaded': '#94a3b8' }
+
 // ── Main Page ─────────────────────────────────────────────────────────
 const Quotes = () => {
-  const { API_URL, products, fetchProducts } = useGlobal()
+  const { API_URL, products, fetchProducts, allUsers, allOrders, fetchAdminData } = useGlobal()
   const navigate = useNavigate()
   const [quotes,       setQuotes]       = useState([])
   const [loading,      setLoading]      = useState(true)
   const [previewQuote, setPreviewQuote] = useState(null)
+  const [previewUser,  setPreviewUser]  = useState(null)
 
   const loadQuotes = async () => {
     setLoading(true)
@@ -466,7 +472,21 @@ const Quotes = () => {
   useEffect(() => {
     loadQuotes()
     if (products.length === 0) fetchProducts()
+    if (allUsers.length === 0) fetchAdminData('/admin/users')
   }, [])
+
+  const handleCustomerClick = (e, q) => {
+    e.stopPropagation()
+    const user = allUsers.find(u =>
+      (q.customerEmail && u.email === q.customerEmail) ||
+      (q.customerMobile && u.mobile === q.customerMobile)
+    )
+    if (user) {
+      setPreviewUser({ type: 'registered', user })
+    } else {
+      setPreviewUser({ type: 'guest', name: q.customerName, mobile: q.customerMobile, email: q.customerEmail })
+    }
+  }
 
   const handleDelete = async (id) => {
     try {
@@ -510,7 +530,12 @@ const Quotes = () => {
       key: 'customer',
       render: (_, q) => (
         <div>
-          <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>{q.customerName}</div>
+          <div
+            onClick={e => handleCustomerClick(e, q)}
+            style={{ fontWeight: 600, color: NAVY, fontSize: 13, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2, display: 'inline-block' }}
+          >
+            {q.customerName}
+          </div>
           {q.customerMobile && <div style={{ fontSize: 12, color: BRAND }}>{q.customerMobile}</div>}
         </div>
       ),
@@ -635,6 +660,143 @@ const Quotes = () => {
         onConvert={() => handleConvert(previewQuote)}
         onEdit={() => { navigate(`/admin/quotes/${previewQuote._id}/edit`); setPreviewQuote(null) }}
       />
+
+      {/* ── Customer preview drawer ─────────────────────────────── */}
+      {previewUser && (() => {
+        if (previewUser.type === 'guest') {
+          const g = previewUser
+          return (
+            <Drawer
+              open
+              onClose={() => setPreviewUser(null)}
+              placement="right"
+              width={400}
+              destroyOnHidden
+              styles={{ body: { padding: 0 }, header: { display: 'none' } }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Avatar size={44} style={{ background: '#e5e7eb', color: '#9ca3af' }} icon={<UserOutlined />} />
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{g.name}</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>Walk-in / Unregistered Customer</div>
+                    </div>
+                  </div>
+                  <button onClick={() => setPreviewUser(null)} style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 16 }}>×</button>
+                </div>
+                <div style={{ flex: 1, padding: '20px 24px' }}>
+                  <AntDivider orientation="left" style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0 }}>Contact</AntDivider>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {g.mobile && (
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Mobile</div>
+                        <div style={{ fontSize: 13, color: BRAND, fontWeight: 600 }}>{g.mobile}</div>
+                      </div>
+                    )}
+                    {g.email && (
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Email</div>
+                        <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{g.email}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 24, padding: '14px 16px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+                    <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>This customer is not registered in the system.</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>Add them as a registered user to track orders and KYC.</div>
+                  </div>
+                </div>
+              </div>
+            </Drawer>
+          )
+        }
+
+        const u = previewUser.user
+        const userOrders  = allOrders.filter(o => o.userEmail === u.email || o.userMobile === u.mobile)
+        const totalSpent  = userOrders.reduce((s, o) => s + (o.totalPaid || 0), 0)
+        const outstanding = userOrders.reduce((s, o) => s + (o.pendingAmount || 0), 0)
+        const kycStatus   = u.kycStatus || 'Not Uploaded'
+        const kycColor    = KYC_CLR[kycStatus] || '#94a3b8'
+
+        return (
+          <Drawer
+            open
+            onClose={() => setPreviewUser(null)}
+            placement="right"
+            width={480}
+            destroyOnHidden
+            styles={{ body: { padding: 0 }, header: { display: 'none' } }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              {/* Header */}
+              <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Avatar size={44} style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)', fontWeight: 800, fontSize: 18, flexShrink: 0 }} icon={<UserOutlined />} />
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{u.fullName}</span>
+                      <Tag color={u.role === 'admin' ? 'geekblue' : 'default'} style={{ fontSize: 10 }}>{u.role}</Tag>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: kycColor, background: `${kycColor}18`, border: `1px solid ${kycColor}40`, borderRadius: 4, padding: '1px 7px' }}>{kycStatus}</span>
+                    </div>
+                    {u.userId && (
+                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: BRAND, background: '#fff7ed', border: '1px solid #fed7aa', padding: '1px 7px', borderRadius: 4, marginTop: 3, display: 'inline-block' }}>{u.userId}</span>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setPreviewUser(null)} style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 16, flexShrink: 0 }}>×</button>
+              </div>
+
+              {/* Stats */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', background: '#fafafa', flexShrink: 0 }}>
+                {[
+                  { label: 'Total Orders', value: userOrders.length },
+                  { label: 'Total Spent',  value: `₹${totalSpent.toLocaleString()}` },
+                  { label: 'Outstanding',  value: `₹${outstanding.toLocaleString()}`, red: outstanding > 0 },
+                ].map((s, i) => (
+                  <div key={s.label} style={{ flex: 1, padding: '10px 14px', borderRight: i < 2 ? '1px solid #f1f5f9' : 'none', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: s.red ? '#ef4444' : NAVY }}>{s.value}</div>
+                    <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+                <AntDivider orientation="left" style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0 }}>Contact</AntDivider>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 20 }}>
+                  {[
+                    { label: 'Email',        value: u.email },
+                    { label: 'Mobile',       value: u.mobile || '—' },
+                    { label: 'Account Type', value: u.accountType || 'Private' },
+                    { label: 'Class',        value: u.customerClass || 'New' },
+                    { label: 'Joined',       value: fmtDateQ(u.createdAt) },
+                  ].map(f => (
+                    <div key={f.label}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>{f.label}</div>
+                      <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 500 }}>{f.value}</div>
+                    </div>
+                  ))}
+                  {u.address && (
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Address</div>
+                      <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 500, lineHeight: 1.5 }}>{u.address}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    onClick={() => { setPreviewUser(null); navigate(`/admin/users?uid=${u._id}`) }}
+                    style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: `1.5px solid ${NAVY}`, background: 'transparent', color: NAVY, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    <LinkOutlined /> Open Full Profile
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Drawer>
+        )
+      })()}
     </div>
   )
 }

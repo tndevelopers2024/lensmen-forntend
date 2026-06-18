@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Table, Input, Tag, Button, Modal, Drawer, Select, Space, Typography, Avatar, Image, Divider,
 } from 'antd'
@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import { HiCheckCircle, HiUpload } from 'react-icons/hi'
 import toast from 'react-hot-toast'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGlobal } from '../../context/GlobalContext'
 import PageHeader from '../../components/PageHeader'
 
@@ -53,6 +54,10 @@ const ORDER_STATUS_COLOR = {
 
 const UsersPage = () => {
   const { allUsers, allOrders, fetchAdminData, API_URL } = useGlobal()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const openedFromUrlRef = useRef(false)
+
   const [searchTerm, setSearchTerm]       = useState('')
   const [selectedUser, setSelectedUser]   = useState(null)
   const [drawerTab, setDrawerTab]         = useState('overview')
@@ -74,7 +79,21 @@ const UsersPage = () => {
     u.userId?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // sync selectedUser when allUsers refreshes
+  // Restore drawer from URL on mount (after allUsers loads)
+  useEffect(() => {
+    if (!allUsers.length || openedFromUrlRef.current) return
+    const uid = searchParams.get('uid')
+    if (!uid) return
+    const user = allUsers.find(u => u._id === uid)
+    if (user) {
+      openedFromUrlRef.current = true
+      setSelectedUser(user)
+      const tab = searchParams.get('tab')
+      if (tab) setDrawerTab(tab)
+    }
+  }, [allUsers])
+
+  // sync selectedUser when allUsers refreshes (e.g. after KYC update)
   useEffect(() => {
     if (selectedUser) {
       const fresh = allUsers.find(u => u._id === selectedUser._id)
@@ -82,10 +101,20 @@ const UsersPage = () => {
     }
   }, [allUsers])
 
-  // reset tab when a new user is opened
+  // Sync URL when drawer opens/closes or tab changes
   useEffect(() => {
-    if (selectedUser) setDrawerTab('overview')
-  }, [selectedUser?._id])
+    if (selectedUser) {
+      const params = new URLSearchParams()
+      params.set('uid', selectedUser._id)
+      if (drawerTab !== 'overview') params.set('tab', drawerTab)
+      setSearchParams(params, { replace: true })
+    } else {
+      if (searchParams.get('uid')) {
+        setSearchParams({}, { replace: true })
+      }
+      openedFromUrlRef.current = false
+    }
+  }, [selectedUser?._id, drawerTab])
 
   const handleClassChange = async (userId, newClass) => {
     try {
@@ -271,7 +300,7 @@ const UsersPage = () => {
         dataSource={filteredUsers}
         rowKey="_id"
         onRow={record => ({
-          onClick: () => { setSelectedUser(record); setKycReason('') },
+          onClick: () => { setSelectedUser(record); setDrawerTab('overview'); setKycReason('') },
           style: { cursor: 'pointer' },
         })}
         rowClassName={() => 'hover:bg-slate-50 transition-colors group'}
@@ -361,7 +390,14 @@ const UsersPage = () => {
             },
             {
               title: 'Invoice', dataIndex: 'bookingCode', width: 110,
-              render: code => <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#E5550F' }}>{code || '—'}</span>,
+              render: code => (
+                <span
+                  onClick={e => { e.stopPropagation(); navigate(`/admin/invoices?invoiceCode=${code}`) }}
+                  style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12, color: '#E5550F', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                >
+                  {code || '—'}
+                </span>
+              ),
             },
             {
               title: 'Type', dataIndex: 'type', width: 80,
@@ -587,6 +623,11 @@ const UsersPage = () => {
                         size="small"
                         pagination={{ pageSize: 10, simple: true, size: 'small' }}
                         scroll={{ x: 600 }}
+                        onRow={record => ({
+                          onClick: () => navigate(`/admin/orders?orderId=${record._id}`),
+                          style: { cursor: 'pointer' },
+                        })}
+                        rowClassName={() => 'hover:bg-blue-50'}
                       />
                     )}
                   </div>

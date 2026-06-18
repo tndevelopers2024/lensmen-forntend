@@ -1,27 +1,25 @@
 import { useState, useMemo } from 'react'
-import { Link, useSearchParams, useNavigate } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import {
-  HiOutlineHeart, HiHeart, HiTrendingUp, HiPlus, HiChevronDown,
+  HiOutlineHeart, HiHeart, HiTrendingUp, HiChevronDown,
 } from 'react-icons/hi'
-import { MdCameraAlt, MdVideocam, MdFlashOn, MdCategory, MdGridView } from 'react-icons/md'
+import { MdCameraAlt } from 'react-icons/md'
 import { differenceInDays } from 'date-fns'
 import { useGlobal, getImageUrl } from '../context/GlobalContext'
+
+const resolveItemUrl = (item) => {
+  if (!item) return '/'
+  if (item.type === 'all') return '/'
+  if (item.type === 'category' && item.categoryName) return `/?category=${encodeURIComponent(item.categoryName)}`
+  if (item.type === 'product' && item.productId) return `/product/${item.productId}`
+  if (item.type === 'url' && item.url) return item.url
+  return '/'
+}
 
 const OFFER_COLORS = ['#E5550F', '#c94a0d', '#a83b0b', '#7c2d12', '#92400e']
 const offerLabel = (o) =>
   o.discountType === 'percentage' ? `${o.discountValue}% OFF` : `₹${o.discountValue} OFF`
 
-const getCategoryIcon = (cat) => {
-  const s = (cat || '').toLowerCase()
-  if (s === 'all') return <MdGridView className="text-[22px]" />
-  if (s.includes('dslr') || s.includes('camera') || s.includes('canon') || s.includes('nikon') || s.includes('mirrorless'))
-    return <MdCameraAlt className="text-[22px]" />
-  if (s.includes('lens') || s.includes('video') || s.includes('cinema'))
-    return <MdVideocam className="text-[22px]" />
-  if (s.includes('light') || s.includes('flash') || s.includes('strobe'))
-    return <MdFlashOn className="text-[22px]" />
-  return <MdCategory className="text-[22px]" />
-}
 
 const bookedThisMonth = (id = '') => {
   let h = 0
@@ -89,14 +87,55 @@ const FAQItem = ({ q, a }) => {
 }
 
 const LandingPage = ({ setShowBookingModal }) => {
-  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categories, setAuthMode, offers } = useGlobal()
+  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categories, categoriesData, mainMenu, sidebarMenu, setAuthMode, offers } = useGlobal()
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const [wishlist, setWishlist] = useState(new Set())
 
   const selectedCategory = searchParams.get('category') || 'All'
-  const searchQuery = (searchParams.get('q') || '').toLowerCase().trim()
-  const allCategories = ['All', ...categories]
+  const selectedSub      = searchParams.get('sub') || ''
+  const searchQuery      = (searchParams.get('q') || '').toLowerCase().trim()
+
+  // Sidebar items — use sidebar-menu if available, else fall back to categories
+  const navItems = useMemo(() => {
+    if (sidebarMenu?.items?.length > 0) return sidebarMenu.items
+    return [
+      { _id: '__all__', label: 'All', type: 'all', children: [] },
+      ...categoriesData.map(c => ({
+        _id: c.name, label: c.name, type: 'category', categoryName: c.name,
+        imageUrl: c.imageUrl || '', children: [],
+      })),
+    ]
+  }, [sidebarMenu, categoriesData])
+
+  // Build a map: categoryName → first product image (fallback for sidebar)
+  const categoryFirstImage = useMemo(() => {
+    const map = {}
+    ;[...products].reverse().forEach(p => {
+      if (p.category && p.imageUrl && !map[p.category]) map[p.category] = getImageUrl(p.imageUrl)
+    })
+    return map
+  }, [products])
+
+  // Resolve sidebar image for a menu item
+  const getItemImage = (item) => {
+    if (item.imageUrl) return getImageUrl(item.imageUrl)
+    if (item.type === 'category') return categoryFirstImage[item.categoryName] || ''
+    if (item.type === 'product') {
+      const p = products.find(pr => String(pr._id) === String(item.productId))
+      return p ? getImageUrl(p.imageUrl) : ''
+    }
+    return ''
+  }
+
+  // Active state for sidebar item
+  const isActive = (item) => {
+    if (item.type === 'all') return location.pathname === '/' && !searchParams.get('category')
+    if (item.type === 'category') return selectedCategory === item.categoryName
+    if (item.type === 'product') return location.pathname === `/product/${item.productId}`
+    return false
+  }
 
   const rentalDays = useMemo(() => {
     if (!rentalDates.from || !rentalDates.to) return 1
@@ -105,12 +144,15 @@ const LandingPage = ({ setShowBookingModal }) => {
 
   const filteredProducts = products.filter(p => {
     const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory
+    const matchesSub = !selectedSub || (p.name || '').toLowerCase().includes(selectedSub.toLowerCase())
     const matchesSearch = !searchQuery || (p.name || '').toLowerCase().includes(searchQuery)
-    return matchesCategory && matchesSearch
+    return matchesCategory && matchesSub && matchesSearch
   })
 
-  const handleCategoryClick = (cat) => {
-    navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`, { replace: true })
+  const goToItem = (item) => {
+    const url = resolveItemUrl(item)
+    if (item.type === 'url' && item.url?.startsWith('http')) window.open(item.url, '_blank')
+    else navigate(url, { replace: true })
     setTimeout(() => document.getElementById('inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
@@ -124,55 +166,65 @@ const LandingPage = ({ setShowBookingModal }) => {
 
   return (
     <div>
-      {/* Mobile horizontal category chips */}
+      {/* Mobile horizontal chips */}
       <div
         className="md:hidden flex gap-2 overflow-x-auto bg-white border-b border-gray-100 px-4 py-3"
         style={{ scrollbarWidth: 'none' }}
       >
-        {allCategories.map(cat => {
-          const active = selectedCategory === cat
-          return (
-            <button
-              key={cat}
-              onClick={() => handleCategoryClick(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                active ? 'bg-[#E5550F] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-            </button>
-          )
-        })}
+        {navItems.map(item => (
+          <button
+            key={String(item._id || item.label)}
+            onClick={() => goToItem(item)}
+            className={`px-3.5 py-1.5 rounded-full text-[12px] font-semibold whitespace-nowrap shrink-0 transition-colors ${
+              isActive(item) ? 'bg-[#E5550F] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       {/* Sidebar + main layout */}
       <div className="flex max-w-[1440px] mx-auto">
 
         {/* Left Sidebar */}
-        <aside className="hidden md:block md:w-[72px] lg:w-[100px] shrink-0 bg-white border-r border-gray-100 sticky top-[104px] self-start overflow-y-auto">
-          {allCategories.map(cat => {
-            const active = selectedCategory === cat
+        <aside className="hidden md:block md:w-[80px] lg:w-[104px] shrink-0 bg-white border-r border-gray-100 sticky top-[104px] self-start overflow-y-auto">
+          {navItems.map(item => {
+            const active  = isActive(item)
+            const imgSrc  = getItemImage(item)
+            const itemKey = String(item._id || item.label)
+
             return (
               <button
-                key={cat}
-                onClick={() => handleCategoryClick(cat)}
-                className={`w-full flex flex-col items-center gap-2 py-4 px-1 transition-all border-b border-gray-50 group ${
+                key={itemKey}
+                onClick={() => goToItem(item)}
+                className={`w-full flex flex-col items-center gap-2 py-4 px-2 transition-all border-b border-gray-50 group ${
                   active
                     ? 'bg-orange-50 border-l-[3px] border-l-[#E5550F]'
                     : 'border-l-[3px] border-l-transparent hover:bg-gray-50'
                 }`}
               >
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors ${
+                <div className={`w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center transition-all ring-2 ${
                   active
-                    ? 'bg-orange-100 text-[#E5550F]'
-                    : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200 group-hover:text-gray-700'
+                    ? 'ring-[#E5550F] shadow-[0_0_0_3px_rgba(229,85,15,0.15)]'
+                    : 'ring-transparent group-hover:ring-gray-200'
                 }`}>
-                  {getCategoryIcon(cat)}
+                  {imgSrc ? (
+                    <img
+                      src={imgSrc}
+                      alt={item.label}
+                      className={`w-full h-full object-cover transition-transform group-hover:scale-105 ${active ? '' : 'brightness-90 group-hover:brightness-100'}`}
+                    />
+                  ) : (
+                    <div className={`w-full h-full flex items-center justify-center text-[11px] font-bold ${active ? 'bg-orange-100 text-[#E5550F]' : 'bg-gray-100 text-gray-400'}`}>
+                      {item.label.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <span className={`hidden lg:block text-[10px] font-semibold text-center leading-tight px-0.5 ${
+                <span className={`text-[10px] font-semibold text-center leading-tight px-0.5 ${
                   active ? 'text-[#E5550F]' : 'text-gray-400 group-hover:text-gray-600'
                 }`}>
-                  {cat.length > 10 ? cat.slice(0, 9) + '..' : cat}
+                  {item.label.length > 9 ? item.label.slice(0, 8) + '..' : item.label}
                 </span>
               </button>
             )
@@ -199,7 +251,7 @@ const LandingPage = ({ setShowBookingModal }) => {
 
             <div className="relative z-10 px-6 md:px-10 py-6 md:py-9">
               <h2 className="text-[26px] md:text-[36px] font-black text-white leading-tight mb-2">
-                {selectedCategory === 'All' ? 'Camera Gear' : selectedCategory}
+                {selectedCategory === 'All' ? 'Camera Gear' : selectedSub ? `${selectedCategory} — ${selectedSub}` : selectedCategory}
               </h2>
               <p className="text-white/75 text-[13px] md:text-[15px] max-w-md leading-relaxed">
                 Rent premium photography &amp; videography equipment from{' '}
@@ -264,6 +316,8 @@ const LandingPage = ({ setShowBookingModal }) => {
             <h2 className="text-[18px] md:text-[22px] font-black text-gray-900 truncate">
               {searchQuery
                 ? <>Results for "<span className="text-[#E5550F]">{searchParams.get('q')}</span>"</>
+                : selectedSub
+                ? <>{selectedSub} <span className="text-gray-400 font-medium">in {selectedCategory}</span></>
                 : <>{selectedCategory === 'All' ? 'All Gear' : selectedCategory} On Rent</>
               }
             </h2>

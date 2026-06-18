@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import {
   HiOutlineShoppingCart, HiOutlineLogout, HiOutlineChartBar,
   HiOutlineUser, HiOutlineSearch, HiLocationMarker, HiCalendar, HiPencilAlt, HiX,
+  HiChevronDown,
 } from 'react-icons/hi'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
@@ -12,8 +13,18 @@ import { differenceInCalendarDays } from 'date-fns'
 import { useGlobal } from '../context/GlobalContext'
 import Footer from './Footer'
 
+// Resolve a menu item to a URL string
+const resolveItemUrl = (item) => {
+  if (!item) return '/'
+  if (item.type === 'all') return '/'
+  if (item.type === 'category' && item.categoryName) return `/?category=${encodeURIComponent(item.categoryName)}`
+  if (item.type === 'product' && item.productId) return `/product/${item.productId}`
+  if (item.type === 'url' && item.url) return item.url
+  return '/'
+}
+
 const Layout = ({ children }) => {
-  const { user, cart, logout, setAuthMode, setCartOpen, categories, rentalDates, setRentalDates } = useGlobal()
+  const { user, cart, logout, setAuthMode, setCartOpen, categories, categoriesData, mainMenu, rentalDates, setRentalDates } = useGlobal()
   const navigate = useNavigate()
   const location = useLocation()
   const [showDatePicker, setShowDatePicker] = useState(false)
@@ -21,7 +32,29 @@ const Layout = ({ children }) => {
   const [searchInput, setSearchInput] = useState('')
 
   const isPublic = !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/dashboard')
-  const activeCategory = new URLSearchParams(location.search).get('category') || 'All'
+  const searchParams = new URLSearchParams(location.search)
+  const activeCategory = searchParams.get('category') || 'All'
+  const activeSub = searchParams.get('sub') || ''
+  const [openMenu, setOpenMenu] = useState(null)
+  const [dropdownPos, setDropdownPos] = useState({ left: 0, top: 0 })
+
+  // Effective nav items: use mainMenu if set, else fall back to categories
+  const navItems = (mainMenu?.items?.length > 0)
+    ? mainMenu.items
+    : [
+        { _id: '__all__', label: 'All', type: 'all', children: [] },
+        ...categoriesData.map(c => ({
+          _id: c.name, label: c.name, type: 'category', categoryName: c.name,
+          imageUrl: c.imageUrl || '', children: [],
+        })),
+      ]
+
+  const isItemActive = (item) => {
+    if (item.type === 'all') return location.pathname === '/' && !searchParams.get('category')
+    if (item.type === 'category') return activeCategory === item.categoryName
+    if (item.type === 'product') return location.pathname === `/product/${item.productId}`
+    return false
+  }
 
   useEffect(() => {
     if (!showSearch) return
@@ -49,10 +82,26 @@ const Layout = ({ children }) => {
     setSearchInput('')
   }
 
-  const goToCategory = (cat) => {
-    navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`)
+  const goToItem = (item) => {
+    const url = resolveItemUrl(item)
+    if (item.type === 'url' && item.url?.startsWith('http')) {
+      window.open(item.url, '_blank')
+    } else {
+      navigate(url)
+    }
+    setOpenMenu(null)
     setTimeout(() => document.getElementById('inventory')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
+
+  // Legacy helper kept for any remaining callers
+  const goToCategory = (cat) => navigate(cat === 'All' ? '/' : `/?category=${encodeURIComponent(cat)}`)
+
+  // Close dropdown on Escape
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setOpenMenu(null) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
 
   const fmtDate = (d) => {
     if (!d) return '—'
@@ -107,7 +156,7 @@ const Layout = ({ children }) => {
       className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 rounded-full px-3 h-[28px] text-[12px] transition-colors shrink-0"
     >
       <HiCalendar className="text-white/50 text-sm shrink-0" />
-      <span className="text-white/60 hidden sm:inline">Deliver:</span>
+      <span className="text-white/60 hidden sm:inline">Return:</span>
       <span className="text-white font-semibold">{fmtDate(rentalDates.to)}</span>
     </button>
   )
@@ -239,27 +288,79 @@ const Layout = ({ children }) => {
             </div>
           </div>
 
-          {/* ── Category tab row ───────────────────────────────── */}
+          {/* ── Nav menu row ───────────────────────────────────── */}
           <div className="bg-white border-b border-gray-200 shadow-sm">
             <div
               className="max-w-[1400px] mx-auto px-3 md:px-5 flex items-center overflow-x-auto"
               style={{ scrollbarWidth: 'none' }}
             >
-              {['All', ...categories].map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => goToCategory(cat)}
-                  className={`px-4 md:px-6 py-3.5 text-[13px] md:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all shrink-0 ${
-                    activeCategory === cat
-                      ? 'border-[#E5550F] text-[#E5550F]'
-                      : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+              {navItems.map(item => {
+                const hasChildren = item.children?.length > 0
+                const isActive    = isItemActive(item)
+                const itemKey     = String(item._id || item.label)
+                const isOpen      = openMenu === itemKey
+
+                return (
+                  <div key={itemKey} className="shrink-0">
+                    <button
+                      onClick={(e) => {
+                        if (hasChildren) {
+                          if (isOpen) { setOpenMenu(null); return }
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setDropdownPos({ left: rect.left, top: rect.bottom })
+                          setOpenMenu(itemKey)
+                        } else {
+                          goToItem(item)
+                        }
+                      }}
+                      className={`flex items-center gap-1 px-4 md:px-6 py-3.5 text-[13px] md:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all ${
+                        isActive
+                          ? 'border-[#E5550F] text-[#E5550F]'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      {item.label}
+                      {hasChildren && (
+                        <HiChevronDown className={`text-[12px] mt-0.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                      )}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           </div>
+
+          {/* ── Dropdown portal — fixed, escapes overflow ──────── */}
+          {openMenu && (() => {
+            const item = navItems.find(i => String(i._id || i.label) === openMenu)
+            const children = item?.children || []
+            return children.length > 0 ? (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpenMenu(null)} />
+                <div
+                  style={{ position: 'fixed', left: dropdownPos.left, top: dropdownPos.top, zIndex: 9999 }}
+                  className="min-w-[180px] bg-white border border-gray-100 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.15)] py-1.5"
+                >
+                  <button
+                    onClick={() => goToItem(item)}
+                    className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-gray-700 hover:bg-orange-50 hover:text-[#E5550F] transition-colors"
+                  >
+                    All {item.label}
+                  </button>
+                  <div className="mx-3 h-px bg-gray-100 my-1" />
+                  {children.map(child => (
+                    <button
+                      key={String(child._id || child.label)}
+                      onClick={() => { goToItem(child); }}
+                      className="w-full text-left px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                    >
+                      {child.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null
+          })()}
         </nav>
       )}
 
@@ -302,7 +403,7 @@ const Layout = ({ children }) => {
                 </div>
                 <div className={`rounded-xl p-3 transition-all ${rentalDates.to ? 'bg-white/15 border border-white/10' : 'bg-white/5 border border-dashed border-white/20'}`}>
                   <p className={`text-[9px] font-bold uppercase tracking-widest mb-1 ${rentalDates.to ? 'text-white/60' : 'text-white/35'}`}>
-                    Deliver
+                    Return
                   </p>
                   <p className={`text-[15px] font-black leading-none ${rentalDates.to ? 'text-white' : 'text-white/25'}`}>
                     {rentalDates.to ? fmtDate(rentalDates.to) : '— —'}

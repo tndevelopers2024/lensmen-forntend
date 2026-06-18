@@ -15,7 +15,10 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://api.lensmenrental
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
+  const [categoriesData, setCategoriesData] = useState([]) // full objects: {name, imageUrl, subcategories}
+  const [categories, setCategories]         = useState([]) // just names, for backward compat
+  const [mainMenu,    setMainMenu]    = useState(null) // top nav menu
+  const [sidebarMenu, setSidebarMenu] = useState(null) // left sidebar menu
   const [offers, setOffers] = useState([])
   const [authMode, setAuthMode] = useState('none')
   const [cartOpen, setCartOpen] = useState(false)
@@ -122,6 +125,8 @@ export const GlobalProvider = ({ children }) => {
     fetchProducts()
     fetchCategories()
     fetchOffers()
+    fetchMainMenu()
+    fetchSidebarMenu()
   }, [])
 
   const fetchProducts = async () => {
@@ -142,11 +147,28 @@ export const GlobalProvider = ({ children }) => {
     } catch {}
   }
 
+  const fetchMainMenu = async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/main-menu`)
+      if (res.ok) { const data = await res.json(); setMainMenu(data) }
+    } catch {}
+  }
+
+  const fetchSidebarMenu = async () => {
+    try {
+      const res = await fetch(`${API_URL}/menus/sidebar-menu`)
+      if (res.ok) { const data = await res.json(); setSidebarMenu(data) }
+    } catch {}
+  }
+
   const fetchCategories = async () => {
     try {
       const res = await fetch(`${API_URL}/products/categories`)
       const data = await res.json()
-      setCategories(data)
+      // data is now [{name, imageUrl, subcategories}]
+      const normalized = data.map(d => typeof d === 'string' ? { name: d, imageUrl: '', subcategories: [] } : d)
+      setCategoriesData(normalized)
+      setCategories(normalized.map(d => d.name))
     } catch (error) {
       console.error('Fetch categories error:', error)
     }
@@ -301,7 +323,9 @@ export const GlobalProvider = ({ children }) => {
   return (
     <GlobalContext.Provider value={{
       products, setProducts,
-      categories, setCategories,
+      categories, setCategories, categoriesData,
+      mainMenu,    setMainMenu,    fetchMainMenu,
+      sidebarMenu, setSidebarMenu, fetchSidebarMenu,
       offers, setOffers, fetchOffers,
       authMode, setAuthMode,
       cartOpen, setCartOpen,

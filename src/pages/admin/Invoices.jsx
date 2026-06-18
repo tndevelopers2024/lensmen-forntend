@@ -1,14 +1,43 @@
-import { useState, useMemo } from 'react'
-import { Table, Input, Button, Tag, Select, Space } from 'antd'
-import { SearchOutlined, PrinterOutlined, FileTextOutlined } from '@ant-design/icons'
-import { useGlobal, API_URL } from '../../context/GlobalContext'
+import { useState, useMemo, useEffect } from 'react'
+import {
+  Table, Input, Button, Tag, Modal, Drawer, Avatar,
+  Descriptions, Row, Col, Space, Typography, Divider,
+} from 'antd'
+import {
+  SearchOutlined, PrinterOutlined, FileTextOutlined,
+  UserOutlined, ArrowRightOutlined, LinkOutlined,
+} from '@ant-design/icons'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import PageHeader from '../../components/PageHeader'
 import { getAdminSettings } from './Settings'
 
 const { Search } = Input
+const { Text } = Typography
 
 const NAVY  = '#1e1b4b'
 const BRAND = '#E5550F'
+
+const ORDER_STATUS_CFG = {
+  'Request Submitted': { color: '#94a3b8', bg: '#f8fafc', label: 'Submitted' },
+  'KYC Pending':       { color: '#f59e0b', bg: '#fffbeb', label: 'KYC Pending' },
+  'KYC Approved':      { color: '#10b981', bg: '#f0fdf4', label: 'KYC Approved' },
+  'Approved':          { color: '#10b981', bg: '#f0fdf4', label: 'Approved' },
+  'Ready for Pickup':  { color: '#6366f1', bg: '#eef2ff', label: 'Ready for Pickup' },
+  'During Rental':     { color: '#3b82f6', bg: '#eff6ff', label: 'Active Rental' },
+  'Picked Up':         { color: '#3b82f6', bg: '#eff6ff', label: 'Picked Up' },
+  'Active':            { color: '#3b82f6', bg: '#eff6ff', label: 'Active' },
+  'Return Pending':    { color: '#f97316', bg: '#fff7ed', label: 'Return Pending' },
+  'Returned':          { color: '#22c55e', bg: '#f0fdf4', label: 'Returned' },
+  'Closed':            { color: '#22c55e', bg: '#f0fdf4', label: 'Closed' },
+  'Reopened':          { color: '#f97316', bg: '#fff7ed', label: 'Reopened' },
+  'Rejected':          { color: '#ef4444', bg: '#fef2f2', label: 'Rejected' },
+}
+const ocfg = (s) => ORDER_STATUS_CFG[s] || { color: '#94a3b8', bg: '#f8fafc', label: s }
+
+const KYC_COLOR = {
+  Approved: '#10b981', Pending: '#f59e0b', Rejected: '#ef4444', 'Not Uploaded': '#94a3b8',
+}
 
 const invoiceStatus = (order) => {
   const pending = order.pendingAmount ?? (order.totalPrice - (order.totalPaid || 0))
@@ -23,15 +52,36 @@ const invoiceStatus = (order) => {
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
 const fmtAmt  = (n) => `₹${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+const fmtShort = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+
+const MILESTONES = [
+  { label: 'Submitted', statuses: ['Request Submitted', 'KYC Pending'] },
+  { label: 'KYC Done',  statuses: ['KYC Approved'] },
+  { label: 'Approved',  statuses: ['Approved'] },
+  { label: 'Ready',     statuses: ['Ready for Pickup'] },
+  { label: 'Active',    statuses: ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Reopened'] },
+  { label: 'Closed',    statuses: ['Returned', 'Closed'] },
+]
 
 const InvoicesPage = () => {
-  const { allOrders } = useGlobal()
+  const { allOrders, allUsers } = useGlobal()
   const pickupLocs = getAdminSettings().pickupLocations || []
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const invoiceCodeParam = searchParams.get('invoiceCode')
 
-  const [search,     setSearch]     = useState('')
+  const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [page,       setPage]       = useState(1)
+  const [page,         setPage]         = useState(1)
+  const [previewOrder, setPreviewOrder] = useState(null)
+  const [previewUser,  setPreviewUser]  = useState(null)
   const PAGE_SIZE = 25
+
+  // Pre-filter to the invoice navigated from Users page
+  useEffect(() => {
+    if (!invoiceCodeParam) return
+    setSearch(invoiceCodeParam)
+  }, [invoiceCodeParam])
 
   const rows = useMemo(() => {
     const q = search.toLowerCase()
@@ -42,8 +92,8 @@ const InvoicesPage = () => {
         const matchQ = !q || name.includes(q) || inv.toLowerCase().includes(q) || (o.userMobile || '').includes(q)
         const st = invoiceStatus(o)
         const matchStatus =
-          statusFilter === 'all' ? true :
-          statusFilter === 'paid' ? st.label === 'PAID' :
+          statusFilter === 'all'     ? true :
+          statusFilter === 'paid'    ? st.label === 'PAID' :
           statusFilter === 'overdue' ? st.overdue > 0 :
           statusFilter === 'pending' ? st.label === 'PENDING' : true
         return matchQ && matchStatus
@@ -163,6 +213,14 @@ const InvoicesPage = () => {
     setTimeout(() => { win.print() }, 600)
   }
 
+  const handleUserClick = (e, order) => {
+    e.stopPropagation()
+    const user = allUsers.find(u =>
+      u.email === order.userEmail || u.mobile === order.userMobile
+    )
+    if (user) setPreviewUser(user)
+  }
+
   const columns = [
     {
       title: 'DATE',
@@ -177,8 +235,10 @@ const InvoicesPage = () => {
       key: 'invoice',
       width: 120,
       render: (code, r) => (
-        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: BRAND, cursor: 'pointer' }}
-          onClick={() => printInvoice(r)}>
+        <span
+          style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: BRAND, cursor: 'pointer' }}
+          onClick={() => printInvoice(r)}
+        >
           {code || '#' + r._id?.slice(-8).toUpperCase()}
         </span>
       ),
@@ -188,7 +248,10 @@ const InvoicesPage = () => {
       key: 'order',
       width: 120,
       render: (_, r) => (
-        <span style={{ fontSize: 12, color: '#6b7280', fontFamily: 'monospace' }}>
+        <span
+          onClick={e => { e.stopPropagation(); setPreviewOrder(r) }}
+          style={{ fontSize: 12, fontFamily: 'monospace', color: NAVY, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+        >
           {r.bookingCode || '#' + r._id?.slice(-8).toUpperCase()}
         </span>
       ),
@@ -199,7 +262,14 @@ const InvoicesPage = () => {
       key: 'customer',
       width: 160,
       sorter: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
-      render: name => <span style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>{name || '—'}</span>,
+      render: (name, r) => (
+        <span
+          onClick={e => handleUserClick(e, r)}
+          style={{ fontSize: 13, fontWeight: 500, color: NAVY, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+        >
+          {name || '—'}
+        </span>
+      ),
     },
     {
       title: 'INVOICE STATUS',
@@ -219,11 +289,7 @@ const InvoicesPage = () => {
       },
       render: (_, r) => {
         const st = invoiceStatus(r)
-        return (
-          <span style={{ fontSize: 12, fontWeight: 700, color: st.color }}>
-            {st.label}
-          </span>
-        )
+        return <span style={{ fontSize: 12, fontWeight: 700, color: st.color }}>{st.label}</span>
       },
     },
     {
@@ -287,6 +353,312 @@ const InvoicesPage = () => {
   const overdueCount = allOrders.filter(o => invoiceStatus(o).overdue > 0).length
   const pendingCount = allOrders.filter(o => invoiceStatus(o).label === 'PENDING').length
 
+  // ── Order preview modal helpers ──────────────────────────────────────
+  const renderOrderPreview = () => {
+    if (!previewOrder) return null
+    const o = previewOrder
+    const items       = o.items?.length ? o.items : [o.productId].filter(Boolean)
+    const isRejected  = o.status === 'Rejected'
+    const activeIdx   = isRejected ? -1 : MILESTONES.findIndex(m => m.statuses.includes(o.status))
+    const trackPct    = activeIdx >= 0 ? (activeIdx / (MILESTONES.length - 1)) * 100 : 0
+    const statusInfo  = ocfg(o.status)
+
+    return (
+      <Modal
+        open
+        onCancel={() => setPreviewOrder(null)}
+        footer={null}
+        width={860}
+        destroyOnHidden
+        styles={{ body: { padding: '0 24px 24px' } }}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingRight: 32 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Order Details</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: BRAND }}>
+              {o.bookingCode || '#' + o._id?.slice(-8).toUpperCase()}
+            </span>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: statusInfo.color,
+              background: statusInfo.bg, border: `1px solid ${statusInfo.color}30`,
+              borderRadius: 6, padding: '2px 10px',
+            }}>
+              {statusInfo.label}
+            </span>
+            <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
+              Placed {fmtShort(o.createdAt)}
+            </Text>
+            <Button
+              size="small" icon={<LinkOutlined />}
+              style={{ marginLeft: 'auto', fontSize: 11 }}
+              onClick={() => { setPreviewOrder(null); navigate(`/admin/orders?orderId=${o._id}`) }}
+            >
+              Open in Orders
+            </Button>
+          </div>
+        }
+      >
+        {/* Status stepper */}
+        <div style={{ background: '#f8fafc', border: '1px solid #eef0f3', borderRadius: 14, padding: '18px 24px', marginBottom: 20, marginTop: 8 }}>
+          {isRejected ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ color: '#ef4444', fontSize: 18 }}>✕</span>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>Rental Request Rejected</div>
+                {o.rejectionReason && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 2 }}>Reason: <em>"{o.rejectionReason}"</em></div>}
+              </div>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', left: '6%', right: '6%', top: 14, height: 3, background: '#e5e7eb', borderRadius: 2, zIndex: 0 }} />
+              <div style={{
+                position: 'absolute', left: '6%', top: 14, height: 3,
+                background: 'linear-gradient(90deg,#10b981,#1e1b4b)',
+                borderRadius: 2, zIndex: 1, width: `${trackPct * 0.88}%`, transition: 'width 0.5s',
+              }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
+                {MILESTONES.map((m, i) => {
+                  const done = i < activeIdx, active = i === activeIdx
+                  return (
+                    <div key={m.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: done ? '#10b981' : active ? NAVY : '#fff',
+                        border: done || active ? 'none' : '2px solid #e5e7eb',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, color: done || active ? '#fff' : '#d1d5db',
+                        boxShadow: active ? `0 0 0 5px rgba(30,27,75,0.12)` : done ? '0 0 0 3px rgba(16,185,129,0.15)' : 'none',
+                      }}>
+                        {done ? '✓' : i + 1}
+                      </div>
+                      <span style={{ fontSize: 9, fontWeight: active ? 700 : done ? 600 : 500, color: done ? '#10b981' : active ? NAVY : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+                        {m.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Row gutter={20}>
+          {/* Equipment */}
+          <Col span={9}>
+            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Equipment</Text>
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {items.map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: 10, background: '#fafafa', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+                  <img
+                    src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
+                    alt=""
+                    style={{ width: 44, height: 44, borderRadius: 7, objectFit: 'contain', background: '#fff', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
+                      {item?.name}
+                      {item?.quantity > 1 && (
+                        <span style={{ marginLeft: 5, fontSize: 10, fontWeight: 700, color: BRAND, background: '#fff7ed', padding: '1px 5px', borderRadius: 4 }}>×{item.quantity}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>₹{item?.pricePerDay}/day</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Col>
+
+          {/* Logistics */}
+          <Col span={8}>
+            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Logistics</Text>
+            <div style={{ marginTop: 10, background: '#fafafa', borderRadius: 12, padding: 14, border: '1px solid #f0f0f0', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Pickup</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{fmtDate(o.startDate)}</div>
+                </div>
+                <ArrowRightOutlined style={{ color: '#d1d5db' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Return</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{fmtDate(o.endDate)}</div>
+                </div>
+              </div>
+              <div style={{ borderTop: '1px dashed #e5e7eb', marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
+                <Text type="secondary" style={{ fontSize: 11 }}>Duration</Text>
+                <Text strong style={{ fontSize: 12 }}>{o.totalDays || 1} Day(s)</Text>
+              </div>
+            </div>
+            <Descriptions column={1} size="small" bordered style={{ borderRadius: 10 }}>
+              <Descriptions.Item label="Client">{o.userName}</Descriptions.Item>
+              <Descriptions.Item label="Mobile">{o.userMobile}</Descriptions.Item>
+              <Descriptions.Item label="Email">{o.userEmail}</Descriptions.Item>
+            </Descriptions>
+          </Col>
+
+          {/* Payment summary */}
+          <Col span={7}>
+            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Payment</Text>
+            <div style={{ marginTop: 10, background: NAVY, borderRadius: 12, padding: '18px 14px', marginBottom: 12 }}>
+              <div style={{ fontSize: 10, color: '#93c5fd', fontWeight: 700, marginBottom: 4 }}>TOTAL</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#fff' }}>₹{(o.totalPrice || 0).toLocaleString()}</div>
+            </div>
+            <div style={{ background: '#f9fafb', borderRadius: 10, padding: '10px 12px', border: '1px solid #f0f0f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Collected</Text>
+                <Text strong style={{ color: '#10b981', fontSize: 12 }}>₹{(o.totalPaid || 0).toLocaleString()}</Text>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Pending</Text>
+                <Text strong style={{ color: (o.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981', fontSize: 12 }}>
+                  ₹{(o.pendingAmount || 0).toLocaleString()}
+                </Text>
+              </div>
+              {(o.payments || []).map((p, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderTop: '1px solid #f0f0f0' }}>
+                  <Space size={4}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>{p.type}</span>
+                    <span style={{ color: '#6b7280' }}>{p.mode}</span>
+                  </Space>
+                  <Text strong style={{ fontSize: 11 }}>₹{p.amount?.toLocaleString()}</Text>
+                </div>
+              ))}
+            </div>
+          </Col>
+        </Row>
+      </Modal>
+    )
+  }
+
+  // ── User preview drawer helpers ──────────────────────────────────────
+  const renderUserPreview = () => {
+    if (!previewUser) return null
+    const u = previewUser
+    const userOrders  = allOrders.filter(o => o.userEmail === u.email || o.userMobile === u.mobile)
+    const totalSpent  = userOrders.reduce((s, o) => s + (o.totalPaid || 0), 0)
+    const outstanding = userOrders.reduce((s, o) => s + (o.pendingAmount || 0), 0)
+    const kycStatus   = u.kycStatus || 'Not Uploaded'
+    const kycColor    = KYC_COLOR[kycStatus] || '#94a3b8'
+
+    return (
+      <Drawer
+        open
+        onClose={() => setPreviewUser(null)}
+        placement="right"
+        width={480}
+        destroyOnHidden
+        styles={{ body: { padding: 0 }, header: { display: 'none' } }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          {/* Header */}
+          <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Avatar
+                size={44}
+                style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)', fontWeight: 800, fontSize: 18, flexShrink: 0 }}
+                icon={<UserOutlined />}
+              />
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{u.fullName}</span>
+                  <Tag color={u.role === 'admin' ? 'geekblue' : 'default'} style={{ fontSize: 10 }}>{u.role}</Tag>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: kycColor, background: `${kycColor}18`, border: `1px solid ${kycColor}40`, borderRadius: 4, padding: '1px 7px' }}>
+                    {kycStatus}
+                  </span>
+                </div>
+                {u.userId && (
+                  <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: BRAND, background: '#fff7ed', border: '1px solid #fed7aa', padding: '1px 7px', borderRadius: 4, marginTop: 3, display: 'inline-block' }}>
+                    {u.userId}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setPreviewUser(null)}
+              style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 16, flexShrink: 0 }}
+            >×</button>
+          </div>
+
+          {/* Stats */}
+          <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', background: '#fafafa', flexShrink: 0 }}>
+            {[
+              { label: 'Total Orders', value: userOrders.length },
+              { label: 'Total Spent',  value: `₹${totalSpent.toLocaleString()}` },
+              { label: 'Outstanding',  value: `₹${outstanding.toLocaleString()}`, red: outstanding > 0 },
+            ].map((s, i) => (
+              <div key={s.label} style={{ flex: 1, padding: '10px 14px', borderRight: i < 2 ? '1px solid #f1f5f9' : 'none', textAlign: 'center' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: s.red ? '#ef4444' : NAVY }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+            <Divider orientation="left" style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0 }}>
+              Contact
+            </Divider>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: 20 }}>
+              {[
+                { label: 'Email', value: u.email },
+                { label: 'Mobile', value: u.mobile || '—' },
+                { label: 'Account Type', value: u.accountType || 'Private' },
+                { label: 'Class', value: u.customerClass || 'New' },
+                { label: 'Joined', value: fmtShort(u.createdAt) },
+              ].map(f => (
+                <div key={f.label}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>{f.label}</div>
+                  <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 500 }}>{f.value}</div>
+                </div>
+              ))}
+              {u.address && (
+                <div style={{ gridColumn: 'span 2' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>Address</div>
+                  <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 500, lineHeight: 1.5 }}>{u.address}</div>
+                </div>
+              )}
+            </div>
+
+            {userOrders.length > 0 && (
+              <>
+                <Divider orientation="left" style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Recent Orders
+                </Divider>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {userOrders.slice(0, 5).map(o => (
+                    <div
+                      key={o._id}
+                      onClick={() => { setPreviewUser(null); setPreviewOrder(o) }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f0f0f0', cursor: 'pointer' }}
+                    >
+                      <div>
+                        <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: BRAND }}>{o.bookingCode}</span>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{fmtDate(o.createdAt)}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: ocfg(o.status).color }}>{ocfg(o.status).label}</span>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginTop: 2 }}>₹{(o.totalPrice || 0).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ marginTop: 20 }}>
+              <button
+                onClick={() => { setPreviewUser(null); navigate(`/admin/users?uid=${u._id}`) }}
+                style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: `1.5px solid ${NAVY}`, background: 'transparent', color: NAVY, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 0.15s' }}
+              >
+                <LinkOutlined /> Open Full Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      </Drawer>
+    )
+  }
+
   return (
     <div>
       <PageHeader
@@ -308,8 +680,7 @@ const InvoicesPage = () => {
             onClick={() => { setStatusFilter(chip.key); setPage(1) }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
-              padding: '6px 14px',
-              borderRadius: 20,
+              padding: '6px 14px', borderRadius: 20,
               border: statusFilter === chip.key ? `1.5px solid ${chip.color}` : '1.5px solid #e5e7eb',
               background: statusFilter === chip.key ? chip.bg : 'transparent',
               color: statusFilter === chip.key ? chip.color : '#6b7280',
@@ -322,8 +693,7 @@ const InvoicesPage = () => {
               fontSize: 11, fontWeight: 700,
               background: statusFilter === chip.key ? chip.color : '#e5e7eb',
               color: statusFilter === chip.key ? '#fff' : '#6b7280',
-              borderRadius: 10, padding: '1px 7px',
-              minWidth: 20, textAlign: 'center',
+              borderRadius: 10, padding: '1px 7px', minWidth: 20, textAlign: 'center',
             }}>
               {chip.count}
             </span>
@@ -357,9 +727,20 @@ const InvoicesPage = () => {
             showSizeChanger: false,
           }}
           rowClassName={() => 'inv-row'}
+          onRow={(record) => ({
+            style: record.bookingCode === invoiceCodeParam
+              ? { background: '#fffbeb', boxShadow: 'inset 3px 0 0 #f59e0b' }
+              : {},
+          })}
           style={{ fontSize: 13 }}
         />
       </div>
+
+      {/* Order preview modal */}
+      {renderOrderPreview()}
+
+      {/* User preview drawer */}
+      {renderUserPreview()}
     </div>
   )
 }

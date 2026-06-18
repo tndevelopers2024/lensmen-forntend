@@ -4,8 +4,9 @@ import { Layout, Menu, ConfigProvider, Button, Tooltip } from 'antd'
 import {
   BarChartOutlined, AppstoreOutlined, ShoppingCartOutlined, TeamOutlined,
   PlusOutlined, SettingOutlined, LogoutOutlined,
-  LeftOutlined, RightOutlined, AccountBookOutlined, FileTextOutlined,
+  LeftOutlined, RightOutlined, LineChartOutlined, FileTextOutlined,
   TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined, AuditOutlined,
+  MenuOutlined,
 } from '@ant-design/icons'
 import { useGlobal } from '../context/GlobalContext'
 
@@ -32,10 +33,11 @@ const AdminLayout = ({ children, location }) => {
     },
     { key: '/admin/orders',   icon: <ShoppingCartOutlined />, label: <Link to="/admin/orders">Orders</Link> },
     { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
-    { key: '/admin/accounts',  icon: <AccountBookOutlined />,  label: <Link to="/admin/accounts">Accounts</Link> },
+    { key: '/admin/accounts',  icon: <LineChartOutlined />,  label: <Link to="/admin/accounts">Reports</Link> },
     { key: '/admin/invoices',  icon: <AuditOutlined />,        label: <Link to="/admin/invoices">Invoices</Link> },
     { key: '/admin/quotes',    icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
     { key: '/admin/offers',    icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
+    { key: '/admin/menus',     icon: <MenuOutlined />,         label: <Link to="/admin/menus">Menus</Link> },
   ]
 
   const utilItems = [

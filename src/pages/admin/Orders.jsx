@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Input, Button, Modal, Typography, Radio, DatePicker, Image,
   Row, Col, Descriptions, Table, Space, Tooltip, Popconfirm
@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
+import { useSearchParams } from 'react-router-dom'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import { getAdminSettings } from './Settings'
 import PageHeader from '../../components/PageHeader'
@@ -45,6 +46,8 @@ const RETURNED_STATUSES = ['Returned', 'Closed']
 const OrdersMonitor = () => {
   const { allOrders, setAllOrders, API_URL } = useGlobal()
   const pickupLocs = getAdminSettings().pickupLocations || []
+  const [searchParams] = useSearchParams()
+  const orderIdParam = searchParams.get('orderId')
 
   const [selectedOrder,     setSelectedOrder]     = useState(null)
   const [searchQuery,       setSearchQuery]       = useState('')
@@ -66,6 +69,13 @@ const OrdersMonitor = () => {
   const [approveLocation,   setApproveLocation]   = useState(() => pickupLocs[0]?.id || '')
   const [reopenTarget,      setReopenTarget]      = useState(null)   // orderId
   const [reopenNotes,       setReopenNotes]       = useState('')
+
+  // Auto-open order from URL param (navigated from Users page)
+  useEffect(() => {
+    if (!orderIdParam || !allOrders.length || selectedOrder) return
+    const order = allOrders.find(o => o._id === orderIdParam)
+    if (order) setSelectedOrder(order)
+  }, [allOrders, orderIdParam])
 
   // ── Print order ────────────────────────────────────────────────────
   const printOrder = (order) => {
@@ -319,7 +329,8 @@ const OrdersMonitor = () => {
     const matchSearch =
       order.userName?.toLowerCase().includes(q) ||
       order.userMobile?.includes(q) ||
-      order.userEmail?.toLowerCase().includes(q)
+      order.userEmail?.toLowerCase().includes(q) ||
+      order.bookingCode?.toLowerCase().includes(q)
 
     let matchTab = true
     if (activeTab === 'rented')   matchTab = ACTIVE_STATUSES.includes(order.status)
