@@ -41,6 +41,7 @@ import AdminNotifications from './pages/admin/Notifications'
 import InvoicesPage from './pages/admin/Invoices'
 import DashboardNotifications from './pages/dashboard/DashboardNotifications'
 import DashboardHelp from './pages/dashboard/DashboardHelp'
+import OrderDetailPage from './pages/OrderDetailPage'
 
 function AppContent() {
   const location = useLocation()
@@ -64,6 +65,7 @@ function AppContent() {
         <Route path="/product/:id" element={<ProductDetails setShowBookingModal={setShowBookingModal} />} />
         <Route path="/cart" element={<CartPage setShowBookingModal={setShowBookingModal} />} />
         <Route path="/my-orders" element={<Navigate to="/dashboard/orders" replace />} />
+        <Route path="/orders/:bookingCode" element={<OrderDetailPage />} />
         <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/" />} />
 
         {/* User Dashboard Routes */}
