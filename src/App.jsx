@@ -35,6 +35,7 @@ import QuoteFormPage from './pages/admin/QuoteFormPage'
 import CategoriesPage from './pages/admin/Categories'
 import OffersPage from './pages/admin/Offers'
 import MenusPage from './pages/admin/Menus'
+import VendorsPage from './pages/admin/Vendors'
 import AdminSettings from './pages/admin/Settings'
 import AdminNotifications from './pages/admin/Notifications'
 import InvoicesPage from './pages/admin/Invoices'
@@ -168,6 +169,12 @@ function AppContent() {
         <Route path="/admin/invoices" element={user?.role === 'admin' ? (
           <AdminLayout location={location}>
             <InvoicesPage />
+          </AdminLayout>
+        ) : <Navigate to="/" />} />
+
+        <Route path="/admin/vendors" element={user?.role === 'admin' ? (
+          <AdminLayout location={location}>
+            <VendorsPage />
           </AdminLayout>
         ) : <Navigate to="/" />} />
 

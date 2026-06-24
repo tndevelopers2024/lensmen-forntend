@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   Table, Input, Button, Tag, Modal, Drawer, Avatar,
-  Descriptions, Row, Col, Space, Typography, Divider,
+  Typography, Divider,
 } from 'antd'
 import {
   SearchOutlined, PrinterOutlined, FileTextOutlined,
-  UserOutlined, ArrowRightOutlined, LinkOutlined,
+  UserOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
@@ -134,67 +134,85 @@ const InvoicesPage = () => {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${invNo}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #111; background: #fff; }
-  .page { max-width: 750px; margin: 0 auto; padding: 32px 28px; border: 1px solid #ccc; }
-  .inv-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #ccc; padding-bottom: 16px; }
-  .inv-header-left { display: flex; align-items: flex-start; gap: 16px; }
-  .inv-header-left img { width: 90px; height: auto; object-fit: contain; }
-  .company-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-  .company-addr { font-size: 11px; line-height: 1.55; color: #333; max-width: 340px; }
-  .tax-invoice-label { font-size: 30px; font-weight: 400; letter-spacing: 1px; color: #111; align-self: flex-end; }
-  .meta-table { width: 100%; border-collapse: collapse; border: 1px solid #ccc; margin-top: 0; }
-  .meta-table td { padding: 5px 10px; font-size: 12px; border: 1px solid #ccc; vertical-align: top; }
-  .meta-table .meta-label { color: #555; width: 110px; }
-  .meta-table .meta-val { font-weight: 600; }
-  .bill-to-header { background: #e8e8e8; padding: 5px 10px; font-size: 12px; font-weight: 600; border: 1px solid #ccc; border-top: none; }
-  .bill-to-name { padding: 6px 10px 10px; font-size: 13px; font-weight: 700; border: 1px solid #ccc; border-top: none; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: #fff; }
+  .page { max-width: 780px; margin: 0 auto; padding: 24px 28px; border: 1px solid #ccc; }
+  .inv-header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 0; }
+  .inv-header img { width: 52px; height: 52px; object-fit: contain; flex-shrink: 0; }
+  .company-block { flex: 1; }
+  .company-name { font-size: 14px; font-weight: 800; letter-spacing: 0.04em; margin-bottom: 2px; }
+  .company-addr { font-size: 10px; line-height: 1.4; color: #444; }
+  .invoice-ref { text-align: right; }
+  .invoice-ref .inv-num { font-size: 16px; font-weight: 800; }
+  .invoice-ref .inv-meta { font-size: 10px; color: #555; margin-top: 3px; line-height: 1.6; }
+  .info-row { display: flex; border: 1px solid #ccc; border-top: none; }
+  .bill-to { flex: 1; padding: 8px 12px; border-right: 1px solid #ccc; }
+  .bill-to-label { font-size: 9px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .bill-to-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .bill-to-detail { font-size: 10px; color: #555; line-height: 1.5; }
+  .inv-meta-box { width: 260px; padding: 8px 12px; }
+  .inv-meta-row { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+  .inv-meta-row .lbl { color: #666; }
+  .inv-meta-row .val { font-weight: 600; }
   .items-table { width: 100%; border-collapse: collapse; }
-  .items-table th { background: #e8e8e8; font-size: 12px; font-weight: 700; padding: 7px 10px; border: 1px solid #ccc; text-align: left; }
+  .items-table th { background: #e8e8e8; font-size: 11px; font-weight: 700; padding: 6px 8px; border: 1px solid #ccc; text-align: left; }
   .items-table th.r, .items-table td.r { text-align: right; }
-  .items-table th.c, .items-table td.c { text-align: center; width: 36px; }
-  .items-table td { padding: 8px 10px; border: 1px solid #ccc; font-size: 12px; vertical-align: top; }
+  .items-table th.c, .items-table td.c { text-align: center; width: 28px; }
+  .items-table td { padding: 5px 8px; border: 1px solid #ccc; font-size: 11px; vertical-align: top; }
+  .items-table td .sub { font-size: 10px; color: #777; }
   .footer-split { display: flex; border: 1px solid #ccc; border-top: none; }
-  .footer-left { flex: 1; padding: 12px 10px; border-right: 1px solid #ccc; font-size: 12px; }
-  .footer-right { width: 260px; font-size: 12px; }
-  .totals-row { display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #ccc; }
-  .totals-row.bold { font-weight: 700; font-size: 13px; }
-  .sig-box { padding: 12px 10px; text-align: center; min-height: 80px; display: flex; flex-direction: column; justify-content: space-between; border-top: 1px solid #ccc; }
-  @media print { body { margin: 0; } .page { border: none; padding: 20px; max-width: 100%; } }
+  .footer-left { flex: 1; padding: 10px; border-right: 1px solid #ccc; font-size: 11px; }
+  .footer-right { width: 260px; font-size: 11px; }
+  .totals-row { display: flex; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid #ccc; }
+  .totals-row.bold { font-weight: 700; font-size: 12px; }
+  .sig-box { padding: 10px; text-align: center; min-height: 60px; display: flex; flex-direction: column; justify-content: space-between; border-top: 1px solid #ccc; }
+  @media print { body { margin: 0; } .page { border: none; padding: 16px; max-width: 100%; } }
 </style></head><body><div class="page">
   <div class="inv-header">
-    <div class="inv-header-left">
-      <img src="${logoUrl}" alt="Lens Men Logo" />
-      <div>
-        <div class="company-name">LENS MEN</div>
-        <div class="company-addr">flat no S3, 2nd floor, Sri Niketan Apartment, Sasi Nagar<br>Main road, Sasinagar Old no 7 new no 16, near Anbu Hospital, Velachery.<br>Chennai Tamil Nadu 600042<br>India<br>+919080086600<br>lensmen@live.com</div>
+    <img src="${logoUrl}" alt="Lensmen Logo" />
+    <div class="company-block">
+      <div class="company-name">LENSMEN RENTALS</div>
+      <div class="company-addr">Flat S3, 2nd floor, Sri Niketan Apt, Sasi Nagar Main Rd, Sasinagar (Old No.7, New No.16), near Anbu Hospital, Velachery, Chennai – 600042 &nbsp;|&nbsp; +91 90800 86600 &nbsp;|&nbsp; lensmen@live.com</div>
+    </div>
+    <div class="invoice-ref">
+      <div class="inv-num">INVOICE</div>
+      <div class="inv-meta">${invNo}<br>${invDate}</div>
+    </div>
+  </div>
+  <div class="info-row">
+    <div class="bill-to">
+      <div class="bill-to-label">Bill To</div>
+      <div class="bill-to-name">${order.userGstBusinessName || order.userName || '—'}</div>
+      ${order.userGstBusinessName && order.userGstBusinessName !== order.userName ? `<div style="font-size:11px;color:#555;margin-bottom:2px;">${order.userName}</div>` : ''}
+      <div class="bill-to-detail">
+        ${order.userMobile  ? order.userMobile  + '<br>' : ''}
+        ${order.userEmail   ? order.userEmail   + '<br>' : ''}
+        ${order.userAddress ? order.userAddress + '<br>' : ''}
+        ${order.userGstNumber ? `<span style="font-weight:700;color:#111;">GSTIN: ${order.userGstNumber}</span>` : ''}
       </div>
     </div>
-    <div class="tax-invoice-label">TAX INVOICE</div>
+    <div class="inv-meta-box">
+      <div class="inv-meta-row"><span class="lbl">Invoice #</span><span class="val">${invNo}</span></div>
+      <div class="inv-meta-row"><span class="lbl">Invoice Date</span><span class="val">${invDate}</span></div>
+      <div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invDate}</span></div>
+      <div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>
+    </div>
   </div>
-  <table class="meta-table">
-    <tr><td class="meta-label">#</td><td class="meta-val">${invNo}</td><td rowspan="4" style="width:50%"></td></tr>
-    <tr><td class="meta-label">Invoice Date</td><td class="meta-val">${invDate}</td></tr>
-    <tr><td class="meta-label">Terms</td><td class="meta-val">Due on Receipt</td></tr>
-    <tr><td class="meta-label">Due Date</td><td class="meta-val">${invDate}</td></tr>
-  </table>
-  <div class="bill-to-header">Bill To</div>
-  <div class="bill-to-name">${order.userName || '—'}</div>
   <table class="items-table">
-    <thead><tr><th class="c">#</th><th>Item &amp; Description</th><th class="r" style="width:70px">Qty</th><th class="r" style="width:90px">Rate</th><th class="r" style="width:90px">Amount</th></tr></thead>
+    <thead><tr><th class="c">#</th><th>Item &amp; Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:80px">Rate</th><th class="r" style="width:85px">Amount</th></tr></thead>
     <tbody>
       ${items.map((item, i) => {
-        const qty = item?.quantity || 1
+        const qty  = item?.quantity || 1
         const rate = (item?.pricePerDay || 0) * days
         const amt  = qty * rate
-        return `<tr><td class="c">${i+1}</td><td>${item?.name || 'Unknown'}<br><span style="font-size:11px;color:#666;">${days} day${days!==1?'s':''} rental</span></td><td class="r">${qty}.0</td><td class="r">${rate.toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td class="r">${amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
+        return `<tr><td class="c">${i+1}</td><td>${item?.name || 'Unknown'}<span class="sub"> &nbsp;${days} day${days!==1?'s':''} rental</span></td><td class="r">${qty}</td><td class="r">${rate.toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td class="r">${amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
       }).join('')}
     </tbody>
   </table>
   <div class="footer-split">
     <div class="footer-left">
-      <div style="margin-bottom:8px;"><div style="font-size:11px;color:#555;margin-bottom:2px;">Total In Words</div><div style="font-weight:700;font-style:italic;">${amountInWords(total)}</div></div>
-      <div style="margin-bottom:32px;"><div style="font-size:11px;color:#555;margin-bottom:2px;">Notes</div><div>${order.notes || 'Thanks for your business.'}</div></div>
-      <div style="font-size:11px;color:#555;margin-top:8px;">Customer Signature.</div>
+      <div style="margin-bottom:6px;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Total In Words</div><div style="font-weight:700;font-style:italic;">${amountInWords(total)}</div></div>
+      <div style="margin-bottom:24px;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Notes</div><div>${order.notes || 'Thanks for your business.'}</div></div>
+      <div style="font-size:10px;color:#555;margin-top:6px;">Customer Signature.</div>
     </div>
     <div class="footer-right">
       <div class="totals-row"><span>Sub Total</span><span>${subTotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
@@ -353,40 +371,40 @@ const InvoicesPage = () => {
   const overdueCount = allOrders.filter(o => invoiceStatus(o).overdue > 0).length
   const pendingCount = allOrders.filter(o => invoiceStatus(o).label === 'PENDING').length
 
-  // ── Order preview modal helpers ──────────────────────────────────────
+  // ── Order preview modal ──────────────────────────────────────────────
   const renderOrderPreview = () => {
     if (!previewOrder) return null
-    const o = previewOrder
-    const items       = o.items?.length ? o.items : [o.productId].filter(Boolean)
-    const isRejected  = o.status === 'Rejected'
-    const activeIdx   = isRejected ? -1 : MILESTONES.findIndex(m => m.statuses.includes(o.status))
-    const trackPct    = activeIdx >= 0 ? (activeIdx / (MILESTONES.length - 1)) * 100 : 0
-    const statusInfo  = ocfg(o.status)
+    const o          = previewOrder
+    const items      = o.items?.length ? o.items : [o.productId].filter(Boolean)
+    const isRejected = o.status === 'Rejected'
+    const activeIdx  = isRejected ? -1 : MILESTONES.findIndex(m => m.statuses.includes(o.status))
+    const trackPct   = activeIdx >= 0 ? (activeIdx / (MILESTONES.length - 1)) * 100 : 0
+    const statusInfo = ocfg(o.status)
+    const invStatus  = invoiceStatus(o)
+    const subtotal   = items.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * (o.totalDays || 1), 0)
 
     return (
       <Modal
         open
         onCancel={() => setPreviewOrder(null)}
         footer={null}
-        width={860}
+        width={820}
         destroyOnHidden
-        styles={{ body: { padding: '0 24px 24px' } }}
+        styles={{ body: { padding: 0 } }}
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingRight: 32 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Order Details</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: BRAND }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>Order Details</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: BRAND }}>
               {o.bookingCode || '#' + o._id?.slice(-8).toUpperCase()}
             </span>
             <span style={{
               fontSize: 11, fontWeight: 700, color: statusInfo.color,
               background: statusInfo.bg, border: `1px solid ${statusInfo.color}30`,
-              borderRadius: 6, padding: '2px 10px',
+              borderRadius: 20, padding: '2px 12px',
             }}>
               {statusInfo.label}
             </span>
-            <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
-              Placed {fmtShort(o.createdAt)}
-            </Text>
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>Placed {fmtShort(o.createdAt)}</span>
             <Button
               size="small" icon={<LinkOutlined />}
               style={{ marginLeft: 'auto', fontSize: 11 }}
@@ -397,135 +415,215 @@ const InvoicesPage = () => {
           </div>
         }
       >
-        {/* Status stepper */}
-        <div style={{ background: '#f8fafc', border: '1px solid #eef0f3', borderRadius: 14, padding: '18px 24px', marginBottom: 20, marginTop: 8 }}>
-          {isRejected ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#ef4444', fontSize: 18 }}>✕</span>
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>Rental Request Rejected</div>
-                {o.rejectionReason && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 2 }}>Reason: <em>"{o.rejectionReason}"</em></div>}
-              </div>
-            </div>
-          ) : (
-            <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '6%', right: '6%', top: 14, height: 3, background: '#e5e7eb', borderRadius: 2, zIndex: 0 }} />
-              <div style={{
-                position: 'absolute', left: '6%', top: 14, height: 3,
-                background: 'linear-gradient(90deg,#10b981,#1e1b4b)',
-                borderRadius: 2, zIndex: 1, width: `${trackPct * 0.88}%`, transition: 'width 0.5s',
-              }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
-                {MILESTONES.map((m, i) => {
-                  const done = i < activeIdx, active = i === activeIdx
-                  return (
-                    <div key={m.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                      <div style={{
-                        width: 30, height: 30, borderRadius: '50%',
-                        background: done ? '#10b981' : active ? NAVY : '#fff',
-                        border: done || active ? 'none' : '2px solid #e5e7eb',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700, color: done || active ? '#fff' : '#d1d5db',
-                        boxShadow: active ? `0 0 0 5px rgba(30,27,75,0.12)` : done ? '0 0 0 3px rgba(16,185,129,0.15)' : 'none',
-                      }}>
-                        {done ? '✓' : i + 1}
-                      </div>
-                      <span style={{ fontSize: 9, fontWeight: active ? 700 : done ? 600 : 500, color: done ? '#10b981' : active ? NAVY : '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-                        {m.label}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        <div style={{ padding: '0 24px 0' }}>
 
-        <Row gutter={20}>
-          {/* Equipment */}
-          <Col span={9}>
-            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Equipment</Text>
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {items.map((item, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, padding: 10, background: '#fafafa', borderRadius: 10, border: '1px solid #f0f0f0' }}>
-                  <img
-                    src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
-                    alt=""
-                    style={{ width: 44, height: 44, borderRadius: 7, objectFit: 'contain', background: '#fff', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }}
-                  />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
-                      {item?.name}
-                      {item?.quantity > 1 && (
-                        <span style={{ marginLeft: 5, fontSize: 10, fontWeight: 700, color: BRAND, background: '#fff7ed', padding: '1px 5px', borderRadius: 4 }}>×{item.quantity}</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>₹{item?.pricePerDay}/day</div>
+          {/* ── Status stepper ── */}
+          <div style={{ padding: '16px 0 20px' }}>
+            {isRejected ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fef2f2', borderRadius: 10, padding: '12px 16px' }}>
+                <span style={{ fontSize: 18, color: '#ef4444' }}>✕</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#991b1b', fontSize: 13 }}>Rental Request Rejected</div>
+                  {o.rejectionReason && <div style={{ fontSize: 12, color: '#b91c1c' }}>"{o.rejectionReason}"</div>}
+                </div>
+              </div>
+            ) : (
+              <div style={{ position: 'relative' }}>
+                <div style={{ position: 'absolute', left: '7%', right: '7%', top: 18, height: 3, background: '#e5e7eb', borderRadius: 2, zIndex: 0 }} />
+                <div style={{
+                  position: 'absolute', left: '7%', top: 18, height: 3,
+                  background: 'linear-gradient(90deg, #10b981, #1e1b4b)',
+                  borderRadius: 2, zIndex: 1,
+                  width: `${Math.max(0, trackPct * 0.86)}%`, transition: 'width 0.5s',
+                }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 2 }}>
+                  {MILESTONES.map((m, i) => {
+                    const done = i < activeIdx, active = i === activeIdx
+                    return (
+                      <div key={m.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%',
+                          background: done ? '#10b981' : active ? NAVY : '#fff',
+                          border: done || active ? 'none' : '2px solid #d1d5db',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 13, fontWeight: 700,
+                          color: done || active ? '#fff' : '#9ca3af',
+                          boxShadow: active ? `0 0 0 6px rgba(30,27,75,0.1)` : done ? '0 0 0 4px rgba(16,185,129,0.12)' : 'none',
+                        }}>
+                          {done ? '✓' : i + 1}
+                        </div>
+                        <span style={{
+                          fontSize: 9, fontWeight: active ? 800 : done ? 600 : 400,
+                          color: done ? '#10b981' : active ? NAVY : '#9ca3af',
+                          textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap',
+                        }}>
+                          {m.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Two info cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+            {/* Customer */}
+            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', border: '1px solid #e8edf2' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>CUSTOMER</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{o.userName}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: BRAND, marginTop: 3 }}>{o.userMobile}</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{o.userEmail}</div>
+              {o.userGstNumber && (
+                <div style={{ marginTop: 6, fontSize: 11, color: '#374151' }}>
+                  <span style={{ color: '#9ca3af', marginRight: 4 }}>GSTIN</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{o.userGstNumber}</span>
+                </div>
+              )}
+            </div>
+            {/* Rental Period */}
+            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', border: '1px solid #e8edf2' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>RENTAL PERIOD</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>
+                {fmtShort(o.startDate)} → {fmtShort(o.endDate)}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: BRAND, marginTop: 4 }}>
+                {o.totalDays || 1} day{(o.totalDays || 1) !== 1 ? 's' : ''}
+              </div>
+              {o.pickupLocation && (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
+                  📍 {o.pickupLocation}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Equipment table ── */}
+          <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e8edf2', marginBottom: 20 }}>
+            {/* Header */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 100px 60px 60px 110px',
+              background: NAVY, padding: '10px 16px', gap: 8,
+            }}>
+              {['EQUIPMENT', 'RATE/DAY', 'QTY', 'DAYS', 'AMOUNT'].map(h => (
+                <div key={h} style={{ fontSize: 10, fontWeight: 700, color: '#c7d2fe', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: h === 'EQUIPMENT' ? 'left' : 'right' }}>{h}</div>
+              ))}
+            </div>
+            {/* Rows */}
+            {items.map((item, i) => {
+              const lineAmt = (item.pricePerDay || 0) * (item.quantity || 1) * (o.totalDays || 1)
+              return (
+                <div key={i} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 100px 60px 60px 110px',
+                  padding: '12px 16px', gap: 8, alignItems: 'center',
+                  borderBottom: i < items.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  background: i % 2 === 0 ? '#fff' : '#fafafa',
+                }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <img
+                      src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)}
+                      alt=""
+                      style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'contain', background: '#f3f4f6', border: '1px solid #e5e7eb', padding: 2, flexShrink: 0 }}
+                      onError={e => { e.target.style.display = 'none' }}
+                    />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>{item.name}</span>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: 12, color: '#374151' }}>₹{(item.pricePerDay || 0).toLocaleString()}</div>
+                  <div style={{ textAlign: 'right', fontSize: 12, color: '#374151' }}>{item.quantity || 1}</div>
+                  <div style={{ textAlign: 'right', fontSize: 12, color: '#374151' }}>{o.totalDays || 1}</div>
+                  <div style={{ textAlign: 'right', fontSize: 13, fontWeight: 700, color: NAVY }}>₹{lineAmt.toLocaleString()}</div>
+                </div>
+              )
+            })}
+            {/* Totals */}
+            <div style={{ borderTop: '1px solid #e5e7eb', background: '#fafafa' }}>
+              {(o.discountAmount > 0) && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '8px 16px' }}>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>Subtotal</span>
+                  <span style={{ fontSize: 12, color: '#374151', minWidth: 80, textAlign: 'right' }}>₹{subtotal.toLocaleString()}</span>
+                </div>
+              )}
+              {(o.discountAmount > 0) && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '4px 16px' }}>
+                  <span style={{ fontSize: 12, color: '#10b981' }}>Discount {o.offerCode ? `(${o.offerCode})` : ''}</span>
+                  <span style={{ fontSize: 12, color: '#10b981', minWidth: 80, textAlign: 'right' }}>−₹{(o.discountAmount || 0).toLocaleString()}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 40, background: NAVY, borderRadius: 8, padding: '10px 20px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#c7d2fe', letterSpacing: '0.06em' }}>TOTAL</span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>₹{(o.totalPrice || 0).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Payment status strip ── */}
+          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 16px', border: '1px solid #e8edf2', marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 24 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>COLLECTED</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#10b981' }}>₹{(o.totalPaid || 0).toLocaleString()}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>PENDING</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: (o.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981' }}>
+                    ₹{(o.pendingAmount || 0).toLocaleString()}
                   </div>
                 </div>
-              ))}
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 800, padding: '5px 14px', borderRadius: 20,
+                background: invStatus.bg, color: invStatus.color,
+                border: `1px solid ${invStatus.color}30`,
+              }}>
+                {invStatus.label}
+              </span>
             </div>
-          </Col>
+            {(o.payments || []).length > 0 && (
+              <div style={{ marginTop: 10, borderTop: '1px solid #e8edf2', paddingTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(o.payments || []).map((p, i) => (
+                  <div key={i} style={{ fontSize: 11, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '3px 10px', color: '#374151' }}>
+                    <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{p.type}</span>
+                    <span style={{ color: '#9ca3af', margin: '0 4px' }}>·</span>
+                    <span>{p.mode}</span>
+                    <span style={{ color: '#9ca3af', margin: '0 4px' }}>·</span>
+                    <span style={{ fontWeight: 700 }}>₹{p.amount?.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-          {/* Logistics */}
-          <Col span={8}>
-            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Logistics</Text>
-            <div style={{ marginTop: 10, background: '#fafafa', borderRadius: 12, padding: 14, border: '1px solid #f0f0f0', marginBottom: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Pickup</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{fmtDate(o.startDate)}</div>
-                </div>
-                <ArrowRightOutlined style={{ color: '#d1d5db' }} />
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase' }}>Return</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{fmtDate(o.endDate)}</div>
-                </div>
-              </div>
-              <div style={{ borderTop: '1px dashed #e5e7eb', marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
-                <Text type="secondary" style={{ fontSize: 11 }}>Duration</Text>
-                <Text strong style={{ fontSize: 12 }}>{o.totalDays || 1} Day(s)</Text>
-              </div>
-            </div>
-            <Descriptions column={1} size="small" bordered style={{ borderRadius: 10 }}>
-              <Descriptions.Item label="Client">{o.userName}</Descriptions.Item>
-              <Descriptions.Item label="Mobile">{o.userMobile}</Descriptions.Item>
-              <Descriptions.Item label="Email">{o.userEmail}</Descriptions.Item>
-            </Descriptions>
-          </Col>
+        </div>
 
-          {/* Payment summary */}
-          <Col span={7}>
-            <Text strong style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Payment</Text>
-            <div style={{ marginTop: 10, background: NAVY, borderRadius: 12, padding: '18px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 10, color: '#93c5fd', fontWeight: 700, marginBottom: 4 }}>TOTAL</div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#fff' }}>₹{(o.totalPrice || 0).toLocaleString()}</div>
-            </div>
-            <div style={{ background: '#f9fafb', borderRadius: 10, padding: '10px 12px', border: '1px solid #f0f0f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Collected</Text>
-                <Text strong style={{ color: '#10b981', fontSize: 12 }}>₹{(o.totalPaid || 0).toLocaleString()}</Text>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Pending</Text>
-                <Text strong style={{ color: (o.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981', fontSize: 12 }}>
-                  ₹{(o.pendingAmount || 0).toLocaleString()}
-                </Text>
-              </div>
-              {(o.payments || []).map((p, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderTop: '1px solid #f0f0f0' }}>
-                  <Space size={4}>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase' }}>{p.type}</span>
-                    <span style={{ color: '#6b7280' }}>{p.mode}</span>
-                  </Space>
-                  <Text strong style={{ fontSize: 11 }}>₹{p.amount?.toLocaleString()}</Text>
-                </div>
-              ))}
-            </div>
-          </Col>
-        </Row>
+        {/* ── Action bar ── */}
+        <div style={{
+          borderTop: '1px solid #f0f0f0', padding: '14px 24px',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          background: '#fafafa', borderRadius: '0 0 12px 12px',
+        }}>
+          <Button icon={<PrinterOutlined />} onClick={() => printInvoice(o)}>
+            Print Invoice
+          </Button>
+          <Button
+            icon={<span style={{ fontSize: 13 }}>✉</span>}
+            onClick={() => { setPreviewOrder(null); navigate(`/admin/orders?orderId=${o._id}`) }}
+          >
+            Open in Orders
+          </Button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, color: statusInfo.color,
+              background: statusInfo.bg, border: `1px solid ${statusInfo.color}30`,
+              borderRadius: 20, padding: '4px 14px', display: 'inline-flex', alignItems: 'center',
+            }}>
+              {statusInfo.label}
+            </span>
+          </div>
+        </div>
       </Modal>
     )
   }

@@ -38,7 +38,7 @@ const Layout = ({ children }) => {
   const [openMenu, setOpenMenu] = useState(null)
   const [dropdownPos, setDropdownPos] = useState({ left: 0, top: 0 })
 
-  // Effective nav items: use mainMenu if set, else fall back to categories
+  // Use mainMenu if configured, else fall back to categories
   const navItems = (mainMenu?.items?.length > 0)
     ? mainMenu.items
     : [

@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react'
 import {
   Table, Button, Tag, Drawer, Form, Input, InputNumber, Select,
-  Upload, Space, Popconfirm, Image, Tooltip, Divider,
+  Upload, Space, Popconfirm, Image, Tooltip, Divider, Modal, Spin,
 } from 'antd'
 import {
   EditOutlined, DeleteOutlined, PlusOutlined, SearchOutlined,
   BarcodeOutlined, CheckCircleOutlined, InboxOutlined, SyncOutlined,
-  FilterOutlined,
+  FilterOutlined, ApartmentOutlined, ToolOutlined, ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
@@ -62,7 +62,7 @@ const GalleryGrid = ({ existingUrls = [], newFiles = [], onRemoveExisting, onRem
 }
 
 // ── Product Form body (shared by Add + Edit) ──────────────────────────
-const ProductForm = ({ form, totalQty, setTotalQty, imagePreview, onImageChange, isAdd,
+const ProductForm = ({ form, imagePreview, onImageChange, isAdd,
   galleryFiles, onAddGallery, onRemoveGallery,
   existingGallery, onRemoveExistingGallery }) => (
   <Form form={form} layout="vertical">
@@ -120,30 +120,90 @@ const ProductForm = ({ form, totalQty, setTotalQty, imagePreview, onImageChange,
       <TextArea rows={3} placeholder="Features, accessories included, handling notes…" />
     </Form.Item>
 
-    <Divider orientation="left" style={dividerStyle}>Inventory</Divider>
-
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-      <Form.Item label="Total Units Owned" name="totalQuantity" style={{ marginBottom: 0 }}>
-        <InputNumber
-          size="large" min={1} style={{ width: '100%' }}
-          onChange={v => {
-            setTotalQty(v || 1)
-            const cur = form.getFieldValue('availableQuantity') || 0
-            if (cur > (v || 1)) form.setFieldValue('availableQuantity', v || 1)
-          }}
-        />
-      </Form.Item>
-      <Form.Item label="Available Now" name="availableQuantity" style={{ marginBottom: 0 }}>
-        <InputNumber size="large" min={0} max={totalQty} style={{ width: '100%' }} />
-      </Form.Item>
-    </div>
-
   </Form>
 )
+
+// ── Unit status config ────────────────────────────────────────────────
+const UNIT_STATUS = {
+  available:   { color: '#10b981', bg: '#f0fdf4', border: '#bbf7d0', label: 'Available', icon: '●' },
+  rented:      { color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', label: 'Rented Out', icon: '◐' },
+  maintenance: { color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', label: 'Maintenance', icon: '⚙' },
+  damaged:     { color: '#ef4444', bg: '#fef2f2', border: '#fecaca', label: 'Damaged', icon: '✕' },
+}
 
 // ── Main page ─────────────────────────────────────────────────────────
 const AdminInventory = () => {
   const { adminProductList, fetchAdminData, fetchProducts, API_URL } = useGlobal()
+
+  // Units drawer state
+  const [unitsProduct,  setUnitsProduct]  = useState(null)   // product whose units are shown
+  const [units,         setUnits]         = useState([])
+  const [unitsLoading,  setUnitsLoading]  = useState(false)
+  const [addUnitOpen,   setAddUnitOpen]   = useState(false)
+  const [bulkCount,     setBulkCount]     = useState(1)
+  const [addingUnits,   setAddingUnits]   = useState(false)
+  const [editUnit,      setEditUnit]      = useState(null)   // unit being edited inline
+  const [unitFilter,    setUnitFilter]    = useState('all')
+
+  const fetchUnits = async (product) => {
+    setUnitsLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/products/${product._id}/units`)
+      setUnits(await res.json())
+    } catch { toast.error('Failed to load units') }
+    finally { setUnitsLoading(false) }
+  }
+
+  const openUnits = (product) => {
+    setUnitsProduct(product)
+    setUnitFilter('all')
+    fetchUnits(product)
+  }
+
+  const handleAddUnits = async () => {
+    if (!unitsProduct) return
+    setAddingUnits(true)
+    try {
+      const res = await fetch(`${API_URL}/products/${unitsProduct._id}/units/bulk`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: bulkCount }),
+      })
+      if (res.ok) {
+        toast.success(`${bulkCount} unit${bulkCount > 1 ? 's' : ''} added`)
+        setAddUnitOpen(false); setBulkCount(1)
+        await fetchUnits(unitsProduct)
+        fetchAdminData('/admin/all-products')
+      }
+    } catch { toast.error('Failed') }
+    finally { setAddingUnits(false) }
+  }
+
+  const handleUpdateUnit = async (unit, changes) => {
+    try {
+      const res = await fetch(`${API_URL}/products/${unitsProduct._id}/units/${unit._id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      })
+      if (res.ok) {
+        await fetchUnits(unitsProduct)
+        fetchAdminData('/admin/all-products')
+        setEditUnit(null)
+      }
+    } catch { toast.error('Failed to update unit') }
+  }
+
+  const handleDeleteUnit = async (unit) => {
+    try {
+      const res = await fetch(`${API_URL}/products/${unitsProduct._id}/units/${unit._id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Unit removed')
+        await fetchUnits(unitsProduct)
+        fetchAdminData('/admin/all-products')
+      }
+    } catch { toast.error('Failed') }
+  }
+
+  const filteredUnits = units.filter(u => unitFilter === 'all' || u.status === unitFilter)
 
   // Search / filter state
   const [search,         setSearch]         = useState('')
@@ -173,7 +233,6 @@ const AdminInventory = () => {
   const [editingProduct, setEditingProduct] = useState(null)
   const [editForm]  = Form.useForm()
   const [saving,    setSaving]    = useState(false)
-  const [editQty,   setEditQty]   = useState(1)
   const [editGallery,    setEditGallery]    = useState([])
   const [editGalleryFiles, setEditGalleryFiles] = useState([])
   const [editImagePreview, setEditImagePreview] = useState('')
@@ -182,27 +241,22 @@ const AdminInventory = () => {
   const [addOpen,    setAddOpen]    = useState(false)
   const [addForm]    = Form.useForm()
   const [adding,     setAdding]     = useState(false)
-  const [addQty,     setAddQty]     = useState(1)
   const [addFile,    setAddFile]    = useState(null)
   const [addPreview, setAddPreview] = useState('')
   const [galleryFiles, setGalleryFiles] = useState([])
 
   // ── Open edit ──────────────────────────────────────────────────────
   const openEdit = (product) => {
-    const total = product.totalQuantity || 1
-    setEditQty(total)
     setEditGallery(product.galleryImages || [])
     setEditGalleryFiles([])
     setEditImagePreview(getImageUrl(product.imageUrl))
     setEditingProduct({ ...product, newImage: null })
     editForm.setFieldsValue({
-      name:              product.name,
-      pricePerDay:       product.pricePerDay,
-      description:       product.description,
-      category:          product.category,
-      sku:               product.sku || '',
-      totalQuantity:     total,
-      availableQuantity: product.availableQuantity ?? total,
+      name:        product.name,
+      pricePerDay: product.pricePerDay,
+      description: product.description,
+      category:    product.category,
+      sku:         product.sku || '',
     })
   }
 
@@ -230,8 +284,7 @@ const AdminInventory = () => {
   // ── Add product ────────────────────────────────────────────────────
   const openAdd = () => {
     addForm.resetFields()
-    addForm.setFieldsValue({ totalQuantity: 1, availableQuantity: 1 })
-    setAddQty(1); setAddFile(null); setAddPreview(''); setGalleryFiles([])
+    setAddFile(null); setAddPreview(''); setGalleryFiles([])
     setAddOpen(true)
   }
 
@@ -330,11 +383,22 @@ const AdminInventory = () => {
       render: (_, item) => {
         const avail = item.availableQuantity ?? (item.isAvailable ? 1 : 0)
         const total = item.totalQuantity || 1
+        const color = avail === total ? '#10b981' : avail > 0 ? '#f59e0b' : '#ef4444'
         return (
-          <Tooltip title={`${avail} of ${total} available`}>
-            <span style={{ fontWeight: 600, color: avail > 0 ? '#10b981' : '#ef4444', fontSize: 13 }}>
-              {avail}<span style={{ color: '#d1d5db', fontWeight: 400 }}> / {total}</span>
-            </span>
+          <Tooltip title={`${avail} available · ${total - avail} rented/out`}>
+            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}
+              onClick={() => openUnits(item)}>
+              <span style={{ fontWeight: 700, color, fontSize: 13 }}>
+                {avail}<span style={{ color: '#d1d5db', fontWeight: 400 }}> / {total}</span>
+              </span>
+              {total > 1 && (
+                <div style={{ display: 'flex', gap: 2 }}>
+                  {Array.from({ length: total }).map((_, i) => (
+                    <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i < avail ? '#10b981' : '#e5e7eb' }} />
+                  ))}
+                </div>
+              )}
+            </div>
           </Tooltip>
         )
       },
@@ -354,6 +418,14 @@ const AdminInventory = () => {
       align: 'center',
       render: (_, item) => (
         <Space>
+          <Tooltip title="Manage unit IDs & status">
+            <Button
+              icon={<ApartmentOutlined />}
+              size="small"
+              onClick={() => openUnits(item)}
+              style={{ color: NAVY, borderColor: '#c7d2fe' }}
+            />
+          </Tooltip>
           <Button icon={<EditOutlined />} size="small" onClick={() => openEdit(item)} />
           <Popconfirm
             title="Delete this product?"
@@ -455,8 +527,6 @@ const AdminInventory = () => {
       >
         <ProductForm
           form={addForm}
-          totalQty={addQty}
-          setTotalQty={setAddQty}
           imagePreview={addPreview}
           onImageChange={file => { setAddFile(file); setAddPreview(URL.createObjectURL(file)); return false }}
           isAdd
@@ -482,8 +552,6 @@ const AdminInventory = () => {
         {editingProduct && (
           <ProductForm
             form={editForm}
-            totalQty={editQty}
-            setTotalQty={setEditQty}
             isAdd={false}
             imagePreview={editImagePreview}
             onImageChange={file => {
@@ -499,6 +567,178 @@ const AdminInventory = () => {
           />
         )}
       </Drawer>
+
+      {/* ── Units Drawer ───────────────────────────────────────────── */}
+      <Drawer
+        open={!!unitsProduct}
+        onClose={() => { setUnitsProduct(null); setEditUnit(null) }}
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ApartmentOutlined style={{ color: NAVY }} />
+            <span style={{ fontWeight: 700, color: NAVY }}>
+              Unit IDs — {unitsProduct?.name}
+            </span>
+            <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#9ca3af', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4 }}>
+              {unitsProduct?.sku}
+            </span>
+          </div>
+        }
+        width={520}
+        extra={
+          <Button type="primary" icon={<PlusOutlined />}
+            onClick={() => setAddUnitOpen(true)}
+            style={{ background: NAVY, borderColor: NAVY }}>
+            Add Units
+          </Button>
+        }
+        destroyOnHidden
+      >
+        {/* Stock summary bar */}
+        {unitsProduct && !unitsLoading && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            {Object.entries(UNIT_STATUS).map(([key, cfg]) => {
+              const count = units.filter(u => u.status === key).length
+              return (
+                <button key={key}
+                  onClick={() => setUnitFilter(unitFilter === key ? 'all' : key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                    borderRadius: 20, border: `1px solid ${unitFilter === key ? cfg.color : cfg.border}`,
+                    background: unitFilter === key ? cfg.color : cfg.bg,
+                    color: unitFilter === key ? '#fff' : cfg.color,
+                    cursor: 'pointer', fontWeight: 700, fontSize: 12, transition: 'all 0.15s',
+                  }}>
+                  <span>{cfg.icon}</span>
+                  <span>{cfg.label}</span>
+                  <span style={{ background: unitFilter === key ? 'rgba(255,255,255,0.3)' : cfg.color + '22', borderRadius: 10, padding: '0 6px', fontSize: 11 }}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {unitsLoading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spin /></div>
+        ) : filteredUnits.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: '#9ca3af' }}>
+            {units.length === 0
+              ? <><div style={{ fontSize: 32, marginBottom: 12 }}>📦</div><div style={{ fontWeight: 600 }}>No units yet</div><div style={{ fontSize: 12, marginTop: 4 }}>Click "Add Units" to create unit IDs</div></>
+              : 'No units match this filter'
+            }
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {filteredUnits.map(unit => {
+              const cfg = UNIT_STATUS[unit.status] || UNIT_STATUS.available
+              const isEditing = editUnit?._id === unit._id
+              return (
+                <div key={unit._id} style={{
+                  border: `1px solid ${isEditing ? cfg.color : '#e5e7eb'}`,
+                  borderRadius: 10, background: isEditing ? cfg.bg : '#fff',
+                  overflow: 'hidden', transition: 'all 0.15s',
+                }}>
+                  {/* Unit header row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px' }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                      background: cfg.bg, border: `1px solid ${cfg.border}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, color: cfg.color, fontWeight: 700,
+                    }}>{cfg.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, color: NAVY, fontSize: 13, fontFamily: 'monospace' }}>{unit.unitCode}</div>
+                      {unit.serialNumber && (
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>SN: {unit.serialNumber}</div>
+                      )}
+                    </div>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
+                      background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
+                    }}>{cfg.label}</span>
+                    <Button size="small" icon={<EditOutlined />}
+                      onClick={() => setEditUnit(isEditing ? null : { ...unit })}
+                      style={{ color: isEditing ? cfg.color : undefined }} />
+                    <Popconfirm title="Remove this unit?" okType="danger" okText="Remove" onConfirm={() => handleDeleteUnit(unit)}>
+                      <Button size="small" icon={<DeleteOutlined />} danger />
+                    </Popconfirm>
+                  </div>
+
+                  {/* Inline edit panel */}
+                  {isEditing && (
+                    <div style={{ borderTop: `1px solid ${cfg.border}`, padding: '12px 14px', background: '#fafafa' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Status</div>
+                          <Select size="small" style={{ width: '100%' }} value={editUnit.status}
+                            onChange={v => setEditUnit(p => ({ ...p, status: v }))}
+                            options={Object.entries(UNIT_STATUS).map(([k, c]) => ({ value: k, label: c.label }))} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Condition</div>
+                          <Select size="small" style={{ width: '100%' }} value={editUnit.condition || 'Good'}
+                            onChange={v => setEditUnit(p => ({ ...p, condition: v }))}
+                            options={['Excellent', 'Good', 'Fair', 'Needs Service'].map(c => ({ value: c, label: c }))} />
+                        </div>
+                      </div>
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Serial / Asset Number</div>
+                        <Input size="small" placeholder="Physical serial or asset tag"
+                          value={editUnit.serialNumber}
+                          onChange={e => setEditUnit(p => ({ ...p, serialNumber: e.target.value }))} />
+                      </div>
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Notes</div>
+                        <Input.TextArea rows={2} size="small" placeholder="Any remarks…"
+                          value={editUnit.notes}
+                          onChange={e => setEditUnit(p => ({ ...p, notes: e.target.value }))} />
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Button size="small" type="primary"
+                          style={{ background: cfg.color, borderColor: cfg.color }}
+                          onClick={() => handleUpdateUnit(unit, { status: editUnit.status, serialNumber: editUnit.serialNumber, condition: editUnit.condition, notes: editUnit.notes })}>
+                          Save
+                        </Button>
+                        <Button size="small" onClick={() => setEditUnit(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Notes preview when not editing */}
+                  {!isEditing && unit.notes && (
+                    <div style={{ borderTop: '1px solid #f3f4f6', padding: '6px 14px', fontSize: 11, color: '#6b7280', background: '#fafafa' }}>
+                      {unit.notes}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Drawer>
+
+      {/* ── Add Units Modal ────────────────────────────────────────────── */}
+      <Modal
+        open={addUnitOpen}
+        onCancel={() => { setAddUnitOpen(false); setBulkCount(1) }}
+        onOk={handleAddUnits}
+        okText={`Add ${bulkCount} Unit${bulkCount > 1 ? 's' : ''}`}
+        okButtonProps={{ style: { background: NAVY, borderColor: NAVY }, loading: addingUnits }}
+        title={<span style={{ color: NAVY, fontWeight: 700 }}>Add Units to {unitsProduct?.name}</span>}
+        width={380}
+        centered
+      >
+        <div style={{ padding: '12px 0' }}>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
+            Each unit gets a unique ID (e.g. <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{unitsProduct?.sku}-U{String((units.length || 0) + 1).padStart(2, '0')}</code>)
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>How many units to add?</div>
+          <InputNumber
+            min={1} max={50} value={bulkCount} onChange={v => setBulkCount(v || 1)}
+            size="large" style={{ width: '100%' }}
+            addonBefore="Units"
+          />
+        </div>
+      </Modal>
     </div>
   )
 }

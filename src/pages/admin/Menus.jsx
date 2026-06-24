@@ -1,649 +1,703 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
-  Button, Input, Select, Drawer, Form, Popconfirm,
-  Tag, Tooltip, Divider, Empty, Spin,
+  Button, Input, Select, Drawer, Form,
+  Popconfirm, Tag, Tooltip, Empty, Spin, Modal,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined,
   LinkOutlined, AppstoreOutlined, ShoppingOutlined,
-  MenuOutlined, PlusCircleOutlined, HolderOutlined,
+  HolderOutlined, MenuOutlined, PlusCircleOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
-import PageHeader from '../../components/PageHeader'
+
+const API_URL = import.meta.env.VITE_API_URL
 
 const NAVY  = '#1e1b4b'
 const BRAND = '#E5550F'
 
 const TYPE_META = {
-  all:      { label: 'All Products', color: 'purple',  icon: <AppstoreOutlined /> },
-  category: { label: 'Category',     color: 'blue',    icon: <MenuOutlined /> },
-  product:  { label: 'Product',      color: 'green',   icon: <ShoppingOutlined /> },
-  url:      { label: 'Custom URL',   color: 'default', icon: <LinkOutlined /> },
+  all:      { label: 'All Products', color: 'purple', icon: <AppstoreOutlined /> },
+  category: { label: 'Category',     color: 'blue',   icon: <MenuOutlined /> },
+  product:  { label: 'Product',      color: 'green',  icon: <ShoppingOutlined /> },
+  url:      { label: 'Custom URL',   color: 'default',icon: <LinkOutlined /> },
 }
 
-const emptyItem = () => ({
+const POSITION_META = {
+  'top-nav': { label: 'Top Nav',  color: '#f59e0b', bg: '#fffbeb' },
+  'sidebar':  { label: 'Sidebar', color: '#8b5cf6', bg: '#f5f3ff' },
+  '':         { label: 'None',    color: '#9ca3af', bg: '#f9fafb' },
+}
+
+const itemRoute = (item) => {
+  if (item.type === 'all')      return '/ (all products)'
+  if (item.type === 'category') return `?category=${item.categoryName || '…'}`
+  if (item.type === 'product')  return `?product=${item.productName || '…'}`
+  if (item.type === 'url')      return item.url || '…'
+  return ''
+}
+
+const slugify = (str) =>
+  str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+const newItem = () => ({
+  _id: String(Date.now() + Math.random()),
   label: '', type: 'category', categoryName: '',
-  productId: null, productName: '', url: '', imageUrl: '',
+  productId: null, productName: '', url: '', imageUrl: '', children: [],
 })
 
-// ── Draggable Item Row ─────────────────────────────────────────────────────
-const ItemRow = ({
-  item, index, isDragging, isOver,
-  onDragStart, onDragOver, onDrop, onDragEnd,
-  onEdit, onDelete, onAddChild, isChild = false,
-}) => (
-  <div
-    onDragOver={e => onDragOver(e, index)}
-    onDrop={e => onDrop(e, index)}
-    style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: isChild ? '8px 10px 8px 28px' : '10px 12px',
-      background: isDragging ? '#f0f1f7' : isOver ? '#fff7ed' : (isChild ? '#fafafa' : '#fff'),
-      borderBottom: '1px solid #f3f4f6',
-      borderLeft: isOver
-        ? `3px solid ${BRAND}`
-        : isChild ? '3px solid #e5e7eb' : '3px solid transparent',
-      opacity: isDragging ? 0.45 : 1,
-      transition: 'background 0.1s, border-color 0.1s',
-      userSelect: 'none',
-    }}
-  >
-    {/* Drag handle — only this element is draggable */}
+// ── Item row (top-level) ──────────────────────────────────────────────────
+const ItemRow = ({ item, index, dragIdx, overIdx, onDragStart, onDragOver, onDrop, onDragEnd, onEdit, onDelete, onAddChild }) => {
+  const meta = TYPE_META[item.type] || TYPE_META.url
+  const isDragging = dragIdx === index
+  const isOver     = overIdx  === index
+
+  return (
     <div
-      draggable
-      onDragStart={e => onDragStart(e, index)}
-      onDragEnd={onDragEnd}
-      style={{ color: '#9ca3af', fontSize: 16, cursor: 'grab', display: 'flex', alignItems: 'center', flexShrink: 0, padding: '2px 4px' }}
-      title="Drag to reorder"
+      onDragOver={e => { e.preventDefault(); onDragOver(index) }}
+      onDrop={e => { e.preventDefault(); onDrop(index) }}
     >
-      <HolderOutlined />
-    </div>
+      {/* Parent row */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', borderRadius: 10,
+        border: `1.5px solid ${isOver ? BRAND : '#e5e7eb'}`,
+        background: isDragging ? '#fff7ed' : '#fff',
+        opacity: isDragging ? 0.5 : 1,
+        marginBottom: item.children?.length ? 0 : 8,
+        borderBottom: item.children?.length ? 'none' : undefined,
+        borderBottomLeftRadius: item.children?.length ? 0 : 10,
+        borderBottomRightRadius: item.children?.length ? 0 : 10,
+      }}>
+        <div
+          draggable
+          onDragStart={e => onDragStart(e, index)}
+          onDragEnd={onDragEnd}
+          style={{ cursor: 'grab', color: '#d1d5db', fontSize: 14, flexShrink: 0 }}
+        >
+          <HolderOutlined />
+        </div>
 
-    {/* Label + meta */}
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontWeight: 600, fontSize: 13, color: NAVY, display: 'flex', alignItems: 'center', gap: 6 }}>
-        {item.label}
-        <Tag color={TYPE_META[item.type]?.color} style={{ fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
-          {TYPE_META[item.type]?.label}
-        </Tag>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: NAVY, fontSize: 13 }}>
+              {item.label || <em style={{ color: '#d1d5db', fontWeight: 400 }}>No label</em>}
+            </span>
+            <Tag color={meta.color} icon={meta.icon} style={{ fontSize: 11, margin: 0, borderRadius: 20 }}>
+              {meta.label}
+            </Tag>
+          </div>
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>
+            → {itemRoute(item)}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          <Tooltip title="Add sub-item">
+            <Button
+              type="text" size="small"
+              icon={<PlusCircleOutlined style={{ color: '#9ca3af' }} />}
+              onClick={() => onAddChild(index)}
+              style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28 }}
+            />
+          </Tooltip>
+          <Tooltip title="Edit">
+            <Button
+              type="text" size="small" icon={<EditOutlined style={{ color: '#9ca3af' }} />}
+              onClick={() => onEdit(index, null)}
+              style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28 }}
+            />
+          </Tooltip>
+          <Popconfirm title="Remove this item?" onConfirm={() => onDelete(index)} okText="Remove" okButtonProps={{ danger: true }}>
+            <Button
+              type="text" size="small" danger icon={<DeleteOutlined />}
+              style={{ border: '1px solid #fee2e2', borderRadius: 8, width: 28, height: 28 }}
+            />
+          </Popconfirm>
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {item.type === 'category' && item.categoryName ? `→ ?category=${item.categoryName}` : ''}
-        {item.type === 'product'  && item.productName  ? `→ /product/ ${item.productName}` : ''}
-        {item.type === 'url'      && item.url          ? `→ ${item.url}` : ''}
-        {item.type === 'all'                           ? '→ / (all products)' : ''}
-      </div>
+
+      {/* Children */}
+      {item.children?.map((child, ci) => (
+        <div key={child._id || ci} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 14px 8px 40px',
+          background: '#fafafa',
+          border: '1.5px solid #e5e7eb',
+          borderTop: 'none',
+          marginBottom: ci === item.children.length - 1 ? 8 : 0,
+          borderBottomLeftRadius:  ci === item.children.length - 1 ? 10 : 0,
+          borderBottomRightRadius: ci === item.children.length - 1 ? 10 : 0,
+        }}>
+          <div style={{ color: '#e5e7eb', fontSize: 13, flexShrink: 0 }}>
+            <HolderOutlined />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, color: '#374151', fontSize: 13 }}>{child.label}</span>
+              <Tag color={(TYPE_META[child.type] || TYPE_META.url).color} style={{ fontSize: 10, margin: 0, borderRadius: 20 }}>
+                {(TYPE_META[child.type] || TYPE_META.url).label}
+              </Tag>
+            </div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>→ {itemRoute(child)}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+            <Tooltip title="Edit">
+              <Button type="text" size="small" icon={<EditOutlined style={{ color: '#9ca3af' }} />}
+                onClick={() => onEdit(index, ci)}
+                style={{ border: '1px solid #e5e7eb', borderRadius: 8, width: 28, height: 28 }} />
+            </Tooltip>
+            <Popconfirm title="Remove sub-item?" onConfirm={() => onDelete(index, ci)} okText="Remove" okButtonProps={{ danger: true }}>
+              <Button type="text" size="small" danger icon={<DeleteOutlined />}
+                style={{ border: '1px solid #fee2e2', borderRadius: 8, width: 28, height: 28 }} />
+            </Popconfirm>
+          </div>
+        </div>
+      ))}
     </div>
+  )
+}
 
-    {/* Actions */}
-    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-      {!isChild && (
-        <Tooltip title="Add submenu item">
-          <Button
-            size="small" icon={<PlusCircleOutlined />}
-            onClick={() => onAddChild(index)}
-            style={{ color: BRAND, borderColor: BRAND }}
-          />
-        </Tooltip>
-      )}
-      <Tooltip title="Edit">
-        <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(index)} />
-      </Tooltip>
-      <Popconfirm
-        title="Remove this item?"
-        onConfirm={() => onDelete(index)}
-        okText="Remove" okButtonProps={{ danger: true }}
-      >
-        <Button size="small" icon={<DeleteOutlined />} danger />
-      </Popconfirm>
-    </div>
-  </div>
-)
+// ── Main ──────────────────────────────────────────────────────────────────
+export default function Menus() {
+  const { categoriesData, adminProductList } = useGlobal()
 
-// ── Main component ─────────────────────────────────────────────────────────
-const Menus = () => {
-  const { API_URL, categories, products, fetchMainMenu, fetchSidebarMenu } = useGlobal()
-  const [menus,         setMenus]         = useState([])
-  const [loading,       setLoading]       = useState(true)
-  const [selectedId,    setSelectedId]    = useState(null)
-  const [editMenu,      setEditMenu]      = useState(null)
-  const [saving,        setSaving]        = useState(false)
-  const [seeding,       setSeeding]       = useState(false)
-  const [seedingSidebar, setSeedingSidebar] = useState(false)
-  const [drawerOpen,    setDrawerOpen]    = useState(false)
-  const [drawerItem,    setDrawerItem]    = useState(emptyItem())
-  const [drawerCtx,     setDrawerCtx]     = useState(null)
-  const [newMenuOpen,   setNewMenuOpen]   = useState(false)
-  const [newMenuName,   setNewMenuName]   = useState('')
-  const [newMenuHandle, setNewMenuHandle] = useState('')
-  const [productSearch, setProductSearch] = useState('')
+  const [menus,       setMenus]       = useState([])
+  const [loading,     setLoading]     = useState(false)
+  const [selected,    setSelected]    = useState(null)   // full menu object being edited
+  const [items,       setItems]       = useState([])
+  const [saving,      setSaving]      = useState(false)
+  const [menuTitle,   setMenuTitle]   = useState('')
+  const [menuPos,     setMenuPos]     = useState('')
 
-  // Drag state: { level: 'top', idx } or { level: 'child', parentIdx, idx }
-  const dragFrom    = useRef(null)
-  const [dragOver,  setDragOver] = useState(null)
+  // create-menu modal
+  const [newModal,    setNewModal]    = useState(false)
+  const [newTitle,    setNewTitle]    = useState('')
+  const [newHandle,   setNewHandle]   = useState('')
+  const [newPos,      setNewPos]      = useState('')
+  const [creating,    setCreating]    = useState(false)
 
-  useEffect(() => { load() }, [])
+  // item drawer
+  const [drawerOpen,     setDrawerOpen]     = useState(false)
+  const [editParent,     setEditParent]     = useState(null)
+  const [editChild,      setEditChild]      = useState(null)
+  const [form]           = Form.useForm()
+  const [imgUploading,   setImgUploading]   = useState(false)
+  const [itemImageUrl,   setItemImageUrl]   = useState('')
 
-  const load = async () => {
+  // drag
+  const [dragIdx, setDragIdx] = useState(null)
+  const [overIdx, setOverIdx] = useState(null)
+
+  // ── fetch list ────────────────────────────────────────────────────────
+  useEffect(() => { fetchMenus() }, [])
+
+  const fetchMenus = async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`${API_URL}/menus`)
-      const data = await res.json()
-      setMenus(Array.isArray(data) ? data : [])
-      if (data.length > 0 && !selectedId) selectMenu(data[0])
-    } catch { toast.error('Failed to load menus') }
-    finally { setLoading(false) }
+      const res = await fetch(`${API_URL}/menus`)
+      if (res.ok) {
+        const data = await res.json()
+        setMenus(data)
+        if (data.length > 0 && !selected) selectMenu(data[0])
+      }
+    } catch {}
+    setLoading(false)
   }
 
   const selectMenu = (menu) => {
-    setSelectedId(menu._id)
-    setEditMenu(JSON.parse(JSON.stringify(menu)))
+    setSelected(menu)
+    setItems(menu.items || [])
+    setMenuTitle(menu.title || '')
+    setMenuPos(menu.position || '')
   }
 
-  // ── Drag handlers — top-level items ─────────────────────────────────────
-  const onTopDragStart = (e, idx) => {
-    dragFrom.current = { level: 'top', idx }
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', `top:${idx}`)
-  }
-  const onTopDragOver = (e, idx) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (dragOver?.level !== 'top' || dragOver?.idx !== idx) {
-      setDragOver({ level: 'top', idx })
-    }
-  }
-  const onTopDrop = (e, toIdx) => {
-    e.preventDefault()
-    const from = dragFrom.current
-    if (!from || from.level !== 'top' || from.idx === toIdx) { cleanup(); return }
-    const updated = JSON.parse(JSON.stringify(editMenu))
-    const [moved] = updated.items.splice(from.idx, 1)
-    updated.items.splice(toIdx, 0, moved)
-    setEditMenu(updated)
-    cleanup()
-  }
-
-  // ── Drag handlers — child items within a parent ──────────────────────────
-  const onChildDragStart = (e, parentIdx, childIdx) => {
-    dragFrom.current = { level: 'child', parentIdx, idx: childIdx }
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', `child:${parentIdx}:${childIdx}`)
-    e.stopPropagation()
-  }
-  const onChildDragOver = (e, parentIdx, childIdx) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    if (dragOver?.level !== 'child' || dragOver?.parentIdx !== parentIdx || dragOver?.idx !== childIdx) {
-      setDragOver({ level: 'child', parentIdx, idx: childIdx })
-    }
-  }
-  const onChildDrop = (e, parentIdx, toIdx) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const from = dragFrom.current
-    if (!from || from.level !== 'child' || from.parentIdx !== parentIdx || from.idx === toIdx) { cleanup(); return }
-    const updated = JSON.parse(JSON.stringify(editMenu))
-    const children = updated.items[parentIdx].children
-    const [moved] = children.splice(from.idx, 1)
-    children.splice(toIdx, 0, moved)
-    setEditMenu(updated)
-    cleanup()
-  }
-
-  const cleanup = () => { dragFrom.current = null; setDragOver(null) }
-
-  const isDraggingTop   = (idx) => dragFrom.current?.level === 'top' && dragFrom.current?.idx === idx
-  const isDraggingChild = (pIdx, cIdx) => dragFrom.current?.level === 'child' && dragFrom.current?.parentIdx === pIdx && dragFrom.current?.idx === cIdx
-  const isOverTop       = (idx) => dragOver?.level === 'top' && dragOver?.idx === idx
-  const isOverChild     = (pIdx, cIdx) => dragOver?.level === 'child' && dragOver?.parentIdx === pIdx && dragOver?.idx === cIdx
-
-  // ── Persistence ──────────────────────────────────────────────────────────
-  const seedMain = async () => {
-    setSeeding(true)
-    try {
-      const res  = await fetch(`${API_URL}/menus/seed-main`, { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) { toast.success('Main menu seeded from categories!'); await load(); fetchMainMenu() }
-      else toast.error(data.message || 'Failed')
-    } catch { toast.error('Network error') }
-    finally { setSeeding(false) }
-  }
-
-  const seedSidebar = async () => {
-    setSeedingSidebar(true)
-    try {
-      const res  = await fetch(`${API_URL}/menus/seed-sidebar`, { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) { toast.success('Sidebar menu seeded from categories!'); await load(); fetchSidebarMenu() }
-      else toast.error(data.message || 'Failed')
-    } catch { toast.error('Network error') }
-    finally { setSeedingSidebar(false) }
-  }
-
-  const createMenu = async () => {
-    if (!newMenuName.trim() || !newMenuHandle.trim()) return toast.error('Name and handle required')
-    try {
-      const res  = await fetch(`${API_URL}/menus`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newMenuName.trim(), handle: newMenuHandle.trim() }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        toast.success('Menu created')
-        setNewMenuOpen(false); setNewMenuName(''); setNewMenuHandle('')
-        await load()
-      } else toast.error(data.message || 'Failed')
-    } catch { toast.error('Network error') }
-  }
-
-  const saveMenu = async () => {
-    if (!editMenu) return
+  // ── save ──────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (!selected) return
     setSaving(true)
     try {
-      const res  = await fetch(`${API_URL}/menus/${editMenu._id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editMenu.name, items: editMenu.items }),
+      const res = await fetch(`${API_URL}/menus/${selected.handle}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: menuTitle, position: menuPos, items }),
       })
-      const data = await res.json()
       if (res.ok) {
+        const updated = await res.json()
+        setMenus(prev => prev.map(m => m.handle === selected.handle ? updated : m))
+        setSelected(updated)
         toast.success('Menu saved')
-        setMenus(prev => prev.map(m => m._id === data._id ? data : m))
-        setEditMenu(JSON.parse(JSON.stringify(data)))
-        if (data.handle === 'main-menu')    fetchMainMenu()
-        if (data.handle === 'sidebar-menu') fetchSidebarMenu()
-      } else toast.error(data.message || 'Save failed')
+      } else toast.error('Failed to save')
     } catch { toast.error('Network error') }
-    finally { setSaving(false) }
+    setSaving(false)
   }
 
-  const deleteMenu = async (id) => {
+  // ── create menu ───────────────────────────────────────────────────────
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return
+    setCreating(true)
     try {
-      const res  = await fetch(`${API_URL}/menus/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_URL}/menus`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTitle, handle: newHandle || slugify(newTitle), position: newPos }),
+      })
+      if (res.ok) {
+        const menu = await res.json()
+        setMenus(prev => [...prev, menu])
+        selectMenu(menu)
+        setNewModal(false)
+        setNewTitle(''); setNewHandle(''); setNewPos('')
+        toast.success('Menu created')
+      } else {
+        const d = await res.json()
+        toast.error(d.message || 'Failed to create')
+      }
+    } catch { toast.error('Network error') }
+    setCreating(false)
+  }
+
+  // ── delete menu ───────────────────────────────────────────────────────
+  const handleDeleteMenu = async (menu) => {
+    try {
+      await fetch(`${API_URL}/menus/${menu._id}`, { method: 'DELETE' })
+      const next = menus.filter(m => m._id !== menu._id)
+      setMenus(next)
+      if (selected?._id === menu._id) next.length ? selectMenu(next[0]) : setSelected(null)
+      toast.success('Menu deleted')
+    } catch { toast.error('Network error') }
+  }
+
+  // ── item drawer ───────────────────────────────────────────────────────
+  const openAddItem = () => {
+    setEditParent(null); setEditChild(null)
+    form.resetFields(); form.setFieldsValue({ type: 'category' })
+    setItemImageUrl('')
+    setDrawerOpen(true)
+  }
+
+  const openEdit = (pIdx, cIdx) => {
+    const item = cIdx === null ? items[pIdx] : items[pIdx].children[cIdx]
+    setEditParent(pIdx); setEditChild(cIdx)
+    form.setFieldsValue(item)
+    setItemImageUrl(item.imageUrl || '')
+    setDrawerOpen(true)
+  }
+
+  const openAddChild = (pIdx) => {
+    setEditParent(pIdx); setEditChild('new')
+    form.resetFields(); form.setFieldsValue({ type: 'category' })
+    setItemImageUrl('')
+    setDrawerOpen(true)
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImgUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('image', file)
+      const res = await fetch(`${API_URL}/admin/upload-image`, { method: 'POST', body: fd })
       const data = await res.json()
       if (res.ok) {
-        toast.success('Menu deleted')
-        const remaining = menus.filter(m => m._id !== id)
-        setMenus(remaining)
-        if (remaining.length > 0) selectMenu(remaining[0])
-        else { setSelectedId(null); setEditMenu(null) }
-      } else toast.error(data.message || 'Delete failed')
-    } catch { toast.error('Network error') }
-  }
-
-  // ── Item CRUD ─────────────────────────────────────────────────────────────
-  const openAddTopLevel = () => {
-    setDrawerItem(emptyItem())
-    setDrawerCtx({ parentIdx: -1, childIdx: -2 })
-    setDrawerOpen(true)
-  }
-  const openAddChild = (parentIdx) => {
-    setDrawerItem(emptyItem())
-    setDrawerCtx({ parentIdx, childIdx: -1 })
-    setDrawerOpen(true)
-  }
-  const openEditItem = (parentIdx, childIdx = -1) => {
-    const item = childIdx >= 0
-      ? editMenu.items[parentIdx].children[childIdx]
-      : editMenu.items[parentIdx]
-    setDrawerItem(JSON.parse(JSON.stringify(item)))
-    setDrawerCtx({ parentIdx, childIdx })
-    setDrawerOpen(true)
-  }
-
-  const saveDrawerItem = () => {
-    if (!drawerItem.label.trim()) return toast.error('Label is required')
-    const updated = JSON.parse(JSON.stringify(editMenu))
-    const { parentIdx, childIdx } = drawerCtx
-
-    if (parentIdx === -1) {
-      // New top-level
-      updated.items.push({ ...drawerItem, children: [], position: updated.items.length })
-    } else if (childIdx === -1) {
-      // New child
-      if (!updated.items[parentIdx].children) updated.items[parentIdx].children = []
-      updated.items[parentIdx].children.push({ ...drawerItem, position: updated.items[parentIdx].children.length })
-    } else if (childIdx >= 0) {
-      // Edit existing child
-      updated.items[parentIdx].children[childIdx] = { ...updated.items[parentIdx].children[childIdx], ...drawerItem }
-    } else {
-      // Edit existing top-level (childIdx === -2 means editing top-level)
-      if (parentIdx >= 0) {
-        const existing = updated.items[parentIdx]
-        updated.items[parentIdx] = { ...existing, ...drawerItem, children: existing.children || [] }
+        setItemImageUrl(data.url)
+        form.setFieldValue('imageUrl', data.url)
+      } else {
+        toast.error(data.message || 'Upload failed')
       }
+    } catch {
+      toast.error('Upload failed')
+    } finally {
+      setImgUploading(false)
     }
-
-    setEditMenu(updated)
-    setDrawerOpen(false)
-    setDrawerItem(emptyItem())
   }
 
-  const deleteItem = (parentIdx, childIdx = -1) => {
-    const updated = JSON.parse(JSON.stringify(editMenu))
-    if (childIdx >= 0) updated.items[parentIdx].children.splice(childIdx, 1)
-    else updated.items.splice(parentIdx, 1)
-    setEditMenu(updated)
+  const handleDrawerSave = () => {
+    form.validateFields().then(vals => {
+      const item = { ...newItem(), ...vals, children: [] }
+      setItems(prev => {
+        const next = prev.map(it => ({ ...it, children: [...(it.children || [])] }))
+        if (editParent === null) {
+          // new top-level
+          next.push(item)
+        } else if (editChild === null) {
+          // edit top-level
+          next[editParent] = { ...next[editParent], ...vals }
+        } else if (editChild === 'new') {
+          // new child
+          next[editParent].children.push(item)
+        } else {
+          // edit child
+          next[editParent].children[editChild] = { ...next[editParent].children[editChild], ...vals }
+        }
+        return next
+      })
+      setDrawerOpen(false)
+    })
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  const filteredProducts = products.filter(p =>
-    !productSearch || (p.name || '').toLowerCase().includes(productSearch.toLowerCase())
-  ).slice(0, 50)
+  const handleDeleteItem = (pIdx, cIdx = null) => {
+    setItems(prev => {
+      const next = prev.map(it => ({ ...it, children: [...(it.children || [])] }))
+      if (cIdx === null) { next.splice(pIdx, 1) }
+      else { next[pIdx].children.splice(cIdx, 1) }
+      return next
+    })
+  }
 
+  // ── drag ──────────────────────────────────────────────────────────────
+  const handleDragStart = (e, idx) => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move' }
+  const handleDragOver  = (idx)    => setOverIdx(idx)
+  const handleDragEnd   = ()       => { setDragIdx(null); setOverIdx(null) }
+  const handleDrop      = (toIdx)  => {
+    if (dragIdx === null || dragIdx === toIdx) return
+    setItems(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(dragIdx, 1)
+      next.splice(toIdx, 0, moved)
+      return next
+    })
+    setDragIdx(null); setOverIdx(null)
+  }
+
+  const watchType = Form.useWatch('type', form)
+
+  const totalItems = (menu) =>
+    (menu.items || []).reduce((n, it) => n + 1 + (it.children?.length || 0), 0)
+
+  // ── render ────────────────────────────────────────────────────────────
   return (
     <div>
-      <PageHeader
-        eyebrow="Storefront"
-        title="Navigation Menus"
-        subtitle="Build your storefront navigation — drag items to reorder, add submenus per item"
-        actions={
-          <Button type="primary" icon={<PlusOutlined />} size="large" onClick={() => setNewMenuOpen(true)}>
-            New Menu
-          </Button>
-        }
-      />
+      {/* Page header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+            STOREFRONT
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: NAVY, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            Navigation Menus
+          </div>
+          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4 }}>
+            Build your storefront navigation — drag items to reorder, add submenus per item
+          </div>
+        </div>
+        <Button
+          type="primary" icon={<PlusOutlined />} size="large"
+          onClick={() => setNewModal(true)}
+          style={{ background: NAVY, borderColor: NAVY, borderRadius: 10, fontWeight: 700 }}
+        >
+          New Menu
+        </Button>
+      </div>
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spin size="large" /></div>
+        <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>
       ) : (
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
 
-          {/* ── Left: menu list ──────────────────────────────────── */}
-          <div style={{ width: 260, flexShrink: 0 }}>
-            <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #f0f0f0', overflow: 'hidden' }}>
-              <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: NAVY }}>All Menus</span>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>{menus.length} menu{menus.length !== 1 ? 's' : ''}</span>
-              </div>
-
-              {menus.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center' }}>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>No menus yet. Create one using the New Menu button.</div>
-                </div>
-              ) : (
-                menus.map(menu => (
-                  <div
-                    key={menu._id}
-                    onClick={() => selectMenu(menu)}
-                    style={{
-                      padding: '10px 16px', cursor: 'pointer', transition: 'background 0.1s',
-                      background: selectedId === menu._id ? '#fff7ed' : '#fff',
-                      borderLeft: selectedId === menu._id ? `3px solid ${BRAND}` : '3px solid transparent',
-                      borderBottom: '1px solid #f9fafb',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      gap: 6,
-                    }}
-                  >
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: selectedId === menu._id ? BRAND : NAVY, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {menu.name}
-                        {menu.handle === 'main-menu' && (
-                          <Tag color="orange" style={{ fontSize: 9, lineHeight: '14px', padding: '0 4px', marginLeft: 2 }}>Top Nav</Tag>
-                        )}
-                        {menu.handle === 'sidebar-menu' && (
-                          <Tag color="purple" style={{ fontSize: 9, lineHeight: '14px', padding: '0 4px', marginLeft: 2 }}>Sidebar</Tag>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{menu.handle} · {menu.items?.length || 0} items</div>
-                    </div>
-                    {menu.handle !== 'main-menu' && menu.handle !== 'sidebar-menu' && (
-                      <Popconfirm
-                        title="Delete this menu?"
-                        onConfirm={e => { e.stopPropagation(); deleteMenu(menu._id) }}
-                        okText="Delete" okButtonProps={{ danger: true }}
-                      >
-                        <Button size="small" icon={<DeleteOutlined />} danger onClick={e => e.stopPropagation()} />
-                      </Popconfirm>
-                    )}
-                  </div>
-                ))
-              )}
+          {/* ── Left panel: menu list ─────────────────────────────── */}
+          <div style={{
+            width: 260, flexShrink: 0,
+            background: '#fff', borderRadius: 14, border: '1.5px solid #e5e7eb',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              padding: '14px 18px', borderBottom: '1px solid #f3f4f6',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            }}>
+              <span style={{ fontWeight: 700, color: NAVY, fontSize: 14 }}>All Menus</span>
+              <span style={{ fontSize: 12, color: '#9ca3af' }}>{menus.length} menu{menus.length !== 1 ? 's' : ''}</span>
             </div>
 
+            {menus.length === 0 ? (
+              <div style={{ padding: 32, textAlign: 'center', color: '#d1d5db', fontSize: 13 }}>
+                No menus yet
+              </div>
+            ) : menus.map(menu => {
+              const pm   = POSITION_META[menu.position || ''] || POSITION_META['']
+              const isActive = selected?._id === menu._id
+              return (
+                <div
+                  key={menu._id}
+                  onClick={() => selectMenu(menu)}
+                  style={{
+                    padding: '13px 18px',
+                    borderLeft: isActive ? `3px solid ${BRAND}` : '3px solid transparent',
+                    background: isActive ? '#fff7f5' : '#fff',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid #f3f4f6',
+                    transition: 'background 0.12s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontWeight: 700, color: isActive ? BRAND : NAVY, fontSize: 13 }}>
+                      {menu.title}
+                    </span>
+                    {menu.position && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px',
+                        borderRadius: 20, background: pm.bg, color: pm.color,
+                      }}>
+                        {pm.label}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {menu.handle} · {totalItems(menu)} item{totalItems(menu) !== 1 ? 's' : ''}
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
-          {/* ── Right: menu editor ──────────────────────────────── */}
-          {editMenu ? (
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Header row */}
-              <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #f0f0f0', padding: '16px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Menu Name</div>
-                  <Input
-                    value={editMenu.name}
-                    onChange={e => setEditMenu(prev => ({ ...prev, name: e.target.value }))}
-                    style={{ maxWidth: 280, fontWeight: 700, fontSize: 15 }}
-                  />
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
-                    Handle: <code style={{ background: '#f3f4f6', padding: '1px 5px', borderRadius: 4 }}>{editMenu.handle}</code>
-                    {editMenu.handle === 'main-menu'    && <Tag color="orange" style={{ marginLeft: 8, fontSize: 10 }}>Active Top Navigation</Tag>}
-                    {editMenu.handle === 'sidebar-menu' && <Tag color="purple" style={{ marginLeft: 8, fontSize: 10 }}>Active Sidebar Menu</Tag>}
+          {/* ── Right panel: editor ───────────────────────────────── */}
+          {selected ? (
+            <div style={{ flex: 1 }}>
+              {/* Menu name + save */}
+              <div style={{ background: '#fff', borderRadius: 14, border: '1.5px solid #e5e7eb', padding: '20px 24px', marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+                      MENU NAME
+                    </div>
+                    <Input
+                      value={menuTitle}
+                      onChange={e => setMenuTitle(e.target.value)}
+                      style={{ fontSize: 16, fontWeight: 700, color: NAVY, border: '1.5px solid #e5e7eb', borderRadius: 10, height: 44 }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                      <span style={{ fontSize: 12, color: '#9ca3af' }}>Handle:</span>
+                      <code style={{ fontSize: 12, color: '#6b7280', background: '#f9fafb', padding: '2px 8px', borderRadius: 6 }}>
+                        {selected.handle}
+                      </code>
+                      {selected.position && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
+                          background: POSITION_META[selected.position]?.bg,
+                          color: POSITION_META[selected.position]?.color,
+                        }}>
+                          Active {POSITION_META[selected.position]?.label === 'Top Nav' ? 'Top Navigation' : 'Sidebar'}
+                        </span>
+                      )}
+                      <Select
+                        value={menuPos}
+                        onChange={v => setMenuPos(v)}
+                        size="small"
+                        style={{ width: 120 }}
+                        options={[
+                          { value: '',        label: 'No position' },
+                          { value: 'top-nav', label: 'Top Nav'     },
+                          { value: 'sidebar', label: 'Sidebar'     },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <Popconfirm
+                      title="Delete this menu?"
+                      description="All items will be removed permanently."
+                      onConfirm={() => handleDeleteMenu(selected)}
+                      okText="Delete" okButtonProps={{ danger: true }}
+                    >
+                      <Button danger>Delete Menu</Button>
+                    </Popconfirm>
+                    <Button
+                      type="primary" loading={saving} onClick={handleSave}
+                      style={{ background: NAVY, borderColor: NAVY, borderRadius: 10, fontWeight: 700, height: 40 }}
+                    >
+                      Save Menu
+                    </Button>
                   </div>
                 </div>
-                <Button type="primary" loading={saving} onClick={saveMenu} size="large">Save Menu</Button>
               </div>
 
-              {/* Items list */}
-              <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #f0f0f0', overflow: 'hidden' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <span style={{ fontWeight: 700, fontSize: 13, color: NAVY }}>Menu Items ({editMenu.items.length})</span>
-                    <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>
-                      <HolderOutlined /> Drag to reorder
+              {/* Items */}
+              <div style={{ background: '#fff', borderRadius: 14, border: '1.5px solid #e5e7eb', padding: '20px 24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontWeight: 700, color: NAVY, fontSize: 14 }}>
+                      Menu Items ({items.length})
                     </span>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>⠿ Drag to reorder</span>
                   </div>
-                  <Button icon={<PlusOutlined />} size="small" type="primary" onClick={openAddTopLevel}>Add Item</Button>
+                  <Button icon={<PlusOutlined />} onClick={openAddItem}
+                    style={{ borderRadius: 8, fontWeight: 600 }}>
+                    Add Item
+                  </Button>
                 </div>
 
-                {editMenu.items.length === 0 ? (
-                  <div style={{ padding: 40, textAlign: 'center' }}>
-                    <Empty description="No items yet — click Add Item to start building your menu" />
-                  </div>
+                {items.length === 0 ? (
+                  <Empty description="No items yet — click Add Item" style={{ padding: 32 }} />
                 ) : (
-                  <div>
-                    {editMenu.items.map((item, pi) => (
-                      <div key={String(item._id || pi)}>
-                        {/* Top-level item */}
-                        <ItemRow
-                          item={item}
-                          index={pi}
-                          isDragging={isDraggingTop(pi)}
-                          isOver={isOverTop(pi)}
-                          onDragStart={onTopDragStart}
-                          onDragOver={onTopDragOver}
-                          onDrop={onTopDrop}
-                          onDragEnd={cleanup}
-                          onEdit={(i) => openEditItem(i)}
-                          onDelete={(i) => deleteItem(i)}
-                          onAddChild={(i) => openAddChild(i)}
-                        />
-
-                        {/* Children */}
-                        {(item.children || []).map((child, ci) => (
-                          <ItemRow
-                            key={String(child._id || ci)}
-                            item={child}
-                            index={ci}
-                            isDragging={isDraggingChild(pi, ci)}
-                            isOver={isOverChild(pi, ci)}
-                            onDragStart={(e, i) => onChildDragStart(e, pi, i)}
-                            onDragOver={(e, i) => onChildDragOver(e, pi, i)}
-                            onDrop={(e, i) => onChildDrop(e, pi, i)}
-                            onDragEnd={cleanup}
-                            onEdit={(i) => openEditItem(pi, i)}
-                            onDelete={(i) => deleteItem(pi, i)}
-                            onAddChild={() => {}}
-                            isChild
-                          />
-                        ))}
-
-                        {/* Drop zone hint when dragging a child into an empty parent */}
-                        {(item.children || []).length === 0 && dragFrom.current?.level === 'child' && (
-                          <div style={{ height: 4, background: '#f3f4f6', marginLeft: 28 }} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  items.map((item, idx) => (
+                    <ItemRow
+                      key={item._id || idx}
+                      item={item} index={idx}
+                      dragIdx={dragIdx} overIdx={overIdx}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                      onEdit={openEdit}
+                      onDelete={handleDeleteItem}
+                      onAddChild={openAddChild}
+                    />
+                  ))
                 )}
-              </div>
-
-              <div style={{ marginTop: 8, fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>
-                Changes are local — click <strong>Save Menu</strong> to publish to the storefront.
               </div>
             </div>
           ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-              <Empty description="Select a menu to edit, or create a new one" />
+            <div style={{
+              flex: 1, background: '#fff', borderRadius: 14, border: '1.5px dashed #e5e7eb',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300,
+            }}>
+              <Empty description="Select a menu from the left or create one" />
             </div>
           )}
         </div>
       )}
 
-      {/* ── New menu drawer ──────────────────────────────────────── */}
-      <Drawer
-        open={newMenuOpen}
-        onClose={() => setNewMenuOpen(false)}
-        title={<span style={{ fontWeight: 700, color: NAVY }}>New Menu</span>}
-        width={400}
-        extra={<Button type="primary" onClick={createMenu}>Create</Button>}
-        destroyOnHidden
+      {/* ── New Menu modal ────────────────────────────────────────────── */}
+      <Modal
+        open={newModal}
+        onCancel={() => { setNewModal(false); setNewTitle(''); setNewHandle(''); setNewPos('') }}
+        title={<span style={{ color: NAVY, fontWeight: 700 }}>Create Menu</span>}
+        footer={null}
+        width={420}
       >
-        <Form layout="vertical">
-          <Form.Item label="Menu Name" required>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Menu Name</div>
             <Input
-              placeholder="e.g. Main Navigation, Footer Links"
-              value={newMenuName}
+              value={newTitle}
               onChange={e => {
-                setNewMenuName(e.target.value)
-                setNewMenuHandle(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''))
+                setNewTitle(e.target.value)
+                setNewHandle(slugify(e.target.value))
               }}
+              placeholder="e.g. Main Navigation, Sidebar Menu"
+              size="large"
             />
-          </Form.Item>
-          <Form.Item label="Handle" extra="'main-menu' is the primary storefront navigation.">
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Handle</div>
             <Input
-              value={newMenuHandle}
-              onChange={e => setNewMenuHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-              addonBefore="/"
-              placeholder="main-menu"
+              value={newHandle}
+              onChange={e => setNewHandle(e.target.value)}
+              placeholder="auto-generated from name"
+              prefix={<code style={{ fontSize: 11, color: '#9ca3af' }}>/</code>}
             />
-          </Form.Item>
-        </Form>
-      </Drawer>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>URL-safe, unique slug</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Position</div>
+            <Select
+              value={newPos} onChange={v => setNewPos(v)} style={{ width: '100%' }} size="large"
+              options={[
+                { value: '',        label: 'None — not shown automatically' },
+                { value: 'top-nav', label: 'Top Navigation bar'             },
+                { value: 'sidebar', label: 'Sidebar category list'          },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+            <Button onClick={() => setNewModal(false)}>Cancel</Button>
+            <Button
+              type="primary" loading={creating} onClick={handleCreate}
+              disabled={!newTitle.trim()}
+              style={{ background: NAVY, borderColor: NAVY }}
+            >
+              Create Menu
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
-      {/* ── Item editor drawer ───────────────────────────────────── */}
+      {/* ── Item Drawer ───────────────────────────────────────────────── */}
       <Drawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={
-          <span style={{ fontWeight: 700, color: NAVY }}>
-            {drawerCtx?.childIdx === -2 ? 'Add Top-Level Item'
-              : drawerCtx?.childIdx === -1 ? 'Add Submenu Item'
-              : 'Edit Item'}
+          <span style={{ color: NAVY, fontWeight: 700 }}>
+            {editParent === null ? 'Add Menu Item' : editChild === null ? 'Edit Item' : editChild === 'new' ? 'Add Sub-item' : 'Edit Sub-item'}
           </span>
         }
-        width={440}
-        extra={<Button type="primary" onClick={saveDrawerItem}>Save Item</Button>}
+        size="default"
+        extra={<Button type="primary" onClick={handleDrawerSave} style={{ background: NAVY, borderColor: NAVY }}>Apply</Button>}
         destroyOnHidden
       >
-        <Form layout="vertical">
-          <Form.Item label="Label" required extra="Text shown in the navigation menu">
-            <Input
-              placeholder="e.g. Cameras, Shop All, Lenses"
-              value={drawerItem.label}
-              onChange={e => setDrawerItem(p => ({ ...p, label: e.target.value }))}
-              size="large"
-            />
+        <Form form={form} layout="vertical">
+          <Form.Item label="Label" name="label" rules={[{ required: true, message: 'Label required' }]}>
+            <Input placeholder="e.g. Cameras, New Arrivals…" size="large" />
           </Form.Item>
 
-          <Form.Item label="Link Type">
+          <Form.Item label="Type" name="type" rules={[{ required: true }]}>
             <Select
-              value={drawerItem.type}
-              onChange={v => setDrawerItem(p => ({ ...p, type: v, categoryName: '', productId: null, productName: '', url: '' }))}
               size="large"
-              style={{ width: '100%' }}
-              options={[
-                { value: 'all',      label: '🏠  All Products — links to homepage' },
-                { value: 'category', label: '🏷️  Category — links to a product category' },
-                { value: 'product',  label: '📦  Product — links to a specific product' },
-                { value: 'url',      label: '🔗  Custom URL — any URL you choose' },
-              ]}
+              options={Object.entries(TYPE_META).map(([v, m]) => ({ value: v, label: m.label }))}
             />
           </Form.Item>
 
-          {drawerItem.type === 'category' && (
-            <Form.Item label="Category" required>
-              <Select
-                value={drawerItem.categoryName || undefined}
-                onChange={v => setDrawerItem(p => ({ ...p, categoryName: v, label: p.label || v }))}
-                placeholder="Select a category"
-                size="large"
-                style={{ width: '100%' }}
-                showSearch
-                options={categories.map(c => ({ value: c, label: c }))}
-              />
+          {watchType === 'category' && (
+            <Form.Item label="Category" name="categoryName" rules={[{ required: true, message: 'Select a category' }]}>
+              <Select showSearch placeholder="Select category" size="large"
+                options={categoriesData.map(c => ({ value: c.name, label: c.name }))} />
             </Form.Item>
           )}
 
-          {drawerItem.type === 'product' && (
-            <Form.Item label="Product" required>
-              <Input
-                placeholder="Search products…"
-                value={productSearch}
-                onChange={e => setProductSearch(e.target.value)}
-                style={{ marginBottom: 8 }}
-                allowClear
-              />
-              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #f0f0f0', borderRadius: 8 }}>
-                {filteredProducts.map(p => (
-                  <div
-                    key={p._id}
-                    onClick={() => setDrawerItem(prev => ({ ...prev, productId: p._id, productName: p.name, label: prev.label || p.name }))}
-                    style={{
-                      padding: '8px 12px', cursor: 'pointer',
-                      background: drawerItem.productId === p._id ? '#fff7ed' : '#fff',
-                      borderBottom: '1px solid #f9fafb',
-                      fontSize: 13,
-                      fontWeight: drawerItem.productId === p._id ? 600 : 400,
-                      color: drawerItem.productId === p._id ? BRAND : NAVY,
-                    }}
-                  >
-                    {p.name}
-                    <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>₹{p.pricePerDay}/day</span>
-                  </div>
-                ))}
+          {watchType === 'product' && (
+            <Form.Item label="Product" name="productName" rules={[{ required: true, message: 'Select a product' }]}>
+              <Select showSearch placeholder="Select product" size="large"
+                options={(adminProductList || []).map(p => ({ value: p.name, label: p.name }))} />
+            </Form.Item>
+          )}
+
+          {watchType === 'url' && (
+            <Form.Item label="URL" name="url" rules={[{ required: true, message: 'Enter URL' }]}>
+              <Input prefix={<LinkOutlined style={{ color: '#9ca3af' }} />} placeholder="https://…" size="large" />
+            </Form.Item>
+          )}
+
+          <Form.Item label="Image (optional)" name="imageUrl"
+            extra="Shown beside label in sidebar layout">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {itemImageUrl && (
+                <div style={{ position: 'relative', width: 80, height: 80 }}>
+                  <img src={itemImageUrl} alt="preview"
+                    style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #e5e7eb' }} />
+                  <button type="button"
+                    onClick={() => { setItemImageUrl(''); form.setFieldValue('imageUrl', '') }}
+                    style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: '#ef4444', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '20px', textAlign: 'center', padding: 0 }}>
+                    ×
+                  </button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 14px', borderRadius: 6, border: '1px solid #d9d9d9',
+                  cursor: imgUploading ? 'not-allowed' : 'pointer', fontSize: 13,
+                  background: imgUploading ? '#f5f5f5' : '#fff', color: '#374151',
+                }}>
+                  <PlusOutlined style={{ fontSize: 11 }} />
+                  {imgUploading ? 'Uploading…' : 'Upload Image'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    disabled={imgUploading} onChange={handleImageUpload} />
+                </label>
+                {!itemImageUrl && (
+                  <Input
+                    prefix={<LinkOutlined style={{ color: '#9ca3af' }} />}
+                    placeholder="or paste URL…"
+                    value={form.getFieldValue('imageUrl') || ''}
+                    onChange={e => { setItemImageUrl(e.target.value); form.setFieldValue('imageUrl', e.target.value) }}
+                    style={{ flex: 1 }}
+                  />
+                )}
               </div>
-            </Form.Item>
-          )}
-
-          {drawerItem.type === 'url' && (
-            <Form.Item label="URL" required>
-              <Input
-                prefix={<LinkOutlined style={{ color: '#9ca3af' }} />}
-                placeholder="https://… or /path"
-                value={drawerItem.url}
-                onChange={e => setDrawerItem(p => ({ ...p, url: e.target.value }))}
-                size="large"
-              />
-            </Form.Item>
-          )}
-
-          <Divider style={{ margin: '16px 0' }} />
-
-          <Form.Item label="Sidebar Image URL" extra="Optional — shown in the left sidebar. Leave blank to auto-use the category/product image.">
-            <Input
-              prefix={<LinkOutlined style={{ color: '#9ca3af' }} />}
-              placeholder="https://… or /uploads/filename.jpg"
-              value={drawerItem.imageUrl}
-              onChange={e => setDrawerItem(p => ({ ...p, imageUrl: e.target.value }))}
-            />
+            </div>
           </Form.Item>
         </Form>
       </Drawer>
     </div>
   )
 }
-
-export default Menus

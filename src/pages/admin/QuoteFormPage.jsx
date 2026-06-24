@@ -76,6 +76,7 @@ const QuoteFormPage = () => {
         const name = q.customerName || ''
         setNameInput(name)
         form.setFieldsValue({
+          quoteCode:      q.quoteCode      || '',
           customerName:   name,
           customerMobile: q.customerMobile || '',
           customerEmail:  q.customerEmail  || '',
@@ -180,6 +181,7 @@ const QuoteFormPage = () => {
         startDate: dates[0].toDate(), endDate: dates[1].toDate(),
         gstEnabled, gstPercent: 18,
         raisedBy: raisedBy.trim(),
+        quoteCode: values.quoteCode?.trim() || undefined,
       }
       const url    = isEdit ? `${API_URL}/quotes/${id}` : `${API_URL}/quotes`
       const method = isEdit ? 'PUT' : 'POST'
@@ -246,6 +248,15 @@ const QuoteFormPage = () => {
             {/* Quote Meta */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f0f0f0', padding: '20px 24px', marginBottom: 20 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>Quote Meta</div>
+              <Form.Item label="Quote Code" name="quoteCode" style={{ marginBottom: 12 }}
+                help={isEdit ? 'Edit to rename this quote code' : 'Leave blank to auto-generate (e.g. LR-260624-008)'}
+              >
+                <Input
+                  placeholder={isEdit ? quoteCode || 'Auto-generated' : 'Leave blank to auto-generate'}
+                  style={{ fontFamily: 'monospace', fontWeight: 600 }}
+                  allowClear
+                />
+              </Form.Item>
               <Form.Item label="Raised By" style={{ marginBottom: 0 }}>
                 <AutoComplete
                   options={knownRaisers.map(n => ({ value: n, label: n }))}

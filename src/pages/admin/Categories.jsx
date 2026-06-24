@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  Button, Tag, Drawer, Form, Input, Space,
-  Typography, Popconfirm, Tooltip, Divider,
+  Button, Drawer, Form, Input, Space,
+  Typography, Popconfirm, Tooltip, Tag,
 } from 'antd'
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined,
-  HolderOutlined, ArrowUpOutlined, ArrowDownOutlined, LinkOutlined,
+  HolderOutlined, ArrowUpOutlined, ArrowDownOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
@@ -26,8 +26,6 @@ const Categories = () => {
   const [saving,     setSaving]     = useState(false)
   const [form]                      = Form.useForm()
   const [search,     setSearch]     = useState('')
-  const [subInput,   setSubInput]   = useState('')
-  const [subList,    setSubList]    = useState([])
 
   // drag state
   const dragIdx = useRef(null)
@@ -100,22 +98,12 @@ const Categories = () => {
   }
 
   // ── CRUD ──────────────────────────────────────────────────────────
-  const openCreate = () => { setEditing(null); form.resetFields(); setSubList([]); setSubInput(''); setModalOpen(true) }
+  const openCreate = () => { setEditing(null); form.resetFields(); setModalOpen(true) }
   const openEdit   = (cat) => {
     setEditing(cat)
-    form.setFieldsValue({ name: cat.name, description: cat.description, imageUrl: cat.imageUrl || '' })
-    setSubList(cat.subcategories || [])
-    setSubInput('')
+    form.setFieldsValue({ name: cat.name, description: cat.description })
     setModalOpen(true)
   }
-
-  const addSub = () => {
-    const v = subInput.trim()
-    if (v && !subList.includes(v)) setSubList(prev => [...prev, v])
-    setSubInput('')
-  }
-
-  const removeSub = (s) => setSubList(prev => prev.filter(x => x !== s))
 
   const handleSave = async () => {
     const values = await form.validateFields()
@@ -123,7 +111,7 @@ const Categories = () => {
     try {
       const url    = editing ? `${API_URL}/categories/${editing._id}` : `${API_URL}/categories`
       const method = editing ? 'PUT' : 'POST'
-      const payload = { ...values, subcategories: subList }
+      const payload = { ...values }
       const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const data   = await res.json()
       if (res.ok) {
@@ -199,8 +187,8 @@ const Categories = () => {
       {/* Drag-to-reorder table */}
       <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f0f0f0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
         {/* Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '44px 44px 52px 1fr 180px 90px 120px 100px', alignItems: 'center', padding: '10px 16px', borderBottom: '2px solid #f0f0f0', background: '#fafafa' }}>
-          {['', 'POS', 'IMG', 'CATEGORY NAME', 'SUBCATEGORIES', 'PRODUCTS', 'CREATED', 'ACTIONS'].map(h => (
+        <div style={{ display: 'grid', gridTemplateColumns: '44px 44px 52px 1fr 90px 120px 100px', alignItems: 'center', padding: '10px 16px', borderBottom: '2px solid #f0f0f0', background: '#fafafa' }}>
+          {['', 'POS', 'IMG', 'CATEGORY NAME', 'PRODUCTS', 'CREATED', 'ACTIONS'].map(h => (
             <div key={h} style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</div>
           ))}
         </div>
@@ -225,7 +213,7 @@ const Categories = () => {
                 onDragEnd={cleanup}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '44px 44px 52px 1fr 180px 90px 120px 100px',
+                  gridTemplateColumns: '44px 44px 52px 1fr 90px 120px 100px',
                   alignItems: 'center',
                   padding: '12px 16px',
                   borderBottom: '1px solid #f9fafb',
@@ -254,17 +242,6 @@ const Categories = () => {
 
                 {/* Name */}
                 <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>{cat.name}</div>
-
-                {/* Subcategories */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                  {(cat.subcategories || []).length === 0
-                    ? <em style={{ fontSize: 11, color: '#d1d5db' }}>None</em>
-                    : (cat.subcategories || []).slice(0, 3).map(s => (
-                        <Tag key={s} color="orange" style={{ fontSize: 10, padding: '0 6px', borderRadius: 10, lineHeight: '18px' }}>{s}</Tag>
-                      ))
-                  }
-                  {(cat.subcategories || []).length > 3 && <Tag style={{ fontSize: 10, padding: '0 6px', borderRadius: 10, lineHeight: '18px' }}>+{cat.subcategories.length - 3}</Tag>}
-                </div>
 
                 {/* Products */}
                 <div>
@@ -316,55 +293,12 @@ const Categories = () => {
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
-          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Category Details
-          </Divider>
           <Form.Item label="Category Name" name="name" rules={[{ required: true, message: 'Name is required' }]}>
             <Input size="large" placeholder="e.g. Cameras, Lenses, Lighting…" />
           </Form.Item>
           <Form.Item label="Description" name="description">
             <TextArea rows={3} placeholder="Optional — brief description of what belongs in this category" />
           </Form.Item>
-
-          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Sidebar Image
-          </Divider>
-          <Form.Item label="Image URL" name="imageUrl" extra="Paste a direct image URL — shown in the sidebar. Leave blank to auto-use the first product image.">
-            <Input prefix={<LinkOutlined style={{ color: '#9ca3af' }} />} placeholder="https://…" />
-          </Form.Item>
-
-          <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Subcategories
-          </Divider>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <Input
-                placeholder="e.g. DSLR, Mirrorless, Prime Lens…"
-                value={subInput}
-                onChange={e => setSubInput(e.target.value)}
-                onPressEnter={addSub}
-                style={{ flex: 1 }}
-              />
-              <Button icon={<PlusOutlined />} onClick={addSub} disabled={!subInput.trim()}>Add</Button>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 32 }}>
-              {subList.length === 0 && <span style={{ fontSize: 12, color: '#d1d5db' }}>No subcategories yet — add some above</span>}
-              {subList.map(s => (
-                <Tag
-                  key={s}
-                  closable
-                  onClose={() => removeSub(s)}
-                  style={{ borderRadius: 20, padding: '2px 10px', fontWeight: 600, fontSize: 12 }}
-                  color="orange"
-                >
-                  {s}
-                </Tag>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
-              These appear as dropdown items in the top category menu.
-            </div>
-          </div>
         </Form>
       </Drawer>
     </div>

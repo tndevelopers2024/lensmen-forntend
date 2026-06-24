@@ -36,6 +36,7 @@ const AuthModal = ({ mode, setMode }) => {
   const [authData, setAuthData] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
     mobile: '', secondMobile: '', companyName: '', address: '', accountType: 'Private',
+    gstNumber: '', gstBusinessName: '',
   })
   const [resetData, setResetData] = useState({
     email: '', otp: '', newPassword: '', confirmNewPassword: '',
@@ -328,6 +329,18 @@ const AuthModal = ({ mode, setMode }) => {
                           <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Company Name <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
                           <input type="text" placeholder="Your company or studio name"
                             value={authData.companyName || ''} onChange={e => setAuthData({ ...authData, companyName: e.target.value })}
+                            className={field} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">GST Number <span className="text-slate-300 normal-case font-normal">(optional)</span></label>
+                          <input type="text" placeholder="22AAAAA0000A1Z5" maxLength={15}
+                            value={authData.gstNumber || ''} onChange={e => setAuthData({ ...authData, gstNumber: e.target.value.toUpperCase() })}
+                            className={field + " tracking-widest"} />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">GST Business Name <span className="text-slate-300 normal-case font-normal">(optional, as per GST registration)</span></label>
+                          <input type="text" placeholder="Registered business name"
+                            value={authData.gstBusinessName || ''} onChange={e => setAuthData({ ...authData, gstBusinessName: e.target.value })}
                             className={field} />
                         </div>
                         <div className="space-y-1.5">

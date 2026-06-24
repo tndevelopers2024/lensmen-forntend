@@ -6,7 +6,7 @@ import {
   PlusOutlined, SettingOutlined, LogoutOutlined,
   LeftOutlined, RightOutlined, LineChartOutlined, FileTextOutlined,
   TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined, AuditOutlined,
-  MenuOutlined,
+  MenuOutlined, ShopOutlined,
 } from '@ant-design/icons'
 import { useGlobal } from '../context/GlobalContext'
 
@@ -38,6 +38,7 @@ const AdminLayout = ({ children, location }) => {
     { key: '/admin/quotes',    icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
     { key: '/admin/offers',    icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
     { key: '/admin/menus',     icon: <MenuOutlined />,         label: <Link to="/admin/menus">Menus</Link> },
+    { key: '/admin/vendors',   icon: <ShopOutlined />,         label: <Link to="/admin/vendors">Vendors</Link> },
   ]
 
   const utilItems = [

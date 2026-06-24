@@ -17,8 +17,8 @@ export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
   const [categoriesData, setCategoriesData] = useState([]) // full objects: {name, imageUrl, subcategories}
   const [categories, setCategories]         = useState([]) // just names, for backward compat
-  const [mainMenu,    setMainMenu]    = useState(null) // top nav menu
-  const [sidebarMenu, setSidebarMenu] = useState(null) // left sidebar menu
+  const [mainMenu,    setMainMenu]    = useState(null)
+  const [sidebarMenu, setSidebarMenu] = useState(null)
   const [offers, setOffers] = useState([])
   const [authMode, setAuthMode] = useState('none')
   const [cartOpen, setCartOpen] = useState(false)
@@ -51,6 +51,9 @@ export const GlobalProvider = ({ children }) => {
 
   // ── Socket.IO real-time connection ─────────────────────────────────
   const socketRef = useRef(null)
+  // Keep a ref to user so socket handlers always see current value (no stale closure)
+  const userRef   = useRef(user)
+  useEffect(() => { userRef.current = user }, [user])
 
   const fetchNotifications = async (recipient) => {
     if (!recipient) return
@@ -61,55 +64,75 @@ export const GlobalProvider = ({ children }) => {
     } catch {}
   }
 
+  const refreshAllOrders = () =>
+    fetch(`${API_URL}/admin/bookings`)
+      .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+
+  // Create socket ONCE — never disconnect/reconnect on user change
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] })
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    })
     socketRef.current = socket
 
-    if (user) {
-      // Join personal room (email or 'admin')
-      const room = user.role === 'admin' ? 'admin' : user.email
-      socket.emit('join', { room })
-      fetchNotifications(room)
-    }
-
-    // New notification pushed from server
     socket.on('notification:new', (notification) => {
       setNotifications(prev => [notification, ...prev])
     })
 
-    // booking:new → refresh order lists
     socket.on('booking:new', ({ userEmail }) => {
       fetchProducts()
-      if (user?.role === 'admin') {
-        fetch(`${API_URL}/admin/bookings`)
-          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      const u = userRef.current
+      if (u?.role === 'admin') refreshAllOrders()
+      if (u && u.email === userEmail) {
+        fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
+          .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
       }
-      if (user && user.email === userEmail) fetchUserOrders()
     })
 
-    // booking:updated → refresh order lists
     socket.on('booking:updated', ({ userEmail }) => {
-      if (user?.role === 'admin') {
-        fetch(`${API_URL}/admin/bookings`)
-          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      const u = userRef.current
+      if (u?.role === 'admin') refreshAllOrders()
+      if (u && u.email === userEmail) {
+        fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
+          .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
       }
-      if (user && user.email === userEmail) fetchUserOrders()
     })
 
-    // booking:cancelled
     socket.on('booking:cancelled', ({ userEmail }) => {
       fetchProducts()
-      if (user?.role === 'admin') {
-        fetch(`${API_URL}/admin/bookings`)
-          .then(r => r.json()).then(data => setAllOrders(data)).catch(() => {})
+      const u = userRef.current
+      if (u?.role === 'admin') refreshAllOrders()
+      if (u && u.email === userEmail) {
+        fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
+          .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
       }
-      if (user && user.email === userEmail) fetchUserOrders()
     })
 
-    // product:updated
     socket.on('product:updated', () => fetchProducts())
 
+    // vendor mutations → re-fetch vendor data (pages that need it will react)
+    socket.on('vendor:updated', () => {
+      // signal any vendor page listeners — pages listen to this via socketRef
+    })
+
     return () => socket.disconnect()
+  }, []) // ← empty deps: stable socket for the lifetime of the app
+
+  // Join / rejoin room whenever user changes (login, logout, role change)
+  useEffect(() => {
+    const socket = socketRef.current
+    if (!socket) return
+    if (user) {
+      const room = user.role === 'admin' ? 'admin' : user.email
+      socket.emit('join', { room })
+      fetchNotifications(room)
+      // Auto-load allOrders for admin on login
+      if (user.role === 'admin') refreshAllOrders()
+    }
   }, [user])
 
   useEffect(() => {
@@ -149,17 +172,17 @@ export const GlobalProvider = ({ children }) => {
 
   const fetchMainMenu = async () => {
     try {
-      const res = await fetch(`${API_URL}/menus/main-menu`)
-      if (res.ok) { const data = await res.json(); setMainMenu(data) }
+      const res = await fetch(`${API_URL}/menus`)
+      if (!res.ok) return
+      const list = await res.json()
+      const topNav  = list.find(m => m.position === 'top-nav')
+      const sidebar = list.find(m => m.position === 'sidebar')
+      if (topNav)  setMainMenu(topNav)
+      if (sidebar) setSidebarMenu(sidebar)
     } catch {}
   }
 
-  const fetchSidebarMenu = async () => {
-    try {
-      const res = await fetch(`${API_URL}/menus/sidebar-menu`)
-      if (res.ok) { const data = await res.json(); setSidebarMenu(data) }
-    } catch {}
-  }
+  const fetchSidebarMenu = async () => { /* handled by fetchMainMenu */ }
 
   const fetchCategories = async () => {
     try {
@@ -324,7 +347,7 @@ export const GlobalProvider = ({ children }) => {
     <GlobalContext.Provider value={{
       products, setProducts,
       categories, setCategories, categoriesData,
-      mainMenu,    setMainMenu,    fetchMainMenu,
+      mainMenu, setMainMenu, fetchMainMenu,
       sidebarMenu, setSidebarMenu, fetchSidebarMenu,
       offers, setOffers, fetchOffers,
       authMode, setAuthMode,
@@ -344,6 +367,8 @@ export const GlobalProvider = ({ children }) => {
       fetchProducts,
       fetchAdminData,
       fetchUserOrders,
+      refreshAllOrders,
+      socketRef,
       notifications, setNotifications,
       markNotificationRead,
       markAllNotificationsRead,

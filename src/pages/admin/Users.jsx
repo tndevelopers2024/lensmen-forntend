@@ -16,6 +16,14 @@ import PageHeader from '../../components/PageHeader'
 const { Text } = Typography
 const { TextArea } = Input
 
+// Normalize any stored upload URL to the current API server so local dev works
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api$/, '')
+const toUploadUrl = (url) => {
+  if (!url) return url
+  const m = url.match(/\/uploads\/.+/)
+  return m ? `${API_BASE}${m[0]}` : url
+}
+
 const KYC_DOCS = [
   { key: 'aadhaarFront', label: 'Aadhaar Front' },
   { key: 'aadhaarBack',  label: 'Aadhaar Back'  },
@@ -532,6 +540,31 @@ const UsersPage = () => {
                           options={CLASSES.map(c => ({ value: c, label: c }))}
                         />
                       </div>
+                      {selectedUser.companyName && (
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5 }}>Company Name</div>
+                          <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 500 }}>{selectedUser.companyName}</div>
+                        </div>
+                      )}
+                      {(selectedUser.gstNumber || selectedUser.gstBusinessName) && (
+                        <div style={{ gridColumn: 'span 2', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '10px 14px' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#0ea5e9', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>GST Details</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
+                            {selectedUser.gstNumber && (
+                              <div>
+                                <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>GSTIN</div>
+                                <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#1e293b', letterSpacing: '0.08em' }}>{selectedUser.gstNumber}</div>
+                              </div>
+                            )}
+                            {selectedUser.gstBusinessName && (
+                              <div>
+                                <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>Business Name</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{selectedUser.gstBusinessName}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <Divider orientation="left" style={divStyle}>KYC Documents</Divider>
@@ -558,7 +591,7 @@ const UsersPage = () => {
                     {hasDocs ? (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                         {KYC_DOCS.map(doc => {
-                          const url = selectedUser.kycDocuments?.[doc.key]
+                          const url = toUploadUrl(selectedUser.kycDocuments?.[doc.key])
                           return (
                             <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 10, padding: 12, border: '1px solid #e5e7eb' }}>
                               <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{doc.label}</div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Row, Col, Card, Statistic, Table, Tabs, Tag, Button, Space,
   Input, Modal, Radio, DatePicker, Typography,
@@ -32,11 +32,12 @@ const STATUS_TAG = {
 }
 
 const AdminOverview = () => {
-  const { adminStats, allOrders, API_URL } = useGlobal()
+  const { adminStats, allOrders, refreshAllOrders, API_URL } = useGlobal()
+  useEffect(() => { if (allOrders.length === 0) refreshAllOrders() }, [])
   const [dateRange,          setDateRange]          = useState([null, null])
   const [startDate,          endDate]               = dateRange
   const [searchTerm,         setSearchTerm]         = useState('')
-  const [activeTab,          setActiveTab]          = useState('rented')
+  const [activeTab,          setActiveTab]          = useState('all')
   const [isReturnConfirming, setIsReturnConfirming] = useState(null)
   const [outDate,            setOutDate]            = useState(new Date())
   const [inDate,             setInDate]             = useState(new Date())
@@ -45,6 +46,8 @@ const AdminOverview = () => {
   const [editingNotes,       setEditingNotes]       = useState({ id: null, notes: '', condition: '' })
 
   const activeRentalStatuses   = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup']
+  const rentedOutStatuses      = ['Picked Up', 'During Rental', 'Return Pending', 'Active']
+  const readyForPickupStatuses = ['Ready for Pickup', 'Approved']
   const returnedClosedStatuses = ['Returned', 'Closed']
 
   const scheduleOut = allOrders.filter(o => activeRentalStatuses.includes(o.status) && isSameDay(new Date(o.startDate), outDate))
@@ -69,13 +72,15 @@ const AdminOverview = () => {
       order.productId?.name?.toLowerCase().includes(searchTerm.toLowerCase())
 
     if (!searchMatch) return false
-    const isActive   = activeRentalStatuses.includes(order.status)
-    const isReturned = returnedClosedStatuses.includes(order.status)
-    if (activeTab === 'rented'   && !isActive)   return false
-    if (activeTab === 'returned' && !isReturned) return false
+    const isActive        = activeRentalStatuses.includes(order.status)
+    const isReturned      = returnedClosedStatuses.includes(order.status)
+    const isRentedOut     = rentedOutStatuses.includes(order.status)
+    const isReadyPickup   = readyForPickupStatuses.includes(order.status)
+    if (activeTab === 'rented'  && !isRentedOut)   return false
+    if (activeTab === 'ready'   && !isReadyPickup)  return false
+    if (activeTab === 'returned' && !isReturned)    return false
     if (activeTab === 'due') {
-      const daysLeft = differenceInDays(new Date(order.endDate), new Date())
-      if (!isActive || daysLeft < 0 || daysLeft > 3) return false
+      if (!isRentedOut || new Date(order.endDate) >= new Date()) return false
     }
     if (!startDate && !endDate) return true
     const orderDate = new Date(order.startDate)
@@ -346,9 +351,10 @@ const AdminOverview = () => {
             onChange={setActiveTab}
             items={[
               { key: 'all',      label: 'All Rentals' },
+              { key: 'ready',    label: 'Ready for Pickup' },
               { key: 'rented',   label: 'Rented Out' },
               { key: 'returned', label: 'Returned' },
-              { key: 'due',      label: 'Due in 3 Days' },
+              { key: 'due',      label: 'Due Orders' },
             ]}
             size="small"
           />

@@ -87,7 +87,7 @@ const FAQItem = ({ q, a }) => {
 }
 
 const LandingPage = ({ setShowBookingModal }) => {
-  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categories, categoriesData, mainMenu, sidebarMenu, setAuthMode, offers } = useGlobal()
+  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categories, categoriesData, sidebarMenu, setAuthMode, offers } = useGlobal()
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -97,7 +97,6 @@ const LandingPage = ({ setShowBookingModal }) => {
   const selectedSub      = searchParams.get('sub') || ''
   const searchQuery      = (searchParams.get('q') || '').toLowerCase().trim()
 
-  // Sidebar items — use sidebar-menu if available, else fall back to categories
   const navItems = useMemo(() => {
     if (sidebarMenu?.items?.length > 0) return sidebarMenu.items
     return [

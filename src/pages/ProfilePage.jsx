@@ -10,7 +10,9 @@ const ProfilePage = () => {
   const [formData, setFormData] = useState({
     fullName: user?.fullName || '',
     mobile: user?.mobile || '',
-    address: user?.address || ''
+    address: user?.address || '',
+    gstNumber: user?.gstNumber || '',
+    gstBusinessName: user?.gstBusinessName || '',
   })
 
   // KYC States
@@ -199,6 +201,29 @@ const ProfilePage = () => {
                     onChange={e => setFormData({ ...formData, address: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 pl-12 font-bold text-xs focus:bg-white focus:border-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all resize-none"
                   />
+                </div>
+              </div>
+
+              {/* GST Details */}
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">GST Details <span className="normal-case font-normal text-slate-300">(optional)</span></p>
+                <div className="space-y-3">
+                  <div className="space-y-1 group">
+                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-primary transition-colors">GSTIN</label>
+                    <input type="text" maxLength={15} placeholder="22AAAAA0000A1Z5"
+                      value={formData.gstNumber}
+                      onChange={e => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 font-bold text-xs tracking-widest focus:bg-white focus:border-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1 group">
+                    <label className="text-[12px] font-black text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-primary transition-colors">Business Name (as per GST)</label>
+                    <input type="text" placeholder="Registered business name"
+                      value={formData.gstBusinessName}
+                      onChange={e => setFormData({ ...formData, gstBusinessName: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl p-3.5 font-bold text-xs focus:bg-white focus:border-primary focus:ring-4 focus:ring-orange-50 outline-none transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
