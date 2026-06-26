@@ -288,7 +288,7 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products, knownRaisers }
       destroyOnHidden
     >
       <Form form={form} layout="vertical">
-        <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af' }}>QUOTE META</Divider>
+        <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af' }}>Quote Details</Divider>
 
         <Form.Item label="Raised By">
           <AutoComplete
@@ -301,7 +301,8 @@ const QuoteDrawer = ({ open, onClose, initial, onSaved, products, knownRaisers }
           />
         </Form.Item>
 
-        <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af' }}>CUSTOMER DETAILS</Divider>
+        <Divider orientation="left" style={{ fontSize: 11, 
+          color: '#9ca3af' }}>CUSTOMER DETAILS</Divider>
 
         <Form.Item label="Customer Name" name="customerName" rules={[{ required: true, message: 'Name is required' }]}>
           <AutoComplete
@@ -513,7 +514,7 @@ const Quotes = () => {
 
   const columns = [
     {
-      title: 'Quote Code',
+      title: 'Quote No',
       dataIndex: 'quoteCode',
       key: 'quoteCode',
       render: code => (

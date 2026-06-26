@@ -90,6 +90,7 @@ const OrdersMonitor = () => {
   const [unitOptions,       setUnitOptions]       = useState([])
   const [unitLoading,       setUnitLoading]       = useState(false)
   const [assigningUnit,     setAssigningUnit]     = useState(false)
+  const [editingPrice,      setEditingPrice]      = useState(null)  // { itemIndex, value }
 
   // Auto-open order from URL param (navigated from Users page)
   useEffect(() => {
@@ -407,6 +408,27 @@ const OrdersMonitor = () => {
         setVendorForm({ vendorId: '', vendorCost: '' })
       } else { toast.error(data.message || 'Failed') }
     } catch { toast.error('Network error') }
+  }
+
+  const savePriceEdit = async (itemIndex, newPrice) => {
+    if (!selectedOrder) return
+    const updatedItems = (selectedOrder.items?.length ? selectedOrder.items : [selectedOrder.productId]).map((it, idx) =>
+      idx === itemIndex ? { ...it, pricePerDay: newPrice } : it
+    )
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: updatedItems, startDate: selectedOrder.startDate, endDate: selectedOrder.endDate }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        toast.success('Price updated')
+        setAllOrders(prev => prev.map(o => o._id === updated._id ? updated : o))
+        setSelectedOrder(updated)
+      } else toast.error('Update failed')
+    } catch { toast.error('Error') }
+    finally { setEditingPrice(null) }
   }
 
   const handleSendReminder = async (order) => {
@@ -1343,23 +1365,22 @@ const OrdersMonitor = () => {
             <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#6b7280' }}>
               {selectedOrder.bookingCode || '#' + selectedOrder._id?.slice(-8).toUpperCase()}
             </span>
-            <span style={{
-              fontSize: 12, fontWeight: 700,
-              color: cfg(selectedOrder.status).color,
-              background: cfg(selectedOrder.status).bg,
-              border: `1px solid ${cfg(selectedOrder.status).color}30`,
-              borderRadius: 6, padding: '3px 10px',
-            }}>
-              {cfg(selectedOrder.status).label}
-            </span>
-            {selectedOrder.createdAt && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Placed {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}{' '}
-                {new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Text>
-            )}
+            <Tooltip title="Internal Order ID">
+              <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#9ca3af', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 4, padding: '2px 6px', letterSpacing: '0.02em' }}>
+                ID: {selectedOrder._id}
+              </span>
+            </Tooltip>
           </div>
           <div style={{ flex: 1 }} />
+          <span style={{
+            fontSize: 12, fontWeight: 700,
+            color: cfg(selectedOrder.status).color,
+            background: cfg(selectedOrder.status).bg,
+            border: `1px solid ${cfg(selectedOrder.status).color}30`,
+            borderRadius: 6, padding: '3px 10px',
+          }}>
+            {cfg(selectedOrder.status).label}
+          </span>
           <Button icon={<PrinterOutlined />} onClick={() => printOrder(selectedOrder)}>Print</Button>
         </div>
 
@@ -1445,6 +1466,15 @@ const OrdersMonitor = () => {
                     )}
                   </span>
                 </div>
+                {selectedOrder.createdAt && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Placed</span>
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}{' '}
+                      {new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
                 {selectedOrder.isEarlyReturn && (() => {
                   const paid    = selectedOrder.totalPaid || 0
                   const owed    = selectedOrder.totalPrice || 0
@@ -1559,7 +1589,26 @@ const OrdersMonitor = () => {
                           </div>
                         </div>
                       </div>
-                      <Text style={{ fontSize: 13, color: '#6b7280' }}>₹{(item?.pricePerDay || 0).toLocaleString()}</Text>
+                      {editingPrice?.itemIndex === i ? (
+                        <InputNumber
+                          min={0} size="small" prefix="₹" autoFocus
+                          value={editingPrice.value}
+                          onChange={v => setEditingPrice(p => ({ ...p, value: v ?? 0 }))}
+                          onBlur={() => savePriceEdit(i, editingPrice.value)}
+                          onPressEnter={() => savePriceEdit(i, editingPrice.value)}
+                          style={{ width: 90 }}
+                        />
+                      ) : (
+                        <Tooltip title="Click to edit price">
+                          <div
+                            onClick={() => setEditingPrice({ itemIndex: i, value: item?.pricePerDay || 0 })}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                          >
+                            <Text style={{ fontSize: 13, color: '#6b7280' }}>₹{(item?.pricePerDay || 0).toLocaleString()}</Text>
+                            <EditOutlined style={{ fontSize: 10, color: '#d1d5db' }} />
+                          </div>
+                        </Tooltip>
+                      )}
                       <Text style={{ fontSize: 13, color: '#6b7280' }}>{item?.quantity || 1}</Text>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Text style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 14, whiteSpace: 'nowrap' }}>
@@ -1699,8 +1748,7 @@ const OrdersMonitor = () => {
           </div>
         </div>
 
-        {/* All sub-modals (still rendered as overlays) */}
-        {subModals()}
+      {subModals()}
       </div>
     )
   }

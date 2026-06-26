@@ -247,9 +247,9 @@ const QuoteFormPage = () => {
 
             {/* Quote Meta */}
             <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #f0f0f0', padding: '20px 24px', marginBottom: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>Quote Meta</div>
-              <Form.Item label="Quote Code" name="quoteCode" style={{ marginBottom: 12 }}
-                help={isEdit ? 'Edit to rename this quote code' : 'Leave blank to auto-generate (e.g. LR-260624-008)'}
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>Quote Details</div>
+              <Form.Item label="Quote No" name="quoteCode" style={{ marginBottom: 12 }}
+                help={isEdit ? 'Edit to rename this quote No' : 'Leave blank to auto-generate (e.g. LR-260624-008)'}
               >
                 <Input
                   placeholder={isEdit ? quoteCode || 'Auto-generated' : 'Leave blank to auto-generate'}
