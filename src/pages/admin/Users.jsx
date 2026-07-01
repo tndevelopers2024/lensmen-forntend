@@ -235,6 +235,10 @@ const UsersPage = () => {
       </div>
       <table><thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Mode</th><th>Notes</th><th>Amount</th></tr></thead>
       <tbody>${rows}</tbody></table>
+      <div style="margin-top:40px;text-align:right;">
+        <img src="${window.location.origin}/signature.png" alt="Signature" style="height:48px;object-fit:contain;" /><br/>
+        <span style="font-size:11px;color:#555;">Authorized Signature</span>
+      </div>
       <script>window.onload=()=>window.print()</script></body></html>`)
     win.document.close()
   }
@@ -488,6 +492,10 @@ const UsersPage = () => {
                         <div class="row"><span class="label">Mode</span><span class="val">${txn.mode || '—'}</span></div>
                         ${txn.notes ? `<div class="row"><span class="label">Notes</span><span class="val">${txn.notes}</span></div>` : ''}
                         <div class="amount">₹${(txn.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        <div style="margin-top:40px;text-align:right;">
+                          <img src="${window.location.origin}/signature.png" alt="Signature" style="height:48px;object-fit:contain;" /><br/>
+                          <span style="font-size:11px;color:#555;">Authorized Signature</span>
+                        </div>
                         <script>window.onload=()=>window.print()</script></body></html>`)
                       win.document.close()
                     }}

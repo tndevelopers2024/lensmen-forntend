@@ -71,7 +71,7 @@ export const GlobalProvider = ({ children }) => {
   // Create socket ONCE — never disconnect/reconnect on user change
   useEffect(() => {
     const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,

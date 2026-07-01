@@ -69,6 +69,10 @@ const OrdersMonitor = () => {
   const [actualReturnDate,  setActualReturnDate]  = useState(null)  // dayjs
   const [returnDateTime,    setReturnDateTime]    = useState(null)  // dayjs — exact return time
   const [returnNotes,       setReturnNotes]       = useState('')
+  const [offerCode,         setOfferCode]         = useState('')
+  const [offerApplying,     setOfferApplying]     = useState(false)
+  const [offerMode,         setOfferMode]         = useState('code')   // 'code' | 'manual'
+  const [manualDiscount,    setManualDiscount]    = useState(0)
   const [editingNotes,      setEditingNotes]      = useState({ id: null, notes: '', condition: '' })
   const [selectedKycOrder,  setSelectedKycOrder]  = useState(null)
   const [kycRejectionReason,setKycRejectionReason]= useState('')
@@ -284,6 +288,7 @@ const OrdersMonitor = () => {
     }
 
     const logoUrl = `${window.location.origin}/logo.jpg`
+    const signatureUrl = `${window.location.origin}/signature.png`
 
     const html = `<!DOCTYPE html><html><head>
 <meta charset="utf-8">
@@ -434,7 +439,7 @@ const OrdersMonitor = () => {
         <span>₹${balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>
       <div class="sig-box" style="border-top:1px solid #ccc;">
-        <div style="font-size:12px;margin-bottom:8px;">N Indrakumar</div>
+        <img src="${signatureUrl}" alt="Authorized Signature" style="height:48px;object-fit:contain;margin:0 auto 4px;" />
         <div style="font-size:11px;color:#555;">Authorized Signature</div>
       </div>
     </div>
@@ -593,6 +598,79 @@ const OrdersMonitor = () => {
         toast.success('Order permanently deleted')
         setAllOrders(prev => prev.filter(o => o._id !== orderId))
       } else toast.error('Delete failed')
+    } catch { toast.error('Error') }
+  }
+
+  const handleApplyOffer = async () => {
+    if (!offerCode.trim()) return
+    setOfferApplying(true)
+    try {
+      const base = selectedOrder.totalPrice || 0
+      const vRes = await fetch(`${API_URL}/offers/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: offerCode.trim(), orderAmount: base }),
+      })
+      const vData = await vRes.json()
+      if (!vRes.ok) { toast.error(vData.message || 'Invalid offer'); return }
+
+      const newTotal = Math.max(0, base - vData.discount)
+      const dRes = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerCode: vData.code, discountAmount: vData.discount, totalPrice: newTotal }),
+      })
+      if (dRes.ok) {
+        const updated = await dRes.json()
+        const merged = { ...updated, gstEnabled: selectedOrder.gstEnabled, gstRate: selectedOrder.gstRate }
+        setSelectedOrder(merged)
+        setAllOrders(prev => prev.map(o => o._id === merged._id ? merged : o))
+        toast.success(vData.message)
+        setOfferCode('')
+      } else toast.error('Failed to apply offer')
+    } catch { toast.error('Error applying offer') }
+    finally { setOfferApplying(false) }
+  }
+
+  const handleApplyManualDiscount = async () => {
+    if (!manualDiscount || manualDiscount <= 0) { toast.error('Enter a valid discount amount'); return }
+    const base = (selectedOrder.totalPrice || 0) + (selectedOrder.discountAmount || 0)
+    const discount = Math.min(manualDiscount, base)
+    const newTotal = base - discount
+    setOfferApplying(true)
+    try {
+      const dRes = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerCode: `MANUAL-₹${discount}`, discountAmount: discount, totalPrice: newTotal }),
+      })
+      if (dRes.ok) {
+        const updated = await dRes.json()
+        const merged = { ...updated, gstEnabled: selectedOrder.gstEnabled, gstRate: selectedOrder.gstRate }
+        setSelectedOrder(merged)
+        setAllOrders(prev => prev.map(o => o._id === merged._id ? merged : o))
+        toast.success(`Discount of ₹${discount.toLocaleString()} applied`)
+        setManualDiscount(0)
+      } else toast.error('Failed to apply discount')
+    } catch { toast.error('Error') }
+    finally { setOfferApplying(false) }
+  }
+
+  const handleRemoveOffer = async () => {
+    try {
+      const restoredTotal = (selectedOrder.totalPrice || 0) + (selectedOrder.discountAmount || 0)
+      const dRes = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offerCode: null, discountAmount: 0, totalPrice: restoredTotal }),
+      })
+      if (dRes.ok) {
+        const updated = await dRes.json()
+        const merged = { ...updated, gstEnabled: selectedOrder.gstEnabled, gstRate: selectedOrder.gstRate }
+        setSelectedOrder(merged)
+        setAllOrders(prev => prev.map(o => o._id === merged._id ? merged : o))
+        toast.success('Offer removed')
+      } else toast.error('Failed to remove offer')
     } catch { toast.error('Error') }
   }
 
@@ -2032,6 +2110,64 @@ const OrdersMonitor = () => {
 
             {/* Action buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Offer / Discount */}
+              {selectedOrder.offerCode ? (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>🎟 {selectedOrder.offerCode} applied</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Discount: ₹{(selectedOrder.discountAmount || 0).toLocaleString()}</div>
+                  </div>
+                  <Button size="small" danger onClick={handleRemoveOffer}>Remove</Button>
+                </div>
+              ) : (
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                  {/* Mode toggle */}
+                  <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb' }}>
+                    {[{ key: 'code', label: 'Offer Code' }, { key: 'manual', label: 'Manual Discount' }].map(m => (
+                      <button key={m.key} onClick={() => setOfferMode(m.key)} style={{
+                        flex: 1, padding: '7px 0', fontSize: 11, fontWeight: 600, border: 'none', cursor: 'pointer',
+                        background: offerMode === m.key ? '#1e1b4b' : '#f9fafb',
+                        color: offerMode === m.key ? '#fff' : '#6b7280',
+                        transition: 'all 0.15s',
+                      }}>{m.label}</button>
+                    ))}
+                  </div>
+                  {/* Input area */}
+                  <div style={{ padding: '10px 12px', display: 'flex', gap: 8 }}>
+                    {offerMode === 'code' ? (
+                      <>
+                        <Input
+                          placeholder="Enter offer code"
+                          value={offerCode}
+                          onChange={e => setOfferCode(e.target.value.toUpperCase())}
+                          onPressEnter={handleApplyOffer}
+                          style={{ borderRadius: 8, fontSize: 13, flex: 1 }}
+                          allowClear
+                        />
+                        <Button loading={offerApplying} onClick={handleApplyOffer} type="primary"
+                          style={{ borderRadius: 8, background: '#1e1b4b', borderColor: '#1e1b4b', fontWeight: 600 }}>
+                          Apply
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <InputNumber
+                          placeholder="Discount ₹"
+                          min={0} max={selectedOrder.totalPrice || 99999}
+                          value={manualDiscount || null}
+                          onChange={v => setManualDiscount(v || 0)}
+                          style={{ flex: 1, borderRadius: 8 }}
+                          prefix="₹"
+                        />
+                        <Button loading={offerApplying} onClick={handleApplyManualDiscount} type="primary"
+                          style={{ borderRadius: 8, background: '#1e1b4b', borderColor: '#1e1b4b', fontWeight: 600 }}>
+                          Apply
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <Button block onClick={() => setPaymentTarget(selectedOrder)} size="large">₹ Record Payment</Button>
               {(() => {
                 const isOverdue = (selectedOrder.pendingAmount || 0) > 0 && new Date(selectedOrder.endDate) < new Date()

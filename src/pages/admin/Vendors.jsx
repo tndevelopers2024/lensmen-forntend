@@ -238,6 +238,10 @@ export default function VendorsPage() {
       </div>
       <table><thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Items</th><th>Amount</th><th>Order Status</th><th>Payment</th></tr></thead>
       <tbody>${rows}</tbody></table>
+      <div style="margin-top:40px;text-align:right;">
+        <img src="${window.location.origin}/signature.png" alt="Signature" style="height:48px;object-fit:contain;" /><br/>
+        <span style="font-size:11px;color:#555;">Authorized Signature</span>
+      </div>
       <script>window.onload=()=>window.print()</script></body></html>`)
     win.document.close()
   }
@@ -265,6 +269,10 @@ export default function VendorsPage() {
       <div class="row"><span class="label">Payment Status</span><span class="val" style="color:${order.vendorPaymentStatus === 'Paid' ? '#16a34a' : '#dc2626'}">${order.vendorPaymentStatus === 'Paid' ? '✓ Cleared' : 'Pending'}</span></div>
       ${order.vendorPaymentStatus === 'Paid' && order.vendorPaidDate ? `<div class="row"><span class="label">Paid On</span><span class="val">${new Date(order.vendorPaidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>` : ''}
       <div class="amount">₹${(order.vendorCostTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+      <div style="margin-top:40px;text-align:right;">
+        <img src="${window.location.origin}/signature.png" alt="Signature" style="height:48px;object-fit:contain;" /><br/>
+        <span style="font-size:11px;color:#555;">Authorized Signature</span>
+      </div>
       <script>window.onload=()=>window.print()</script></body></html>`)
     win.document.close()
   }
