@@ -21,7 +21,6 @@ const AddGear = () => {
   const [productFile, setProductFile] = useState(null)
   const [previewUrl,  setPreviewUrl]  = useState('')
   const [loading,     setLoading]     = useState(false)
-  const [totalQty,    setTotalQty]    = useState(1)
 
   const handleImageUpload = (file) => {
     setProductFile(file)
@@ -33,7 +32,7 @@ const AddGear = () => {
     setLoading(true)
     const formData = new FormData()
     Object.entries(values).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') formData.append(k, v)
+      if (v !== undefined && v !== null && v !== '' && !(typeof v === 'number' && isNaN(v))) formData.append(k, v)
     })
     if (productFile) formData.append('image', productFile)
 
@@ -63,7 +62,7 @@ const AddGear = () => {
       />
 
       <Card style={{ borderRadius: 16, boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
-        <Form form={form} layout="vertical" onFinish={handleAddProduct} initialValues={{ totalQuantity: 1, availableQuantity: 1 }}>
+        <Form form={form} layout="vertical" onFinish={handleAddProduct}>
 
           {/* ── Basic Info ─────────────────────────────────────────── */}
           <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 0 }}>
@@ -96,48 +95,18 @@ const AddGear = () => {
             </Form.Item>
           </div>
 
-          {/* ── Stock Management ───────────────────────────────────── */}
+          {/* ── Units ──────────────────────────────────────────────── */}
           <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Stock Management
+            Units
           </Divider>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px', marginBottom: 8 }}>
-            <Form.Item label={<span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Total Units Owned</span>} name="totalQuantity">
-              <InputNumber
-                min={1}
-                size="large"
-                style={{ width: '100%' }}
-                onChange={v => {
-                  setTotalQty(v || 1)
-                  const cur = form.getFieldValue('availableQuantity') || 0
-                  if (cur > (v || 1)) form.setFieldValue('availableQuantity', v || 1)
-                }}
-              />
-            </Form.Item>
-
-            <Form.Item label={<span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>Currently Available</span>} name="availableQuantity">
-              <InputNumber min={0} max={totalQty} size="large" style={{ width: '100%' }} />
-            </Form.Item>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+            <span style={{ fontSize: 20 }}>📦</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#15803d' }}>1 unit will be created automatically</div>
+              <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>You can add more units from the Inventory page after creating the product.</div>
+            </div>
           </div>
-
-          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.availableQuantity !== cur.availableQuantity || prev.totalQuantity !== cur.totalQuantity}>
-            {({ getFieldValue }) => {
-              const avail = getFieldValue('availableQuantity') ?? 1
-              const total = getFieldValue('totalQuantity') ?? 1
-              const pct   = Math.round((avail / total) * 100)
-              const color = avail === 0 ? '#ef4444' : avail === total ? '#10b981' : '#f59e0b'
-              return (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 99, transition: 'width 0.25s' }} />
-                  </div>
-                  <Text style={{ fontSize: 12, color: '#9ca3af', marginTop: 6, display: 'block' }}>
-                    <span style={{ color, fontWeight: 600 }}>{avail}</span> of {total} units available
-                  </Text>
-                </div>
-              )
-            }}
-          </Form.Item>
 
           {/* ── Product Image ──────────────────────────────────────── */}
           <Divider orientation="left" style={{ fontSize: 11, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>

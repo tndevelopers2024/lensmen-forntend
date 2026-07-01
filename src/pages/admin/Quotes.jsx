@@ -455,10 +455,12 @@ const KYC_CLR  = { Approved: '#10b981', Pending: '#f59e0b', Rejected: '#ef4444',
 const Quotes = () => {
   const { API_URL, products, fetchProducts, allUsers, allOrders, fetchAdminData } = useGlobal()
   const navigate = useNavigate()
-  const [quotes,       setQuotes]       = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [previewQuote, setPreviewQuote] = useState(null)
-  const [previewUser,  setPreviewUser]  = useState(null)
+  const [quotes,          setQuotes]          = useState([])
+  const [loading,         setLoading]         = useState(true)
+  const [previewQuote,    setPreviewQuote]    = useState(null)
+  const [previewUser,     setPreviewUser]     = useState(null)
+  const [createUserModal, setCreateUserModal] = useState(null)  // quote object pending convert
+  const [creatingUser,    setCreatingUser]    = useState(false)
 
   const loadQuotes = async () => {
     setLoading(true)
@@ -496,13 +498,45 @@ const Quotes = () => {
     } catch { toast.error('Delete failed') }
   }
 
-  const handleConvert = async (quote) => {
+  const doConvert = async (quote) => {
     try {
       const res  = await fetch(`${API_URL}/quotes/${quote._id}/convert`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       const data = await res.json()
       if (res.ok) { toast.success('Quote converted to order!'); setPreviewQuote(null); loadQuotes() }
       else toast.error(data.message || 'Conversion failed')
     } catch { toast.error('Network error') }
+  }
+
+  const handleConvert = async (quote) => {
+    if (!quote.customerEmail) { doConvert(quote); return }
+    try {
+      const res  = await fetch(`${API_URL}/admin/users/check-email?email=${encodeURIComponent(quote.customerEmail)}`)
+      const data = await res.json()
+      if (data.exists) {
+        doConvert(quote)
+      } else {
+        setCreateUserModal(quote)
+      }
+    } catch { doConvert(quote) }
+  }
+
+  const handleCreateUserAndConvert = async () => {
+    if (!createUserModal) return
+    setCreatingUser(true)
+    try {
+      await fetch(`${API_URL}/admin/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: createUserModal.customerName,
+          email:    createUserModal.customerEmail,
+          mobile:   createUserModal.customerMobile,
+        }),
+      })
+      await doConvert(createUserModal)
+      toast.success('Account created and quote converted!')
+    } catch { toast.error('Failed') }
+    finally { setCreatingUser(false); setCreateUserModal(null) }
   }
 
   const stats = {
@@ -661,6 +695,44 @@ const Quotes = () => {
         onConvert={() => handleConvert(previewQuote)}
         onEdit={() => { navigate(`/admin/quotes/${previewQuote._id}/edit`); setPreviewQuote(null) }}
       />
+
+      {/* ── Unregistered user confirm modal ── */}
+      <Modal
+        open={!!createUserModal}
+        onCancel={() => setCreateUserModal(null)}
+        footer={null}
+        width={440}
+        title={null}
+        destroyOnHidden
+      >
+        {createUserModal && (
+          <div style={{ padding: '8px 0' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Customer not registered</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, lineHeight: 1.6 }}>
+              <strong style={{ color: NAVY }}>{createUserModal.customerName}</strong> ({createUserModal.customerEmail}) does not have an account yet.
+              Create a free account for them so they can log in, view their order, and upload KYC documents.
+            </div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px', marginBottom: 20, fontSize: 12, color: '#15803d', lineHeight: 1.6 }}>
+              ✓ Account will be created without a password<br />
+              ✓ Customer can use <strong>"Forgot Password"</strong> on the login page to set their password<br />
+              ✓ A notification will be sent to their account
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <Button onClick={() => { setCreateUserModal(null); doConvert(createUserModal) }}>
+                Skip & Convert Only
+              </Button>
+              <Button
+                type="primary"
+                loading={creatingUser}
+                onClick={handleCreateUserAndConvert}
+                style={{ background: '#10b981', borderColor: '#10b981' }}
+              >
+                Create Account & Convert
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* ── Customer preview drawer ─────────────────────────────── */}
       {previewUser && (() => {

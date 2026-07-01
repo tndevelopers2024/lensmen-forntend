@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Row, Col, Card, Statistic, Table, Tabs, Tag, Button, Space,
-  Input, Modal, Radio, DatePicker, Typography,
+  Input, Modal, Radio, DatePicker, TimePicker, Typography,
 } from 'antd'
 import { SearchOutlined, CheckCircleOutlined } from '@ant-design/icons'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
@@ -39,8 +39,8 @@ const AdminOverview = () => {
   const [searchTerm,         setSearchTerm]         = useState('')
   const [activeTab,          setActiveTab]          = useState('all')
   const [isReturnConfirming, setIsReturnConfirming] = useState(null)
-  const [outDate,            setOutDate]            = useState(new Date())
-  const [inDate,             setInDate]             = useState(new Date())
+  const [returnDateTime,     setReturnDateTime]     = useState(null)
+  const [scheduleRange,      setScheduleRange]      = useState([null, null])
   const [returnCondition,    setReturnCondition]    = useState('Good')
   const [returnNotes,        setReturnNotes]        = useState('')
   const [editingNotes,       setEditingNotes]       = useState({ id: null, notes: '', condition: '' })
@@ -50,8 +50,19 @@ const AdminOverview = () => {
   const readyForPickupStatuses = ['Ready for Pickup', 'Approved']
   const returnedClosedStatuses = ['Returned', 'Closed']
 
-  const scheduleOut = allOrders.filter(o => activeRentalStatuses.includes(o.status) && isSameDay(new Date(o.startDate), outDate))
-  const scheduleIn  = allOrders.filter(o => activeRentalStatuses.includes(o.status) && isSameDay(new Date(o.endDate),   inDate))
+  const [schFrom, schTo] = scheduleRange
+  const scheduleOut = allOrders.filter(o => {
+    if (!activeRentalStatuses.includes(o.status)) return false
+    if (!schFrom || !schTo) return true
+    const d = new Date(o.startDate)
+    return d >= schFrom.startOf('day').toDate() && d <= schTo.endOf('day').toDate()
+  })
+  const scheduleIn = allOrders.filter(o => {
+    if (!activeRentalStatuses.includes(o.status)) return false
+    if (!schFrom || !schTo) return true
+    const d = new Date(o.endDate)
+    return d >= schFrom.startOf('day').toDate() && d <= schTo.endOf('day').toDate()
+  })
 
   const flattenItems = (orders) =>
     orders.flatMap(order => {
@@ -131,28 +142,39 @@ const AdminOverview = () => {
   }
 
   // ── Schedule item row ─────────────────────────────────────────────
-  const ScheduleRow = ({ item }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
-      <img
-        src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
-        style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
-        alt=""
-      />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, color: NAVY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {item.displayItem?.name || 'Unknown item'}
+  const ScheduleRow = ({ item }) => {
+    const sku      = item.displayItem?.productId?.sku || item.displayItem?.sku || '—'
+    const unitCode = item.displayItem?.unitCode || '—'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
+        <img
+          src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
+          style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
+          alt=""
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: NAVY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {item.displayItem?.name || 'Unknown item'}
+          </div>
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.userName}</div>
         </div>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>{item.userName}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#6366f1', background: '#eef2ff', borderRadius: 4, padding: '1px 6px', letterSpacing: '0.03em' }}>{sku}</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: '#0891b2', background: '#ecfeff', borderRadius: 4, padding: '1px 6px', letterSpacing: '0.03em' }}>{unitCode}</span>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const columns = [
     {
       title: 'Equipment',
       key: 'equipment',
       render: (_, order) => {
-        const items = order.items?.length ? order.items : [order.productId]
+        const items    = order.items?.length ? order.items : [order.productId]
+        const isMulti  = items.length > 1
+        const sku      = isMulti ? `${items.length} items` : (items[0]?.productId?.sku || items[0]?.sku || '—')
+        const unitCode = isMulti ? '' : (items[0]?.unitCode || '—')
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img
@@ -162,7 +184,11 @@ const AdminOverview = () => {
             />
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, color: NAVY }}>
-                {items.length > 1 ? `${items.length} items` : items[0]?.name || '—'}
+                {isMulti ? `${items.length} items` : items[0]?.name || '—'}
+              </div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#6366f1', background: '#eef2ff', borderRadius: 4, padding: '1px 6px' }}>{sku}</span>
+                {!isMulti && <span style={{ fontSize: 10, fontWeight: 600, color: '#0891b2', background: '#ecfeff', borderRadius: 4, padding: '1px 6px' }}>{unitCode}</span>}
               </div>
             </div>
           </div>
@@ -244,25 +270,31 @@ const AdminOverview = () => {
       </Row>
 
       {/* ── Schedule row ─────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>
+          Schedule {schFrom && schTo ? `· ${schFrom.format('DD MMM')} – ${schTo.format('DD MMM YYYY')}` : '· All upcoming'}
+        </div>
+        <RangePicker
+          value={scheduleRange[0] ? scheduleRange : [null, null]}
+          onChange={v => setScheduleRange(v || [null, null])}
+          size="small"
+          format="DD MMM YYYY"
+          allowClear
+          placeholder={['From date', 'To date']}
+        />
+      </div>
       <Row gutter={[16, 16]}>
         <Col span={12}>
           <Card
             style={cardStyle}
-            bodyStyle={{ padding: 0 }}
+            bodyStyle={{ padding: 0, height: 360, overflowY: 'auto' }}
             title={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Going Out</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Pickups: {outDate.toLocaleDateString('en-GB')}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Pickups scheduled</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <DatePicker
-                    value={dayjs(outDate)}
-                    onChange={d => d && setOutDate(d.toDate())}
-                    size="small" format="DD/MM/YYYY" allowClear={false}
-                  />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{flattenedOut.length}</span>
-                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedOut.length}</span>
               </div>
             }
           >
@@ -276,41 +308,42 @@ const AdminOverview = () => {
         <Col span={12}>
           <Card
             style={cardStyle}
-            bodyStyle={{ padding: 0 }}
+            bodyStyle={{ padding: 0, height: 360, overflowY: 'auto' }}
             title={
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Coming Back</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Returns: {inDate.toLocaleDateString('en-GB')}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Returns due</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <DatePicker
-                    value={dayjs(inDate)}
-                    onChange={d => d && setInDate(d.toDate())}
-                    size="small" format="DD/MM/YYYY" allowClear={false}
-                  />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>{flattenedIn.length}</span>
-                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedIn.length}</span>
               </div>
             }
           >
             {flattenedIn.length === 0 ? (
               <div style={{ padding: '32px 0', textAlign: 'center', color: '#d1d5db', fontSize: 12 }}>No returns due</div>
             ) : (
-              flattenedIn.map(item => (
-                <div key={item.uniqueKey} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
-                  <img
-                    src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
-                    style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
-                    alt=""
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: NAVY }}>{item.displayItem?.name || 'Unknown item'}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{item.userName}</div>
+              flattenedIn.map(item => {
+                const sku      = item.displayItem?.productId?.sku || item.displayItem?.sku || '—'
+                const unitCode = item.displayItem?.unitCode || '—'
+                return (
+                  <div key={item.uniqueKey} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid #f9fafb' }}>
+                    <img
+                      src={getImageUrl(item.displayItem?.imageUrl || item.displayItem?.productId?.imageUrl)}
+                      style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', border: '1px solid #f0f0f0', flexShrink: 0, background: '#f9fafb' }}
+                      alt=""
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: NAVY }}>{item.displayItem?.name || 'Unknown item'}</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{item.userName}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, marginRight: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#6366f1', background: '#eef2ff', borderRadius: 4, padding: '1px 6px' }}>{sku}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#0891b2', background: '#ecfeff', borderRadius: 4, padding: '1px 6px' }}>{unitCode}</span>
+                    </div>
+                    <Button size="small" type="primary" onClick={() => setIsReturnConfirming(item._id)}>Return</Button>
                   </div>
-                  <Button size="small" type="primary" onClick={() => setIsReturnConfirming(item._id)}>Return</Button>
-                </div>
-              ))
+                )
+              })
             )}
           </Card>
         </Col>
@@ -371,14 +404,48 @@ const AdminOverview = () => {
       {/* Return Confirmation Modal */}
       <Modal
         open={!!isReturnConfirming}
-        onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('') }}
+        onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes(''); setReturnDateTime(null) }}
         title="Confirm Equipment Return"
         okText="Confirm Return"
         okButtonProps={{ style: returnCondition === 'Bad' ? { background: '#ef4444', borderColor: '#ef4444' } : {} }}
-        onOk={() => { updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes); setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes('') }}
+        onOk={() => {
+          const extra = returnDateTime ? { returnedAt: returnDateTime.toISOString() } : {}
+          updateBookingStatus(isReturnConfirming, 'Returned', returnCondition, returnNotes, extra)
+          setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes(''); setReturnDateTime(null)
+        }}
         centered destroyOnHidden
       >
         <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Exact return date & time */}
+          <div>
+            <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Exact Return Date &amp; Time</Text>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <DatePicker
+                style={{ flex: 1 }}
+                value={returnDateTime}
+                onChange={d => setReturnDateTime(d ? (returnDateTime ? d.hour(returnDateTime.hour()).minute(returnDateTime.minute()) : d) : null)}
+                format="DD/MM/YYYY"
+                placeholder="Return date"
+                allowClear
+              />
+              <TimePicker
+                style={{ flex: 1 }}
+                value={returnDateTime}
+                onChange={t => {
+                  if (!t) return
+                  const base = returnDateTime || dayjs()
+                  setReturnDateTime(base.hour(t.hour()).minute(t.minute()).second(0))
+                }}
+                format="hh:mm A"
+                use12Hours
+                placeholder="Return time"
+                allowClear={false}
+                minuteStep={15}
+              />
+            </div>
+          </div>
+
           <div>
             <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Physical Condition</Text>
             <Radio.Group value={returnCondition} onChange={e => setReturnCondition(e.target.value)} buttonStyle="solid">

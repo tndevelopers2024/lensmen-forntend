@@ -415,7 +415,6 @@ const LandingPage = ({ setShowBookingModal }) => {
                                   <p className="font-black text-[18px] md:text-[22px] text-gray-900 leading-none">
                                     ₹{totalPrice}
                                   </p>
-                                  <p className="text-gray-400 text-[10px] md:text-[11px] mt-0.5">Incl. of GST</p>
                                 </div>
 
                                 {qty > 0 ? (

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Table, Input, Tag, Button, Modal, Drawer, Select, Space, Typography, Avatar, Image, Divider,
+  Table, Input, Tag, Button, Modal, Drawer, Select, Space, Typography, Avatar, Image, Divider, Tooltip,
 } from 'antd'
 import {
   SearchOutlined, EyeOutlined, UserOutlined, CheckCircleOutlined,
   CloseCircleOutlined, PlusOutlined, MailOutlined, PhoneOutlined,
-  EnvironmentOutlined, CalendarOutlined, IdcardOutlined, DeleteOutlined,
+  EnvironmentOutlined, CalendarOutlined, IdcardOutlined, DeleteOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import { HiCheckCircle, HiUpload } from 'react-icons/hi'
 import toast from 'react-hot-toast'
@@ -197,6 +197,46 @@ const UsersPage = () => {
       fetchAdminData('/admin/users')
     } catch { toast.error('Server error') }
     finally { setAddLoading(false) }
+  }
+
+  const handlePrintUserTransactions = (user, userOrders, userTransactions, totalSpent) => {
+    const rows = userTransactions.map(p => `
+      <tr>
+        <td>${new Date(p.collectedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+        <td>${p.bookingCode || '—'}</td>
+        <td style="text-transform:capitalize">${p.type || '—'}</td>
+        <td>${p.mode || '—'}</td>
+        <td>${p.notes || '—'}</td>
+        <td style="font-weight:700;color:#16a34a">₹${(p.amount || 0).toLocaleString('en-IN')}</td>
+      </tr>`).join('')
+    const win = window.open('', '_blank')
+    win.document.write(`<!DOCTYPE html><html><head><title>Transactions — ${user.fullName}</title>
+      <style>
+        body { font-family: sans-serif; font-size: 13px; color: #111; padding: 32px; }
+        h1 { font-size: 20px; margin: 0 0 4px; } p { margin: 2px 0; color: #666; font-size: 12px; }
+        .meta { display: flex; justify-content: space-between; margin-bottom: 24px; }
+        .total { font-size: 15px; font-weight: 700; color: #16a34a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #f3f4f6; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+        td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+        @media print { body { padding: 16px; } }
+      </style></head><body>
+      <div class="meta">
+        <div><h1>${user.fullName}</h1>
+          ${user.userId ? `<p>ID: ${user.userId}</p>` : ''}
+          ${user.mobile ? `<p>${user.mobile}</p>` : ''}
+          ${user.email ? `<p>${user.email}</p>` : ''}
+        </div>
+        <div style="text-align:right">
+          <p style="font-size:11px;color:#9ca3af">Printed on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+          <p class="total">Total Collected ₹${totalSpent.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          <p style="font-size:11px;color:#6b7280">${userTransactions.length} transaction${userTransactions.length !== 1 ? 's' : ''} · ${userOrders.length} order${userOrders.length !== 1 ? 's' : ''}</p>
+        </div>
+      </div>
+      <table><thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Mode</th><th>Notes</th><th>Amount</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.close()
   }
 
   const fieldCls = "w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 px-3 text-[13px] text-slate-800 placeholder-slate-400 outline-none focus:border-[#1e1b4b] focus:bg-white transition-all"
@@ -422,6 +462,38 @@ const UsersPage = () => {
             {
               title: 'Amount', dataIndex: 'amount', width: 90,
               render: v => <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>₹{(v || 0).toLocaleString()}</span>,
+            },
+            {
+              title: '', width: 48,
+              render: (_, txn) => (
+                <Tooltip title="Print this transaction">
+                  <Button
+                    size="small" icon={<PrinterOutlined />}
+                    onClick={() => {
+                      const win = window.open('', '_blank')
+                      win.document.write(`<!DOCTYPE html><html><head><title>Transaction — ${txn.bookingCode || ''}</title>
+                        <style>
+                          body{font-family:sans-serif;font-size:13px;color:#111;padding:40px;max-width:480px;margin:auto}
+                          h2{margin:0 0 2px;font-size:18px}.sub{color:#9ca3af;font-size:12px;margin-bottom:24px}
+                          .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6}
+                          .label{color:#6b7280}.val{font-weight:600}
+                          .amount{font-size:22px;font-weight:800;color:#16a34a;margin-top:16px;text-align:right}
+                          @media print{body{padding:16px}}
+                        </style></head><body>
+                        <h2>Payment Receipt</h2>
+                        <div class="sub">${selectedUser.fullName} · Printed ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                        <div class="row"><span class="label">Invoice</span><span class="val">${txn.bookingCode || '—'}</span></div>
+                        <div class="row"><span class="label">Date</span><span class="val">${new Date(txn.collectedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+                        <div class="row"><span class="label">Type</span><span class="val" style="text-transform:capitalize">${txn.type || '—'}</span></div>
+                        <div class="row"><span class="label">Mode</span><span class="val">${txn.mode || '—'}</span></div>
+                        ${txn.notes ? `<div class="row"><span class="label">Notes</span><span class="val">${txn.notes}</span></div>` : ''}
+                        <div class="amount">₹${(txn.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        <script>window.onload=()=>window.print()</script></body></html>`)
+                      win.document.close()
+                    }}
+                  />
+                </Tooltip>
+              ),
             },
           ]
 
@@ -669,13 +741,22 @@ const UsersPage = () => {
                 {/* TRANSACTIONS */}
                 {drawerTab === 'transactions' && (
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 12 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                        Payment History
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                          Payment History
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                          Total collected ₹{totalSpent.toLocaleString()}
+                        </span>
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
-                        Total collected ₹{totalSpent.toLocaleString()}
-                      </span>
+                      <Button
+                        size="small" icon={<PrinterOutlined />}
+                        disabled={userTransactions.length === 0}
+                        onClick={() => handlePrintUserTransactions(selectedUser, userOrders, userTransactions, totalSpent)}
+                      >
+                        Print
+                      </Button>
                     </div>
                     {userTransactions.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '48px 0', color: '#d1d5db' }}>

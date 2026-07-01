@@ -44,7 +44,7 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
 
   const totalPerDay = products.reduce((s, p) => s + (p.pricePerDay || 0), 0) * qty
   const duration    = bookingData.startDate && bookingData.endDate
-    ? Math.max(1, Math.ceil(differenceInDays(bookingData.endDate, bookingData.startDate)))
+    ? Math.max(1, Math.ceil(differenceInDays(bookingData.endDate, bookingData.startDate)) + 1)
     : 0
   const subtotal   = duration * totalPerDay
   const discount   = appliedOffer?.discount || 0

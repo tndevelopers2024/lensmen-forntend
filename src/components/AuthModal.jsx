@@ -16,11 +16,12 @@ const KYC_DOCS = [
 ]
 
 const LEFT = {
-  login:  { tag: 'Welcome Back',       title: 'Sign in to\nyour account.',   sub: 'Access your bookings, rental history, and manage your gear.' },
-  signup: { tag: 'New Here?',           title: 'Join the\nLensmen crew.',     sub: 'Create your account and start renting pro cinema gear today.' },
-  verify: { tag: 'One Last Step',       title: 'Check your\nemail inbox.',    sub: 'Enter the 6-digit code we sent to confirm your identity.' },
-  forgot: { tag: 'Password Recovery',   title: 'Forgot your\npassword?',      sub: 'No worries — enter your email and we\'ll send a reset code.' },
-  reset:  { tag: 'Almost Done',         title: 'Set a new\npassword.',         sub: 'Choose a strong password to keep your account secure.' },
+  login:      { tag: 'Welcome Back',       title: 'Sign in to\nyour account.',   sub: 'Access your bookings, rental history, and manage your gear.' },
+  signup:     { tag: 'New Here?',           title: 'Join the\nLensmen crew.',     sub: 'Create your account and start renting pro cinema gear today.' },
+  verify:     { tag: 'One Last Step',       title: 'Check your\nemail inbox.',    sub: 'Enter the 6-digit code we sent to confirm your identity.' },
+  forgot:     { tag: 'Password Recovery',   title: 'Forgot your\npassword?',      sub: 'No worries — enter your email and we\'ll send a reset code.' },
+  reset:      { tag: 'Almost Done',         title: 'Set a new\npassword.',         sub: 'Choose a strong password to keep your account secure.' },
+  setpassword:{ tag: 'Account Setup',       title: 'Set your\npassword.',          sub: 'Your account was created by admin. Set a password to access your orders.' },
 }
 
 const AuthModal = ({ mode, setMode }) => {
@@ -85,6 +86,10 @@ const AuthModal = ({ mode, setMode }) => {
           setView('verify')
           toast.success('Verification code sent to your email')
         }
+      } else if (data.code === 'NO_PASSWORD') {
+        // Admin-created account with no password — guide to set one
+        setResetData(prev => ({ ...prev, email: data.email || authData.email }))
+        setView('setpassword')
       } else { toast.error(data.message) }
     } catch { toast.error('Authentication failed') }
     finally { setLoading(false) }
@@ -253,11 +258,12 @@ const AuthModal = ({ mode, setMode }) => {
               <div className="mb-7">
                 <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-[0.28em] mb-1.5">{info.tag}</p>
                 <h3 className="text-[22px] font-bold text-slate-900 tracking-tight leading-snug">
-                  {view === 'login'  && 'Good to see you again'}
-                  {view === 'signup' && 'Create your account'}
-                  {view === 'verify' && 'Enter your code'}
-                  {view === 'forgot' && 'Reset your password'}
-                  {view === 'reset'  && 'Set a new password'}
+                  {view === 'login'       && 'Good to see you again'}
+                  {view === 'signup'      && 'Create your account'}
+                  {view === 'verify'      && 'Enter your code'}
+                  {view === 'forgot'      && 'Reset your password'}
+                  {view === 'reset'       && 'Set a new password'}
+                  {view === 'setpassword' && 'Set up your account'}
                 </h3>
                 <p className="text-[13px] text-slate-400 mt-1.5">
                   {(view === 'login' || view === 'verify') && (
@@ -534,6 +540,47 @@ const AuthModal = ({ mode, setMode }) => {
                     {loading ? 'Sending…' : 'Send Reset Code'}
                   </button>
                 </form>
+              )}
+
+              {/* ── SET PASSWORD (admin-created accounts) ── */}
+              {view === 'setpassword' && (
+                <div className="space-y-5">
+                  <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-[13px] text-orange-700 leading-relaxed">
+                    Your account was set up by our admin. An OTP will be sent to your email so you can create a password and log in.
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Email Address</label>
+                    <div className="relative">
+                      <HiOutlineMail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[15px]" />
+                      <input type="email" required placeholder="Your email"
+                        value={resetData.email}
+                        onChange={e => setResetData({ ...resetData, email: e.target.value })}
+                        className={field} />
+                    </div>
+                  </div>
+                  <button disabled={loading} onClick={async () => {
+                    setLoading(true)
+                    try {
+                      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: resetData.email }),
+                      })
+                      const data = await res.json()
+                      if (res.ok) { setView('reset'); toast.success('OTP sent to your email') }
+                      else toast.error(data.message)
+                    } catch { toast.error('Request failed') }
+                    finally { setLoading(false) }
+                  }}
+                    className="w-full py-3.5 rounded-xl font-semibold text-[13px] text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 transition-all duration-200">
+                    {loading ? 'Sending…' : 'Send OTP & Set Password'}
+                  </button>
+                  <p className="text-center">
+                    <button type="button" onClick={() => setView('login')}
+                      className="text-[12px] text-slate-400 hover:text-slate-700 transition-colors">
+                      ← Back to login
+                    </button>
+                  </p>
+                </div>
               )}
 
               {/* ── RESET PASSWORD ── */}

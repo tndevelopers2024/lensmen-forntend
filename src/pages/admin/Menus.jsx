@@ -382,13 +382,6 @@ export default function Menus() {
             Build your storefront navigation — drag items to reorder, add submenus per item
           </div>
         </div>
-        <Button
-          type="primary" icon={<PlusOutlined />} size="large"
-          onClick={() => setNewModal(true)}
-          style={{ background: NAVY, borderColor: NAVY, borderRadius: 10, fontWeight: 700 }}
-        >
-          New Menu
-        </Button>
       </div>
 
       {loading ? (
@@ -454,64 +447,15 @@ export default function Menus() {
           {/* ── Right panel: editor ───────────────────────────────── */}
           {selected ? (
             <div style={{ flex: 1 }}>
-              {/* Menu name + save */}
-              <div style={{ background: '#fff', borderRadius: 14, border: '1.5px solid #e5e7eb', padding: '20px 24px', marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
-                      MENU NAME
-                    </div>
-                    <Input
-                      value={menuTitle}
-                      onChange={e => setMenuTitle(e.target.value)}
-                      style={{ fontSize: 16, fontWeight: 700, color: NAVY, border: '1.5px solid #e5e7eb', borderRadius: 10, height: 44 }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-                      <span style={{ fontSize: 12, color: '#9ca3af' }}>Handle:</span>
-                      <code style={{ fontSize: 12, color: '#6b7280', background: '#f9fafb', padding: '2px 8px', borderRadius: 6 }}>
-                        {selected.handle}
-                      </code>
-                      {selected.position && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20,
-                          background: POSITION_META[selected.position]?.bg,
-                          color: POSITION_META[selected.position]?.color,
-                        }}>
-                          Active {POSITION_META[selected.position]?.label === 'Top Nav' ? 'Top Navigation' : 'Sidebar'}
-                        </span>
-                      )}
-                      <Select
-                        value={menuPos}
-                        onChange={v => setMenuPos(v)}
-                        size="small"
-                        style={{ width: 120 }}
-                        options={[
-                          { value: '',        label: 'No position' },
-                          { value: 'top-nav', label: 'Top Nav'     },
-                          { value: 'sidebar', label: 'Sidebar'     },
-                        ]}
-                      />
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                    <Popconfirm
-                      title="Delete this menu?"
-                      description="All items will be removed permanently."
-                      onConfirm={() => handleDeleteMenu(selected)}
-                      okText="Delete" okButtonProps={{ danger: true }}
-                    >
-                      <Button danger>Delete Menu</Button>
-                    </Popconfirm>
-                    <Button
-                      type="primary" loading={saving} onClick={handleSave}
-                      style={{ background: NAVY, borderColor: NAVY, borderRadius: 10, fontWeight: 700, height: 40 }}
-                    >
-                      Save Menu
-                    </Button>
-                  </div>
-                </div>
+              {/* Save bar */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                <Button
+                  type="primary" loading={saving} onClick={handleSave}
+                  style={{ background: NAVY, borderColor: NAVY, borderRadius: 10, fontWeight: 700, height: 40 }}
+                >
+                  Save Menu
+                </Button>
               </div>
-
               {/* Items */}
               <div style={{ background: '#fff', borderRadius: 14, border: '1.5px solid #e5e7eb', padding: '20px 24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>

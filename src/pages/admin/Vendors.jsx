@@ -6,7 +6,7 @@ import {
 import {
   PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined,
   ShopOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  SendOutlined, DeleteFilled, DollarOutlined,
+  SendOutlined, DeleteFilled, DollarOutlined, PrinterOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import { useGlobal } from '../../context/GlobalContext'
@@ -199,6 +199,76 @@ export default function VendorsPage() {
     finally { setPayingId(null) }
   }
 
+  const handlePrintVendorBills = () => {
+    if (!selected) return
+    const total = vendorOrders.reduce((s, o) => s + (o.vendorCostTotal || 0), 0)
+    const rows = vendorOrders.map(o => `
+      <tr>
+        <td>${new Date(o.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+        <td>#${(o.bookingCode || o._id)?.slice(-6).toUpperCase()}</td>
+        <td>${o.userName || '—'}</td>
+        <td>${(o.vendorItems || []).map(it => `${it.name} ×${it.quantity}`).join(', ') || '—'}</td>
+        <td style="font-weight:700">₹${(o.vendorCostTotal || 0).toLocaleString('en-IN')}</td>
+        <td>${o.status || '—'}</td>
+        <td style="color:${o.vendorPaymentStatus === 'Paid' ? '#16a34a' : '#dc2626'}">${o.vendorPaymentStatus === 'Paid' ? '✓ Cleared' : 'Pending'}</td>
+      </tr>`).join('')
+    const win = window.open('', '_blank')
+    win.document.write(`<!DOCTYPE html><html><head><title>Vendor Bills — ${selected.name}</title>
+      <style>
+        body { font-family: sans-serif; font-size: 13px; color: #111; padding: 32px; }
+        h1 { font-size: 20px; margin: 0 0 4px; } p { margin: 2px 0; color: #666; font-size: 12px; }
+        .meta { display: flex; justify-content: space-between; margin-bottom: 24px; }
+        .total { font-size: 15px; font-weight: 700; color: #dc2626; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #f3f4f6; text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+        td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-size: 12px; }
+        @media print { body { padding: 16px; } }
+      </style></head><body>
+      <div class="meta">
+        <div><h1>${selected.name}</h1>
+          ${selected.vendorNumber ? `<p>Vendor # ${selected.vendorNumber}</p>` : ''}
+          ${selected.phone ? `<p>${selected.phone}</p>` : ''}
+          ${selected.email ? `<p>${selected.email}</p>` : ''}
+        </div>
+        <div style="text-align:right">
+          <p style="font-size:11px;color:#9ca3af">Printed on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+          <p class="total">Total: ₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+          <p style="font-size:11px;color:#6b7280">${vendorOrders.length} order${vendorOrders.length !== 1 ? 's' : ''}</p>
+        </div>
+      </div>
+      <table><thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Items</th><th>Amount</th><th>Order Status</th><th>Payment</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.close()
+  }
+
+  const handlePrintSingleBill = (order) => {
+    const items = (order.vendorItems || []).map(it => `<li>${it.name} × ${it.quantity}</li>`).join('')
+    const win = window.open('', '_blank')
+    win.document.write(`<!DOCTYPE html><html><head><title>Bill — #${(order.bookingCode || order._id)?.slice(-6).toUpperCase()}</title>
+      <style>
+        body { font-family: sans-serif; font-size: 13px; color: #111; padding: 40px; max-width: 520px; margin: auto; }
+        h2 { margin: 0 0 2px; font-size: 18px; } .sub { color: #9ca3af; font-size: 12px; margin-bottom: 24px; }
+        .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+        .label { color: #6b7280; } .val { font-weight: 600; }
+        .amount { font-size: 20px; font-weight: 800; color: #dc2626; margin-top: 16px; text-align: right; }
+        ul { margin: 4px 0 0 16px; padding: 0; } li { font-size: 12px; color: #374151; }
+        @media print { body { padding: 16px; } }
+      </style></head><body>
+      <h2>Vendor Bill</h2>
+      <div class="sub">${selected?.name || ''} · Printed ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+      <div class="row"><span class="label">Order #</span><span class="val">#${(order.bookingCode || order._id)?.slice(-6).toUpperCase()}</span></div>
+      <div class="row"><span class="label">Date</span><span class="val">${new Date(order.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>
+      <div class="row"><span class="label">Customer</span><span class="val">${order.userName || '—'}</span></div>
+      <div class="row"><span class="label">Items</span><span class="val"><ul>${items || '<li>—</li>'}</ul></span></div>
+      <div class="row"><span class="label">Order Status</span><span class="val">${order.status || '—'}</span></div>
+      <div class="row"><span class="label">Payment Status</span><span class="val" style="color:${order.vendorPaymentStatus === 'Paid' ? '#16a34a' : '#dc2626'}">${order.vendorPaymentStatus === 'Paid' ? '✓ Cleared' : 'Pending'}</span></div>
+      ${order.vendorPaymentStatus === 'Paid' && order.vendorPaidDate ? `<div class="row"><span class="label">Paid On</span><span class="val">${new Date(order.vendorPaidDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</span></div>` : ''}
+      <div class="amount">₹${(order.vendorCostTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+      <script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.close()
+  }
+
   const filtered = useMemo(() =>
     vendors.filter(v =>
       !search ||
@@ -262,30 +332,38 @@ export default function VendorsPage() {
       ),
     },
     {
-      title: '', width: 120,
+      title: '', width: 150,
       render: (_, record) => (
-        record.vendorPaymentStatus === 'Paid' ? (
-          <Popconfirm
-            title="Reset payment to Pending?"
-            okText="Reset" okType="default"
-            onConfirm={() => handleMarkPayment(record, 'Pending')}
-          >
-            <Button size="small" style={{ fontSize: 11, color: '#6b7280' }}
-              loading={payingId === record._id}>
-              Reset
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {record.vendorPaymentStatus === 'Paid' ? (
+            <Popconfirm
+              title="Reset payment to Pending?"
+              okText="Reset" okType="default"
+              onConfirm={() => handleMarkPayment(record, 'Pending')}
+            >
+              <Button size="small" style={{ fontSize: 11, color: '#6b7280' }}
+                loading={payingId === record._id}>
+                Reset
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Button
+              size="small" type="primary"
+              icon={<DollarOutlined />}
+              style={{ background: '#10b981', borderColor: '#10b981', fontSize: 11 }}
+              loading={payingId === record._id}
+              onClick={() => { setPayModal(record); setPayAmount(record.vendorCostTotal || '') }}
+            >
+              Mark Paid
             </Button>
-          </Popconfirm>
-        ) : (
-          <Button
-            size="small" type="primary"
-            icon={<DollarOutlined />}
-            style={{ background: '#10b981', borderColor: '#10b981', fontSize: 11 }}
-            loading={payingId === record._id}
-            onClick={() => { setPayModal(record); setPayAmount(record.vendorCostTotal || '') }}
-          >
-            Mark Paid
-          </Button>
-        )
+          )}
+          <Tooltip title="Print this bill">
+            <Button
+              size="small" icon={<PrinterOutlined />}
+              onClick={() => handlePrintSingleBill(record)}
+            />
+          </Tooltip>
+        </div>
       ),
     },
   ]
@@ -621,8 +699,13 @@ export default function VendorsPage() {
                           Bills
                           <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 500, marginLeft: 8 }}>{vendorOrders.length} order{vendorOrders.length !== 1 ? 's' : ''}</span>
                         </div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>
-                          Total: ₹{vendorOrders.reduce((s, o) => s + (o.vendorCostTotal || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>
+                            Total: ₹{vendorOrders.reduce((s, o) => s + (o.vendorCostTotal || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                          <Button size="small" icon={<PrinterOutlined />} onClick={handlePrintVendorBills} disabled={vendorOrders.length === 0}>
+                            Print
+                          </Button>
                         </div>
                       </div>
                       {ordersLoading ? (

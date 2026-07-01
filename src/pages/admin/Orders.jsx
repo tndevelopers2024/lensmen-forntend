@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
-  Input, Button, Modal, Typography, Radio, DatePicker, Image,
-  Table, Space, Tooltip, Popconfirm, Select, InputNumber, Tag
+  Input, Button, Modal, Typography, Radio, DatePicker, TimePicker, Image,
+  Table, Space, Tooltip, Popconfirm, Select, InputNumber, Tag,
+  Drawer, Form, Switch,
 } from 'antd'
 import {
   EyeOutlined, SafetyCertificateOutlined,
@@ -12,7 +13,7 @@ import {
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import { getAdminSettings } from './Settings'
 import PageHeader from '../../components/PageHeader'
@@ -46,12 +47,14 @@ const ACTIVE_STATUSES        = ['Picked Up', 'During Rental', 'Return Pending', 
 const RENTED_OUT_STATUSES    = ['Picked Up', 'During Rental', 'Return Pending', 'Active']
 const READY_PICKUP_STATUSES  = ['Ready for Pickup', 'Approved']
 const RETURNED_STATUSES      = ['Returned', 'Closed']
+const UPCOMING_STATUSES      = ['Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved']
 
 // ── Main component ───────────────────────────────────────────────────
 const OrdersMonitor = () => {
-  const { allOrders, setAllOrders, refreshAllOrders, API_URL, products, fetchProducts } = useGlobal()
+  const { allOrders, setAllOrders, refreshAllOrders, API_URL, products, fetchProducts, allUsers, fetchAdminData } = useGlobal()
   const pickupLocs = getAdminSettings().pickupLocations || []
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const orderIdParam = searchParams.get('orderId')
 
   const [selectedOrder,     setSelectedOrder]     = useState(null)
@@ -64,6 +67,7 @@ const OrdersMonitor = () => {
   const [returnCondition,   setReturnCondition]   = useState('Good')
   const [isEarlyReturn,     setIsEarlyReturn]     = useState(false)
   const [actualReturnDate,  setActualReturnDate]  = useState(null)  // dayjs
+  const [returnDateTime,    setReturnDateTime]    = useState(null)  // dayjs — exact return time
   const [returnNotes,       setReturnNotes]       = useState('')
   const [editingNotes,      setEditingNotes]      = useState({ id: null, notes: '', condition: '' })
   const [selectedKycOrder,  setSelectedKycOrder]  = useState(null)
@@ -91,16 +95,33 @@ const OrdersMonitor = () => {
   const [unitLoading,       setUnitLoading]       = useState(false)
   const [assigningUnit,     setAssigningUnit]     = useState(false)
   const [editingPrice,      setEditingPrice]      = useState(null)  // { itemIndex, value }
+  const [adminNoteInput,    setAdminNoteInput]    = useState('')
+  const [adminNoteSaving,   setAdminNoteSaving]   = useState(false)
+  const [adminNoteAdding,   setAdminNoteAdding]   = useState(false)
+  const [manualOrderOpen,   setManualOrderOpen]   = useState(false)
+  const [manualOrderSaving, setManualOrderSaving] = useState(false)
+  const [moItems,           setMoItems]           = useState([])
+  const [moDates,           setMoDates]           = useState(null)   // [dayjs, dayjs]
+  const [moCustomer,        setMoCustomer]        = useState({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
+  const [moDiscount,        setMoDiscount]        = useState(0)
+  const [moNotes,           setMoNotes]           = useState('')
+  const [moUserSearch,      setMoUserSearch]      = useState('')
 
-  // Auto-open order from URL param (navigated from Users page)
+  // Sync selectedOrder with URL param
   useEffect(() => {
-    if (!orderIdParam || !allOrders.length || selectedOrder) return
+    if (!orderIdParam) { setSelectedOrder(null); return }
+    if (!allOrders.length) return
     const order = allOrders.find(o => o._id === orderIdParam)
     if (order) setSelectedOrder(order)
   }, [allOrders, orderIdParam])
 
   useEffect(() => { if (products.length === 0) fetchProducts() }, [])
   useEffect(() => { if (allOrders.length === 0) refreshAllOrders() }, [])
+  useEffect(() => { if (allUsers.length === 0) fetchAdminData('/admin/users') }, [])
+  useEffect(() => {
+    setAdminNoteInput('')
+    setAdminNoteAdding(false)
+  }, [selectedOrder?._id])
   useEffect(() => {
     fetch(`${API_URL}/vendors`).then(r => r.json()).then(setVendors).catch(() => {})
   }, [])
@@ -135,6 +156,92 @@ const OrdersMonitor = () => {
       }
     } catch { toast.error('Error') }
     finally { setEditSaving(false) }
+  }
+
+  const addAdminNote = async () => {
+    if (!adminNoteInput.trim()) return
+    setAdminNoteSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/admin-notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: adminNoteInput }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setAllOrders(prev => prev.map(o => o._id === updated._id ? updated : o))
+        setSelectedOrder(updated)
+        setAdminNoteInput('')
+        setAdminNoteAdding(false)
+      } else {
+        toast.error('Failed to save note')
+      }
+    } catch { toast.error('Error saving note') }
+    finally { setAdminNoteSaving(false) }
+  }
+
+  const deleteAdminNote = async (index) => {
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/admin-notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteIndex: index }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setAllOrders(prev => prev.map(o => o._id === updated._id ? updated : o))
+        setSelectedOrder(updated)
+      } else {
+        toast.error('Failed to delete note')
+      }
+    } catch { toast.error('Error deleting note') }
+  }
+
+  const resetManualOrder = () => {
+    setMoItems([]); setMoDates(null)
+    setMoCustomer({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
+    setMoDiscount(0); setMoNotes(''); setMoUserSearch('')
+  }
+
+  const saveManualOrder = async () => {
+    if (!moCustomer.name.trim()) { toast.error('Customer name is required'); return }
+    if (moItems.length === 0) { toast.error('Add at least one item'); return }
+    if (!moDates?.[0] || !moDates?.[1]) { toast.error('Select rental dates'); return }
+    setManualOrderSaving(true)
+    try {
+      const days = Math.max(1, moDates[1].diff(moDates[0], 'day') + 1)
+      const subtotal   = moItems.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * days, 0)
+      const totalPrice = Math.max(0, subtotal - (moDiscount || 0))
+      const res = await fetch(`${API_URL}/admin/bookings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userName:    moCustomer.name,
+          userEmail:   moCustomer.email,
+          userMobile:  moCustomer.mobile,
+          userAddress: moCustomer.address,
+          accountType: moCustomer.accountType,
+          items:       moItems.map(it => ({ productId: it.productId, name: it.name, pricePerDay: it.pricePerDay, imageUrl: it.imageUrl, quantity: it.quantity || 1 })),
+          startDate:   moDates[0].toDate(),
+          endDate:     moDates[1].toDate(),
+          totalDays:   days,
+          totalPrice,
+          discountAmount: moDiscount || 0,
+          notes:       moNotes,
+        }),
+      })
+      if (res.ok) {
+        const newOrder = await res.json()
+        toast.success(`Order ${newOrder.bookingCode} created`)
+        setAllOrders(prev => [newOrder, ...prev])
+        setManualOrderOpen(false)
+        resetManualOrder()
+      } else {
+        const d = await res.json()
+        toast.error(d.message || 'Failed to create order')
+      }
+    } catch { toast.error('Network error') }
+    finally { setManualOrderSaving(false) }
   }
 
   // ── Print order ────────────────────────────────────────────────────
@@ -339,7 +446,7 @@ const OrdersMonitor = () => {
       const res = await fetch(`${API_URL}/admin/bookings/${orderId}`, { method: 'DELETE' })
       if (res.ok) {
         toast.success('Order moved to archive')
-        setSelectedOrder(null)
+        setSelectedOrder(null); navigate('/admin/orders')
         setAllOrders(prev => prev.map(o => o._id === orderId ? { ...o, isArchived: true, archivedAt: new Date().toISOString() } : o))
       } else toast.error('Archive failed')
     } catch { toast.error('Error') }
@@ -510,7 +617,7 @@ const OrdersMonitor = () => {
       })
       if (res.ok) {
         toast.success(opts.keepOpen ? 'Location updated' : `→ ${targetStatus}`)
-        if (!opts.keepOpen) setSelectedOrder(null)
+        if (!opts.keepOpen) { setSelectedOrder(null); navigate('/admin/orders') }
       } else toast.error('Failed')
     } catch { toast.error('Error') }
     finally { setActionLoading(false) }
@@ -531,22 +638,28 @@ const OrdersMonitor = () => {
     if (showArchive) return matchSearch
 
     let matchTab = true
-    if (activeTab === 'rented')   matchTab = RENTED_OUT_STATUSES.includes(order.status)
-    if (activeTab === 'ready')    matchTab = READY_PICKUP_STATUSES.includes(order.status)
-    if (activeTab === 'returned') matchTab = RETURNED_STATUSES.includes(order.status)
+    if (activeTab === 'upcoming')  matchTab = UPCOMING_STATUSES.includes(order.status)
+    if (activeTab === 'rented')    matchTab = RENTED_OUT_STATUSES.includes(order.status)
+    if (activeTab === 'ready')     matchTab = READY_PICKUP_STATUSES.includes(order.status)
+    if (activeTab === 'returned')  matchTab = RETURNED_STATUSES.includes(order.status)
     if (activeTab === 'due') {
       matchTab = RENTED_OUT_STATUSES.includes(order.status) &&
         new Date(order.endDate) < new Date()
     }
 
-    const matchDate = !dateFilter ||
-      new Date(order.startDate).toDateString() === dateFilter.toDate().toDateString()
+    const matchDate = !dateFilter?.[0] || !dateFilter?.[1] || (() => {
+      const d = new Date(order.startDate)
+      const from = dateFilter[0].startOf('day').toDate()
+      const to   = dateFilter[1].endOf('day').toDate()
+      return d >= from && d <= to
+    })()
 
     return matchSearch && matchTab && matchDate
   })
 
   const counts = {
     all:      activeOrders.length,
+    upcoming: activeOrders.filter(o => UPCOMING_STATUSES.includes(o.status)).length,
     rented:   activeOrders.filter(o => RENTED_OUT_STATUSES.includes(o.status)).length,
     ready:    activeOrders.filter(o => READY_PICKUP_STATUSES.includes(o.status)).length,
     returned: activeOrders.filter(o => RETURNED_STATUSES.includes(o.status)).length,
@@ -575,6 +688,14 @@ const OrdersMonitor = () => {
   // ── Detail modal action buttons ────────────────────────────────────
   const DetailActions = ({ order }) => {
     const s = order.status
+    const items = order.items?.length ? order.items : []
+    const unassignedItems = items.filter(it => !it.unitId)
+    const allUnitsAssigned = unassignedItems.length === 0
+    const paymentSettled = (order.pendingAmount || 0) <= 0
+
+    const UNIT_REQUIRED_TARGETS    = new Set(['Ready for Pickup', 'During Rental'])
+    const PAYMENT_REQUIRED_TARGETS = new Set(['Closed'])
+
     const map = {
       'Request Submitted': [
         { label: 'Approve Rental', target: 'Approved', primary: true },
@@ -604,22 +725,49 @@ const OrdersMonitor = () => {
 
     return (
       <Space direction="vertical" style={{ width: '100%' }}>
-        {actions.map(a => (
-          <Button
-            key={a.label}
-            type={a.primary ? 'primary' : 'default'}
-            danger={a.danger}
-            block
-            loading={actionLoading}
-            onClick={() => {
-              if (a.modal) { setIsEarlyReturn(false); setActualReturnDate(null); setIsReturnConfirming(order) }
-              else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
-              else if (a.needsNotes) { setReopenNotes(''); setReopenTarget(order._id) }
-              else if (a.target === 'Approved') { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }
-              else handleTransition(order._id, a.target)
-            }}
-          >{a.label}</Button>
-        ))}
+        {!allUnitsAssigned && UNIT_REQUIRED_TARGETS.has(actions.find(a => UNIT_REQUIRED_TARGETS.has(a.target))?.target) && (
+          <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#92400e' }}>
+            ⚠ Assign a unit to all items before proceeding:
+            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+              {unassignedItems.map((it, i) => <li key={i}>{it.name}</li>)}
+            </ul>
+          </div>
+        )}
+        {!paymentSettled && actions.some(a => PAYMENT_REQUIRED_TARGETS.has(a.target)) && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#991b1b' }}>
+            ⚠ Payment not settled — ₹{(order.pendingAmount || 0).toLocaleString()} pending. Collect full payment before closing.
+          </div>
+        )}
+        {actions.map(a => {
+          const needsUnit    = UNIT_REQUIRED_TARGETS.has(a.target)
+          const needsPayment = PAYMENT_REQUIRED_TARGETS.has(a.target)
+          const blocked      = (needsUnit && !allUnitsAssigned) || (needsPayment && !paymentSettled)
+          const tooltip      = needsUnit && !allUnitsAssigned
+            ? 'Assign a unit to every item first'
+            : needsPayment && !paymentSettled
+              ? `Collect ₹${(order.pendingAmount || 0).toLocaleString()} pending payment first`
+              : null
+          const btn = (
+            <Button
+              key={a.label}
+              type={a.primary ? 'primary' : 'default'}
+              danger={a.danger}
+              block
+              disabled={blocked}
+              loading={actionLoading}
+              onClick={() => {
+                if (a.modal) { setIsEarlyReturn(false); setActualReturnDate(null); setIsReturnConfirming(order) }
+                else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
+                else if (a.needsNotes) { setReopenNotes(''); setReopenTarget(order._id) }
+                else if (a.target === 'Approved') { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }
+                else handleTransition(order._id, a.target)
+              }}
+            >{a.label}</Button>
+          )
+          return tooltip
+            ? <Tooltip key={a.label} title={tooltip} placement="left">{btn}</Tooltip>
+            : btn
+        })}
       </Space>
     )
   }
@@ -680,7 +828,7 @@ const OrdersMonitor = () => {
       render: (code, record) => (
         <span
           style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#E5550F', cursor: 'pointer' }}
-          onClick={e => { e.stopPropagation(); setSelectedOrder(record) }}
+          onClick={e => { e.stopPropagation(); setSelectedOrder(record); setSearchParams({ orderId: record._id }) }}
         >
           {code || '#' + record._id?.slice(-8).toUpperCase()}
         </span>
@@ -737,7 +885,9 @@ const OrdersMonitor = () => {
         const overdueDays = overdue
           ? Math.floor((new Date() - new Date(record.endDate)) / (1000 * 60 * 60 * 24))
           : 0
-        if ((record.pendingAmount || 0) === 0 || record.paymentStatus === 'Fully Paid')
+        const noPending = (record.pendingAmount || 0) === 0
+        const hasPaid   = (record.totalPaid || 0) > 0
+        if ((noPending && hasPaid) || record.paymentStatus === 'Fully Paid')
           return <span style={{ color: '#10b981', fontWeight: 700, fontSize: 12 }}>PAID</span>
         if (overdue)
           return (
@@ -786,15 +936,21 @@ const OrdersMonitor = () => {
     },
     {
       title: 'Balance',
-      dataIndex: 'pendingAmount',
       key: 'pendingAmount',
       width: 95,
-      sorter: (a, b) => (a.pendingAmount || 0) - (b.pendingAmount || 0),
-      render: amt => (
-        <span style={{ fontWeight: 600, fontSize: 13, color: (amt || 0) > 0 ? '#ef4444' : '#10b981' }}>
-          ₹{(amt || 0).toLocaleString()}
-        </span>
-      ),
+      sorter: (a, b) => {
+        const balA = Math.max(0, (a.totalPrice || 0) - (a.totalPaid || 0))
+        const balB = Math.max(0, (b.totalPrice || 0) - (b.totalPaid || 0))
+        return balA - balB
+      },
+      render: (_, record) => {
+        const balance = Math.max(0, (record.totalPrice || 0) - (record.totalPaid || 0))
+        return (
+          <span style={{ fontWeight: 600, fontSize: 13, color: balance > 0 ? '#ef4444' : '#10b981' }}>
+            ₹{balance.toLocaleString()}
+          </span>
+        )
+      },
     },
     {
       title: 'Days',
@@ -835,7 +991,7 @@ const OrdersMonitor = () => {
         return (
           <Space size={4} onClick={e => e.stopPropagation()}>
             <Tooltip title="View Details">
-              <Button size="small" icon={<EyeOutlined />} onClick={() => setSelectedOrder(record)} />
+              <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedOrder(record); setSearchParams({ orderId: record._id }) }} />
             </Tooltip>
             {hasKyc && (
               <Tooltip title="KYC Docs">
@@ -885,7 +1041,7 @@ const OrdersMonitor = () => {
         return (
           <Modal
             open={!!isReturnConfirming}
-            onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes(''); setIsEarlyReturn(false); setActualReturnDate(null) }}
+            onCancel={() => { setIsReturnConfirming(null); setReturnCondition('Good'); setReturnNotes(''); setIsEarlyReturn(false); setActualReturnDate(null); setReturnDateTime(null) }}
             title={
               <Space>
                 <span style={{ color: '#1e1b4b', fontWeight: 700 }}>Confirm Equipment Return</span>
@@ -899,17 +1055,54 @@ const OrdersMonitor = () => {
                 : { background: '#10b981', borderColor: '#10b981' },
             }}
             onOk={() => {
-              const extra = isEarlyReturn && actualReturnDate
-                ? { isEarlyReturn: true, actualReturnDate: actualReturnDate.toISOString(), actualDays, adjustedTotal }
-                : {}
+              const extra = {
+                ...(returnDateTime ? { returnedAt: returnDateTime.toISOString() } : {}),
+                ...(isEarlyReturn && actualReturnDate
+                  ? { isEarlyReturn: true, actualReturnDate: actualReturnDate.toISOString(), actualDays, adjustedTotal }
+                  : {}),
+              }
               updateBookingStatus(order._id, 'Returned', returnCondition, returnNotes, extra)
               setIsReturnConfirming(null)
               setReturnCondition('Good'); setReturnNotes('')
-              setIsEarlyReturn(false); setActualReturnDate(null)
+              setIsEarlyReturn(false); setActualReturnDate(null); setReturnDateTime(null)
             }}
             centered destroyOnHidden width={480}
           >
             <div style={{ paddingBlock: 8, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+              {/* Exact return date & time */}
+              <div>
+                <Text strong style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>Exact Return Date &amp; Time</Text>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <DatePicker
+                    style={{ flex: 1 }}
+                    value={returnDateTime}
+                    onChange={d => setReturnDateTime(d ? (returnDateTime ? d.hour(returnDateTime.hour()).minute(returnDateTime.minute()) : d) : null)}
+                    format="DD/MM/YYYY"
+                    placeholder="Return date"
+                    allowClear
+                  />
+                  <TimePicker
+                    style={{ flex: 1 }}
+                    value={returnDateTime}
+                    onChange={t => {
+                      if (!t) { setReturnDateTime(prev => prev); return }
+                      const base = returnDateTime || dayjs()
+                      setReturnDateTime(base.hour(t.hour()).minute(t.minute()).second(0))
+                    }}
+                    format="hh:mm A"
+                    use12Hours
+                    placeholder="Return time"
+                    allowClear={false}
+                    minuteStep={15}
+                  />
+                </div>
+                {scheduledEnd && (
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                    Scheduled return: {scheduledEnd.format('DD/MM/YYYY HH:mm')}
+                  </div>
+                )}
+              </div>
 
               {/* Condition */}
               <div>
@@ -956,14 +1149,9 @@ const OrdersMonitor = () => {
                         style={{ width: '100%' }}
                         value={actualReturnDate}
                         onChange={d => setActualReturnDate(d)}
-                        disabledDate={d => {
-                          if (!d) return false
-                          const after = d.isAfter(today, 'day')
-                          const before = pickupDate && d.isBefore(pickupDate, 'day')
-                          return after || before
-                        }}
                         format="DD/MM/YYYY"
                         placeholder="Select actual return date"
+                        allowClear
                       />
                     </div>
 
@@ -1355,7 +1543,7 @@ const OrdersMonitor = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
           <Button
             icon={<ArrowRightOutlined style={{ transform: 'rotate(180deg)' }} />}
-            onClick={() => { setSelectedOrder(null); setEditingOrder(false) }}
+            onClick={() => { setSelectedOrder(null); setEditingOrder(false); navigate('/admin/orders') }}
             style={{ borderRadius: 8, fontWeight: 600 }}
           >
             Back to Orders
@@ -1675,6 +1863,69 @@ const OrdersMonitor = () => {
                 )}
               </div>
             )}
+
+            {/* Admin Notes */}
+            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', padding: '14px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Admin Notes {(selectedOrder.adminNotes?.length > 0) && <span style={{ color: '#6366f1' }}>({selectedOrder.adminNotes.length})</span>}
+                </div>
+                {!adminNoteAdding && (
+                  <button
+                    onClick={() => setAdminNoteAdding(true)}
+                    style={{ fontSize: 12, fontWeight: 600, color: '#6366f1', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    + Add Note
+                  </button>
+                )}
+              </div>
+
+              {/* Existing notes list */}
+              {(selectedOrder.adminNotes?.length > 0) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: adminNoteAdding ? 12 : 0 }}>
+                  {[...selectedOrder.adminNotes].reverse().map((note, revIdx) => {
+                    const realIdx = selectedOrder.adminNotes.length - 1 - revIdx
+                    const d = new Date(note.createdAt)
+                    const timeStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    return (
+                      <div key={realIdx} style={{ background: '#f8fafc', borderRadius: 8, padding: '9px 12px', border: '1px solid #e5e7eb', position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                          <div style={{ fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.6, flex: 1 }}>{note.text}</div>
+                          <Popconfirm title="Delete this note?" onConfirm={() => deleteAdminNote(realIdx)} okText="Delete" okButtonProps={{ danger: true }} placement="left">
+                            <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', padding: 0, fontSize: 13, flexShrink: 0, lineHeight: 1 }}>✕</button>
+                          </Popconfirm>
+                        </div>
+                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 5 }}>{timeStr}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* No notes state */}
+              {!selectedOrder.adminNotes?.length && !adminNoteAdding && (
+                <div style={{ fontSize: 13, color: '#d1d5db', fontStyle: 'italic' }}>No admin notes yet.</div>
+              )}
+
+              {/* Add note input */}
+              {adminNoteAdding && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <TextArea
+                    value={adminNoteInput}
+                    onChange={e => setAdminNoteInput(e.target.value)}
+                    placeholder="Type a note..."
+                    autoSize={{ minRows: 2, maxRows: 6 }}
+                    style={{ borderRadius: 8, fontSize: 13 }}
+                    autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addAdminNote() }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <Button size="small" onClick={() => { setAdminNoteInput(''); setAdminNoteAdding(false) }}>Cancel</Button>
+                    <Button size="small" type="primary" loading={adminNoteSaving} onClick={addAdminNote} style={{ background: '#6366f1', borderColor: '#6366f1' }}>Save Note</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── RIGHT: Revenue + Actions ────────────────────── */}
@@ -1769,13 +2020,22 @@ const OrdersMonitor = () => {
               allowClear
               style={{ width: 240 }}
             />
-            <DatePicker
-              placeholder="Filter by date"
+            <DatePicker.RangePicker
+              placeholder={['From date', 'To date']}
               value={dateFilter}
               onChange={d => { setDateFilter(d); setCurrentPage(1) }}
               allowClear
-              style={{ width: 155 }}
+              style={{ width: 240 }}
+              format="DD MMM YYYY"
             />
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => { resetManualOrder(); setManualOrderOpen(true) }}
+              style={{ background: '#1e1b4b', borderColor: '#1e1b4b', fontWeight: 600 }}
+            >
+              New Order
+            </Button>
           </Space>
         }
       />
@@ -1785,6 +2045,7 @@ const OrdersMonitor = () => {
         {!showArchive && (
           <>
             <TabPill id="all"      label="All Rentals" />
+            <TabPill id="upcoming" label="Upcoming" />
             <TabPill id="ready"    label="Ready for Pickup" />
             <TabPill id="rented"   label="Rented Out" />
             <TabPill id="returned" label="Returned" />
@@ -1850,7 +2111,7 @@ const OrdersMonitor = () => {
             style: { padding: '10px 16px' },
           }}
           onRow={record => ({
-            onClick: () => { if (!showArchive) setSelectedOrder(record) },
+            onClick: () => { if (!showArchive) { setSelectedOrder(record); setSearchParams({ orderId: record._id }) } },
             style: { cursor: showArchive ? 'default' : 'pointer', opacity: showArchive ? 0.8 : 1 },
           })}
           locale={{
@@ -1865,6 +2126,158 @@ const OrdersMonitor = () => {
       </div>
 
       {subModals()}
+
+      {/* ── Manual Order Drawer ─────────────────────────────────── */}
+      <Drawer
+        open={manualOrderOpen}
+        onClose={() => setManualOrderOpen(false)}
+        title={<span style={{ fontWeight: 700, color: '#1e1b4b' }}>Create Manual Order</span>}
+        width={560}
+        destroyOnHidden
+        footer={
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <Button onClick={() => setManualOrderOpen(false)}>Cancel</Button>
+            <Button type="primary" loading={manualOrderSaving} onClick={saveManualOrder}
+              style={{ background: '#1e1b4b', borderColor: '#1e1b4b', fontWeight: 600 }}>
+              Create Order
+            </Button>
+          </div>
+        }
+      >
+        {/* Customer */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Customer</div>
+          <Select
+            showSearch placeholder="Search registered user..."
+            style={{ width: '100%', marginBottom: 10 }}
+            filterOption={false}
+            onSearch={v => setMoUserSearch(v)}
+            value={null}
+            options={(allUsers || [])
+              .filter(u => {
+                const q = moUserSearch.toLowerCase()
+                return !q || u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.mobile?.includes(q)
+              })
+              .slice(0, 20)
+              .map(u => ({ value: u._id, label: `${u.fullName} — ${u.email || u.mobile}`, u }))
+            }
+            onChange={(_, opt) => {
+              const u = opt?.u
+              if (u) setMoCustomer({ name: u.fullName, email: u.email || '', mobile: u.mobile || '', address: u.address || '', accountType: u.accountType || 'Private' })
+            }}
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Name *</div>
+              <Input value={moCustomer.name} onChange={e => setMoCustomer(p => ({ ...p, name: e.target.value }))} placeholder="Customer name" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Mobile</div>
+              <Input value={moCustomer.mobile} onChange={e => setMoCustomer(p => ({ ...p, mobile: e.target.value }))} placeholder="Phone number" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Email</div>
+              <Input value={moCustomer.email} onChange={e => setMoCustomer(p => ({ ...p, email: e.target.value }))} placeholder="Email address" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 4 }}>Address / City</div>
+              <Input value={moCustomer.address} onChange={e => setMoCustomer(p => ({ ...p, address: e.target.value }))} placeholder="City" />
+            </div>
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Rental Period *</div>
+          <DatePicker.RangePicker
+            showTime={{ format: 'HH:mm' }}
+            format="DD MMM YYYY HH:mm"
+            value={moDates}
+            onChange={v => setMoDates(v)}
+            style={{ width: '100%' }}
+            placeholder={['Pickup date & time', 'Return date & time']}
+          />
+          {moDates?.[0] && moDates?.[1] && (
+            <div style={{ marginTop: 6, fontSize: 12, color: '#6366f1', fontWeight: 600 }}>
+              {Math.max(1, moDates[1].diff(moDates[0], 'day') + 1)} day(s)
+            </div>
+          )}
+        </div>
+
+        {/* Equipment */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Equipment *</div>
+          <Select
+            showSearch placeholder="Search and add a product..."
+            style={{ width: '100%', marginBottom: 10 }}
+            filterOption={(input, opt) => opt.label.toLowerCase().includes(input.toLowerCase())}
+            options={products.filter(p => !moItems.find(it => String(it.productId) === String(p._id))).map(p => ({ value: p._id, label: `${p.name} — ₹${p.pricePerDay}/day` }))}
+            value={null}
+            onChange={pid => {
+              const p = products.find(x => x._id === pid)
+              if (p) setMoItems(prev => [...prev, { productId: p._id, name: p.name, pricePerDay: p.pricePerDay, imageUrl: p.imageUrl, quantity: 1 }])
+            }}
+          />
+          {moItems.map((item, i) => {
+            const days = moDates?.[0] && moDates?.[1] ? Math.max(1, moDates[1].diff(moDates[0], 'day') + 1) : 1
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: '#f9fafb', borderRadius: 8, border: '1px solid #f0f0f0', marginBottom: 6 }}>
+                <img src={getImageUrl(item.imageUrl)} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'contain', border: '1px solid #e5e7eb', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e1b4b' }}>{item.name}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>₹{item.pricePerDay}/day × {days}d = ₹{(item.pricePerDay * (item.quantity || 1) * days).toLocaleString()}</div>
+                </div>
+                <InputNumber min={1} max={20} size="small" value={item.quantity || 1}
+                  onChange={v => setMoItems(prev => prev.map((it, idx) => idx === i ? { ...it, quantity: v || 1 } : it))}
+                  style={{ width: 60 }} />
+                <button onClick={() => setMoItems(prev => prev.filter((_, idx) => idx !== i))}
+                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, color: '#ef4444', fontSize: 12, padding: '3px 8px', cursor: 'pointer' }}>✕</button>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Pricing summary */}
+        {moItems.length > 0 && moDates?.[0] && moDates?.[1] && (() => {
+          const days     = Math.max(1, moDates[1].diff(moDates[0], 'day') + 1)
+          const subtotal = moItems.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * days, 0)
+          const total    = Math.max(0, subtotal - (moDiscount || 0))
+          return (
+            <div style={{ marginBottom: 20, background: '#1e1b4b', borderRadius: 10, padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>Subtotal</span>
+                <span style={{ fontSize: 13, color: '#fff', fontWeight: 600 }}>₹{subtotal.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>Discount (₹)</span>
+                <InputNumber
+                  min={0} max={subtotal} value={moDiscount}
+                  onChange={v => setMoDiscount(v || 0)}
+                  size="small"
+                  style={{ width: 100, background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', borderRadius: 6 }}
+                  prefix="₹"
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10 }}>
+                <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>Total</span>
+                <span style={{ fontSize: 22, color: '#fff', fontWeight: 900 }}>₹{total.toLocaleString()}</span>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Notes */}
+        <div>
+          <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>Notes (optional)</div>
+          <Input.TextArea
+            value={moNotes}
+            onChange={e => setMoNotes(e.target.value)}
+            placeholder="Special instructions or requirements..."
+            rows={3}
+            style={{ borderRadius: 8 }}
+          />
+        </div>
+      </Drawer>
     </div>
   )
 }
