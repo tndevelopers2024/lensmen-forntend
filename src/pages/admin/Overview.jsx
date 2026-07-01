@@ -40,7 +40,8 @@ const AdminOverview = () => {
   const [activeTab,          setActiveTab]          = useState('all')
   const [isReturnConfirming, setIsReturnConfirming] = useState(null)
   const [returnDateTime,     setReturnDateTime]     = useState(null)
-  const [scheduleRange,      setScheduleRange]      = useState([null, null])
+  const [scheduleRangeOut,   setScheduleRangeOut]   = useState([null, null])
+  const [scheduleRangeIn,    setScheduleRangeIn]    = useState([null, null])
   const [returnCondition,    setReturnCondition]    = useState('Good')
   const [returnNotes,        setReturnNotes]        = useState('')
   const [editingNotes,       setEditingNotes]       = useState({ id: null, notes: '', condition: '' })
@@ -50,18 +51,19 @@ const AdminOverview = () => {
   const readyForPickupStatuses = ['Ready for Pickup', 'Approved']
   const returnedClosedStatuses = ['Returned', 'Closed']
 
-  const [schFrom, schTo] = scheduleRange
+  const [outFrom, outTo] = scheduleRangeOut
+  const [inFrom,  inTo]  = scheduleRangeIn
   const scheduleOut = allOrders.filter(o => {
     if (!activeRentalStatuses.includes(o.status)) return false
-    if (!schFrom || !schTo) return true
+    if (!outFrom || !outTo) return true
     const d = new Date(o.startDate)
-    return d >= schFrom.startOf('day').toDate() && d <= schTo.endOf('day').toDate()
+    return d >= outFrom.startOf('day').toDate() && d <= outTo.endOf('day').toDate()
   })
   const scheduleIn = allOrders.filter(o => {
     if (!activeRentalStatuses.includes(o.status)) return false
-    if (!schFrom || !schTo) return true
+    if (!inFrom || !inTo) return true
     const d = new Date(o.endDate)
-    return d >= schFrom.startOf('day').toDate() && d <= schTo.endOf('day').toDate()
+    return d >= inFrom.startOf('day').toDate() && d <= inTo.endOf('day').toDate()
   })
 
   const flattenItems = (orders) =>
@@ -93,6 +95,8 @@ const AdminOverview = () => {
     if (activeTab === 'due') {
       if (!isRentedOut || new Date(order.endDate) >= new Date()) return false
     }
+    const upcomingStatuses = ['Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved']
+    if (activeTab === 'upcoming' && !upcomingStatuses.includes(order.status)) return false
     if (!startDate && !endDate) return true
     const orderDate = new Date(order.startDate)
     if (startDate && !endDate)  return orderDate >= startDate
@@ -113,32 +117,10 @@ const AdminOverview = () => {
 
   const renderStatusCell = (order) => {
     if (order.status === 'Returned') {
-      return (
-        <Space>
-          <Tag color="success" icon={<CheckCircleOutlined />}>Returned</Tag>
-          {order.returnCondition && (
-            <Tag
-              color={order.returnCondition === 'Good' ? 'success' : 'error'}
-              style={{ cursor: 'pointer' }}
-              onClick={() => setEditingNotes({ id: order._id, notes: order.returnNotes || '', condition: order.returnCondition })}
-            >
-              {order.returnCondition}
-            </Tag>
-          )}
-        </Space>
-      )
+      return <Tag color="success" icon={<CheckCircleOutlined />}>Returned</Tag>
     }
     const tag = STATUS_TAG[order.status] || { color: 'default' }
-    return (
-      <Space wrap>
-        <Tag color={tag.color}>{order.status}</Tag>
-        {['During Rental', 'Picked Up', 'Active', 'Return Pending'].includes(order.status) && (
-          <Button size="small" type="primary" onClick={() => setIsReturnConfirming(order._id)}>
-            Mark Returned
-          </Button>
-        )}
-      </Space>
-    )
+    return <Tag color={tag.color}>{order.status}</Tag>
   }
 
   // ── Schedule item row ─────────────────────────────────────────────
@@ -270,31 +252,30 @@ const AdminOverview = () => {
       </Row>
 
       {/* ── Schedule row ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: NAVY }}>
-          Schedule {schFrom && schTo ? `· ${schFrom.format('DD MMM')} – ${schTo.format('DD MMM YYYY')}` : '· All upcoming'}
-        </div>
-        <RangePicker
-          value={scheduleRange[0] ? scheduleRange : [null, null]}
-          onChange={v => setScheduleRange(v || [null, null])}
-          size="small"
-          format="DD MMM YYYY"
-          allowClear
-          placeholder={['From date', 'To date']}
-        />
-      </div>
+      <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: NAVY }}>Schedule</div>
       <Row gutter={[16, 16]}>
         <Col span={12}>
           <Card
             style={cardStyle}
             bodyStyle={{ padding: 0, height: 360, overflowY: 'auto' }}
             title={
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div>
                   <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Going Out</div>
                   <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Pickups scheduled</div>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedOut.length}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <RangePicker
+                    value={scheduleRangeOut[0] ? scheduleRangeOut : [null, null]}
+                    onChange={v => setScheduleRangeOut(v || [null, null])}
+                    size="small"
+                    format="DD MMM"
+                    allowClear
+                    placeholder={['From', 'To']}
+                    style={{ width: 190 }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedOut.length}</span>
+                </div>
               </div>
             }
           >
@@ -310,12 +291,23 @@ const AdminOverview = () => {
             style={cardStyle}
             bodyStyle={{ padding: 0, height: 360, overflowY: 'auto' }}
             title={
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div>
                   <div style={{ fontWeight: 600, color: NAVY, fontSize: 13 }}>Coming Back</div>
                   <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>Returns due</div>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedIn.length}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <RangePicker
+                    value={scheduleRangeIn[0] ? scheduleRangeIn : [null, null]}
+                    onChange={v => setScheduleRangeIn(v || [null, null])}
+                    size="small"
+                    format="DD MMM"
+                    allowClear
+                    placeholder={['From', 'To']}
+                    style={{ width: 190 }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px' }}>{flattenedIn.length}</span>
+                </div>
               </div>
             }
           >
@@ -384,10 +376,11 @@ const AdminOverview = () => {
             onChange={setActiveTab}
             items={[
               { key: 'all',      label: 'All Rentals' },
+              { key: 'upcoming', label: 'Upcoming' },
               { key: 'ready',    label: 'Ready for Pickup' },
               { key: 'rented',   label: 'Rented Out' },
               { key: 'returned', label: 'Returned' },
-              { key: 'due',      label: 'Due Orders' },
+              { key: 'due',      label: 'Overdue Orders' },
             ]}
             size="small"
           />

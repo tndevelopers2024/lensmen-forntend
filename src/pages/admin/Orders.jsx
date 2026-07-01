@@ -105,6 +105,7 @@ const OrdersMonitor = () => {
   const [moCustomer,        setMoCustomer]        = useState({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
   const [moDiscount,        setMoDiscount]        = useState(0)
   const [moNotes,           setMoNotes]           = useState('')
+  const [moGst,             setMoGst]             = useState(false)
   const [moUserSearch,      setMoUserSearch]      = useState('')
 
   // Sync selectedOrder with URL param
@@ -200,7 +201,7 @@ const OrdersMonitor = () => {
   const resetManualOrder = () => {
     setMoItems([]); setMoDates(null)
     setMoCustomer({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
-    setMoDiscount(0); setMoNotes(''); setMoUserSearch('')
+    setMoDiscount(0); setMoNotes(''); setMoUserSearch(''); setMoGst(false)
   }
 
   const saveManualOrder = async () => {
@@ -228,6 +229,8 @@ const OrdersMonitor = () => {
           totalPrice,
           discountAmount: moDiscount || 0,
           notes:       moNotes,
+          gstEnabled:  moGst,
+          gstRate:     18,
         }),
       })
       if (res.ok) {
@@ -254,8 +257,12 @@ const OrdersMonitor = () => {
     const days        = order.totalDays || 1
     const discount    = order.discountAmount || 0
     const subTotal    = items.reduce((s, it) => s + (it?.pricePerDay || 0) * days * (it?.quantity || 1), 0)
-    const total       = order.totalPrice || (subTotal - discount)
-    const balanceDue  = order.pendingAmount ?? total
+    const baseTotal   = order.totalPrice || (subTotal - discount)
+    const gstEnabled  = order.gstEnabled || false
+    const gstRate     = order.gstRate || 18
+    const gstAmt      = gstEnabled ? +(baseTotal * gstRate / 100).toFixed(2) : 0
+    const total       = +(baseTotal + gstAmt).toFixed(2)
+    const balanceDue  = Math.max(0, total - (order.totalPaid || 0))
 
     const amountInWords = (n) => {
       const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
@@ -410,14 +417,16 @@ const OrdersMonitor = () => {
     <div class="footer-right">
       <div class="totals-row">
         <span>Sub Total</span>
-        <span>${subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <span>${baseTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>
-      ${discount > 0 ? `<div class="totals-row">
-        <span>Discount</span>
-        <span>(-) ${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      ${discount > 0 ? `<div class="totals-row"><span>Discount</span><span>(-) ${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>` : ''}
+      ${gstEnabled ? `
+      <div class="totals-row">
+        <span>GST (${gstRate}%)</span>
+        <span>${gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>` : ''}
-      <div class="totals-row bold">
-        <span>Total</span>
+      <div class="totals-row bold" style="border-top:2px solid #111;">
+        <span>Total${gstEnabled ? ' (Incl. GST)' : ''}</span>
         <span>₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>
       <div class="totals-row bold" style="border-bottom:none;">
@@ -585,6 +594,30 @@ const OrdersMonitor = () => {
         setAllOrders(prev => prev.filter(o => o._id !== orderId))
       } else toast.error('Delete failed')
     } catch { toast.error('Error') }
+  }
+
+  const handleGstToggle = async (val) => {
+    // Optimistic update — reflect change instantly in UI
+    const optimistic = { ...selectedOrder, gstEnabled: val, gstRate: selectedOrder.gstRate || 18 }
+    setSelectedOrder(optimistic)
+    setAllOrders(prev => prev.map(o => o._id === optimistic._id ? optimistic : o))
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gstEnabled: val, gstRate: selectedOrder.gstRate || 18 }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        // Merge — preserve gstEnabled in case old backend doesn't return it yet
+        const merged = { ...updated, gstEnabled: val, gstRate: updated.gstRate || 18 }
+        setSelectedOrder(merged)
+        setAllOrders(prev => prev.map(o => o._id === merged._id ? merged : o))
+        toast.success(val ? 'GST enabled' : 'GST disabled')
+      } else {
+        toast.error('Failed to save GST setting')
+      }
+    } catch { toast.error('Error updating GST') }
   }
 
   // ── API helpers ────────────────────────────────────────────────────
@@ -1932,14 +1965,53 @@ const OrdersMonitor = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Revenue card */}
             <div style={{ background: '#1e1b4b', borderRadius: 14, padding: '20px 20px 16px' }}>
-              <div style={{ fontSize: 11, color: '#93c5fd', fontWeight: 700, marginBottom: 4 }}>TOTAL REVENUE</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: '#93c5fd', fontWeight: 700 }}>
+                  {selectedOrder.gstEnabled ? 'TOTAL (INCL. GST)' : 'TOTAL REVENUE'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
+                  <span style={{ fontSize: 10, color: '#93c5fd' }}>GST</span>
+                  <Switch
+                    size="small"
+                    checked={!!selectedOrder.gstEnabled}
+                    onChange={handleGstToggle}
+                  />
+                </div>
+              </div>
               <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', lineHeight: 1 }}>
-                ₹{(selectedOrder.totalPrice || 0).toLocaleString()}
+                ₹{(() => {
+                  const base = selectedOrder.totalPrice || 0
+                  if (!selectedOrder.gstEnabled) return base.toLocaleString()
+                  const rate = selectedOrder.gstRate || 18
+                  return (+(base * (1 + rate / 100)).toFixed(2)).toLocaleString()
+                })()}
               </div>
             </div>
 
             {/* Payment breakdown */}
             <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {selectedOrder.gstEnabled && (() => {
+                const base  = selectedOrder.totalPrice || 0
+                const rate  = selectedOrder.gstRate || 18
+                const gst   = +(base * rate / 100).toFixed(2)
+                const grand = +(base + gst).toFixed(2)
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 11, color: '#9ca3af' }}>Sub Total</Text>
+                      <Text style={{ fontSize: 12 }}>₹{base.toLocaleString()}</Text>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 11, color: '#9ca3af' }}>GST ({rate}%)</Text>
+                      <Text style={{ fontSize: 12 }}>₹{gst.toLocaleString()}</Text>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+                      <Text style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>Grand Total</Text>
+                      <Text style={{ fontSize: 12, fontWeight: 700 }}>₹{grand.toLocaleString()}</Text>
+                    </div>
+                  </>
+                )
+              })()}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Collected</Text>
                 <Text strong style={{ color: '#10b981' }}>₹{(selectedOrder.totalPaid || 0).toLocaleString()}</Text>
@@ -2265,6 +2337,24 @@ const OrdersMonitor = () => {
             </div>
           )
         })()}
+
+        {/* GST Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: moGst ? '#f0fdf4' : '#f9fafb', border: `1px solid ${moGst ? '#bbf7d0' : '#e5e7eb'}`, borderRadius: 10, padding: '12px 16px' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: '#1e1b4b' }}>Enable GST (18%)</div>
+            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+              {moGst && moDates?.[0] && moItems.length > 0
+                ? (() => {
+                    const days = Math.max(1, moDates[1].diff(moDates[0], 'day') + 1)
+                    const base = moItems.reduce((s, it) => s + (it.pricePerDay || 0) * (it.quantity || 1) * days, 0) - (moDiscount || 0)
+                    const gst  = +(base * 0.18).toFixed(2)
+                    return `GST: ₹${gst.toLocaleString()} · Grand Total: ₹${(base + gst).toLocaleString()}`
+                  })()
+                : 'Add 18% GST on top of rental price'}
+            </div>
+          </div>
+          <Switch checked={moGst} onChange={setMoGst} />
+        </div>
 
         {/* Notes */}
         <div>
