@@ -5,10 +5,11 @@ import {
 } from 'antd'
 import {
   SearchOutlined, PrinterOutlined, FileTextOutlined,
-  UserOutlined, LinkOutlined,
+  UserOutlined, LinkOutlined, EditOutlined,
 } from '@ant-design/icons'
+import toast from 'react-hot-toast'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useGlobal, getImageUrl } from '../../context/GlobalContext'
+import { useGlobal, getImageUrl, API_URL } from '../../context/GlobalContext'
 import PageHeader from '../../components/PageHeader'
 import { getAdminSettings } from './Settings'
 
@@ -39,8 +40,13 @@ const KYC_COLOR = {
   Approved: '#10b981', Pending: '#f59e0b', Rejected: '#ef4444', 'Not Uploaded': '#94a3b8',
 }
 
+// ── GST-inclusive amount helpers ─────────────────────────────────────
+const gstAmount  = (order) => order.gstEnabled ? +((order.totalPrice || 0) * (order.gstRate || 18) / 100).toFixed(2) : 0
+const gstTotal   = (order) => +((order.totalPrice || 0) + gstAmount(order)).toFixed(2)
+const gstBalance = (order) => Math.max(0, +(gstTotal(order) - (order.totalPaid || 0)).toFixed(2))
+
 const invoiceStatus = (order) => {
-  const pending = order.pendingAmount ?? (order.totalPrice - (order.totalPaid || 0))
+  const pending = gstBalance(order)
   if (pending <= 0) return { label: 'PAID', color: '#16a34a', bg: '#f0fdf4', overdue: 0 }
   const today   = new Date()
   const dueDate = new Date(order.endDate)
@@ -64,7 +70,7 @@ const MILESTONES = [
 ]
 
 const InvoicesPage = () => {
-  const { allOrders, allUsers } = useGlobal()
+  const { allOrders, allUsers, setAllOrders } = useGlobal()
   const pickupLocs = getAdminSettings().pickupLocations || []
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -75,7 +81,32 @@ const InvoicesPage = () => {
   const [page,         setPage]         = useState(1)
   const [previewOrder, setPreviewOrder] = useState(null)
   const [previewUser,  setPreviewUser]  = useState(null)
+  const [editingCode,  setEditingCode]  = useState(false)
+  const [codeValue,    setCodeValue]    = useState('')
+  const [codeSaving,   setCodeSaving]   = useState(false)
   const PAGE_SIZE = 25
+
+  const saveBookingCodeEdit = async (order, newCode) => {
+    if (!order) return
+    const trimmed = (newCode || '').trim()
+    if (!trimmed || trimmed === order.bookingCode) { setEditingCode(false); return }
+    setCodeSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${order._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingCode: trimmed }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Order/Invoice number updated')
+        setAllOrders(prev => prev.map(o => o._id === data._id ? data : o))
+        setPreviewOrder(data)
+        setEditingCode(false)
+      } else toast.error(data.message || 'Update failed')
+    } catch { toast.error('Error updating number') }
+    finally { setCodeSaving(false) }
+  }
 
   // Pre-filter to the invoice navigated from Users page
   useEffect(() => {
@@ -106,11 +137,18 @@ const InvoicesPage = () => {
     const days    = order.totalDays || 1
     const discount= order.discountAmount || 0
     const subTotal= items.reduce((s, it) => s + (it?.pricePerDay || 0) * days * (it?.quantity || 1), 0)
-    const total   = order.totalPrice || (subTotal - discount)
-    const balDue  = order.pendingAmount ?? total
+    const baseTotal = order.totalPrice || (subTotal - discount)
+    const gstEnabled  = order.gstEnabled || false
+    const gstRate     = order.gstRate || 18
+    const halfGstRate = gstRate / 2
+    const cgstAmt     = gstEnabled ? +(baseTotal * halfGstRate / 100).toFixed(2) : 0
+    const sgstAmt     = gstEnabled ? +(baseTotal * halfGstRate / 100).toFixed(2) : 0
+    const total   = gstTotal(order)
+    const balDue  = gstBalance(order)
     const invNo   = order.bookingCode || ('#' + order._id?.slice(-8).toUpperCase())
     const invDate = fmtDate(order.createdAt)
     const logoUrl = `${window.location.origin}/logo.jpg`
+    const qrUrl   = `${window.location.origin}/upi-qr.png`
 
     const amountInWords = (n) => {
       const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
@@ -198,26 +236,43 @@ const InvoicesPage = () => {
     </div>
   </div>
   <table class="items-table">
-    <thead><tr><th class="c">#</th><th>Item &amp; Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:80px">Rate</th><th class="r" style="width:85px">Amount</th></tr></thead>
+    <thead><tr><th class="c">#</th><th>Item &amp; Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:50px">Days</th><th class="r" style="width:80px">Rate</th><th class="r" style="width:85px">Amount</th></tr></thead>
     <tbody>
       ${items.map((item, i) => {
         const qty  = item?.quantity || 1
         const rate = (item?.pricePerDay || 0) * days
         const amt  = qty * rate
-        return `<tr><td class="c">${i+1}</td><td>${item?.name || 'Unknown'}<span class="sub"> &nbsp;${days} day${days!==1?'s':''} rental</span></td><td class="r">${qty}</td><td class="r">${rate.toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td class="r">${amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
+        return `<tr><td class="c">${i+1}</td><td>${item?.name || 'Unknown'}</td><td class="r">${qty}</td><td class="r">${days}</td><td class="r">${rate.toLocaleString('en-IN',{minimumFractionDigits:2})}</td><td class="r">${amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td></tr>`
       }).join('')}
     </tbody>
   </table>
   <div class="footer-split">
     <div class="footer-left">
       <div style="margin-bottom:6px;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Total In Words</div><div style="font-weight:700;font-style:italic;">${amountInWords(total)}</div></div>
-      <div style="margin-bottom:24px;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Notes</div><div>${order.notes || 'Thanks for your business.'}</div></div>
-      <div style="font-size:10px;color:#555;margin-top:6px;">Customer Signature.</div>
+      <div style="margin-bottom:14px;"><div style="font-size:10px;color:#555;margin-bottom:2px;">Notes</div><div>${order.notes || 'Thanks for your business.'}</div></div>
+      <div style="padding-top:8px;border-top:1px solid #ccc;">
+        <div style="font-size:10px;font-weight:700;color:#555;margin-bottom:6px;">Bank Details</div>
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <img src="${qrUrl}" alt="UPI QR" style="width:64px;height:auto;border:1px solid #ddd;border-radius:4px;flex-shrink:0;" />
+          <div style="font-size:9.5px;line-height:1.65;color:#333;">
+            <div>Account Name: <b>Lens Men</b></div>
+            <div>Account Type: <b>Current Account</b></div>
+            <div>Account No.: <b>234605500007</b></div>
+            <div>IFSC Code: <b>ICIC0002346</b></div>
+            <div>Branch: <b>Vadapalani</b></div>
+            <div>UPI ID: <b>lensmen@icici</b></div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#555;margin-top:10px;">Customer Signature.</div>
     </div>
     <div class="footer-right">
       <div class="totals-row"><span>Sub Total</span><span>${subTotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       ${discount > 0 ? `<div class="totals-row"><span>Discount</span><span>(-) ${discount.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>` : ''}
-      <div class="totals-row bold"><span>Total</span><span>₹${total.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+      ${gstEnabled ? `
+      <div class="totals-row"><span>CGST (${halfGstRate}%)</span><span>${cgstAmt.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+      <div class="totals-row"><span>SGST (${halfGstRate}%)</span><span>${sgstAmt.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>` : ''}
+      <div class="totals-row bold"><span>Total${gstEnabled ? ' (Incl. GST)' : ''}</span><span>₹${total.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       <div class="totals-row bold" style="border-bottom:none;"><span>Balance Due</span><span>₹${balDue.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       <div class="sig-box"><div style="font-size:12px;margin-bottom:8px;">N Indrakumar</div><div style="font-size:11px;color:#555;">Authorized Signature</div></div>
     </div>
@@ -267,7 +322,7 @@ const InvoicesPage = () => {
       width: 120,
       render: (_, r) => (
         <span
-          onClick={e => { e.stopPropagation(); setPreviewOrder(r) }}
+          onClick={e => { e.stopPropagation(); setEditingCode(false); setPreviewOrder(r) }}
           style={{ fontSize: 12, fontFamily: 'monospace', color: NAVY, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
         >
           {r.bookingCode || '#' + r._id?.slice(-8).toUpperCase()}
@@ -319,22 +374,20 @@ const InvoicesPage = () => {
     },
     {
       title: 'INVOICE AMOUNT',
-      dataIndex: 'totalPrice',
       key: 'amount',
       width: 140,
       align: 'right',
-      sorter: (a, b) => (a.totalPrice || 0) - (b.totalPrice || 0),
-      render: n => <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{fmtAmt(n)}</span>,
+      sorter: (a, b) => gstTotal(a) - gstTotal(b),
+      render: (_, r) => <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{fmtAmt(gstTotal(r))}</span>,
     },
     {
       title: 'BALANCE',
-      dataIndex: 'pendingAmount',
       key: 'balance',
       width: 110,
       align: 'right',
-      sorter: (a, b) => (a.pendingAmount || 0) - (b.pendingAmount || 0),
-      render: (n, r) => {
-        const bal = n ?? (r.totalPrice - (r.totalPaid || 0))
+      sorter: (a, b) => gstBalance(a) - gstBalance(b),
+      render: (_, r) => {
+        const bal = gstBalance(r)
         return (
           <span style={{ fontSize: 13, fontWeight: 600, color: bal > 0 ? '#dc2626' : '#16a34a' }}>
             {fmtAmt(bal)}
@@ -386,7 +439,7 @@ const InvoicesPage = () => {
     return (
       <Modal
         open
-        onCancel={() => setPreviewOrder(null)}
+        onCancel={() => { setPreviewOrder(null); setEditingCode(false) }}
         footer={null}
         width={820}
         destroyOnHidden
@@ -394,9 +447,28 @@ const InvoicesPage = () => {
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingRight: 32 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>Order Details</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: BRAND }}>
-              {o.bookingCode || '#' + o._id?.slice(-8).toUpperCase()}
-            </span>
+            {editingCode ? (
+              <Input
+                size="small"
+                autoFocus
+                value={codeValue}
+                onChange={e => setCodeValue(e.target.value.toUpperCase())}
+                onPressEnter={() => saveBookingCodeEdit(o, codeValue)}
+                onBlur={() => saveBookingCodeEdit(o, codeValue)}
+                onClick={e => e.stopPropagation()}
+                disabled={codeSaving}
+                style={{ width: 150, fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}
+              />
+            ) : (
+              <span
+                onClick={e => { e.stopPropagation(); setCodeValue(o.bookingCode || ''); setEditingCode(true) }}
+                style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, color: BRAND, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                title="Click to edit Invoice / Order number"
+              >
+                {o.bookingCode || '#' + o._id?.slice(-8).toUpperCase()}
+                <EditOutlined style={{ fontSize: 11, color: '#d1d5db' }} />
+              </span>
+            )}
             <span style={{
               fontSize: 11, fontWeight: 700, color: statusInfo.color,
               background: statusInfo.bg, border: `1px solid ${statusInfo.color}30`,
@@ -550,10 +622,22 @@ const InvoicesPage = () => {
                   <span style={{ fontSize: 12, color: '#10b981', minWidth: 80, textAlign: 'right' }}>−₹{(o.discountAmount || 0).toLocaleString()}</span>
                 </div>
               )}
+              {o.gstEnabled && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '4px 16px' }}>
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>CGST ({(o.gstRate || 18) / 2}%)</span>
+                    <span style={{ fontSize: 12, color: '#374151', minWidth: 80, textAlign: 'right' }}>₹{(gstAmount(o) / 2).toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 40, padding: '4px 16px' }}>
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>SGST ({(o.gstRate || 18) / 2}%)</span>
+                    <span style={{ fontSize: 12, color: '#374151', minWidth: 80, textAlign: 'right' }}>₹{(gstAmount(o) / 2).toLocaleString()}</span>
+                  </div>
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 40, background: NAVY, borderRadius: 8, padding: '10px 20px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#c7d2fe', letterSpacing: '0.06em' }}>TOTAL</span>
-                  <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>₹{(o.totalPrice || 0).toLocaleString()}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#c7d2fe', letterSpacing: '0.06em' }}>TOTAL{o.gstEnabled ? ' (INCL. GST)' : ''}</span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: '#fff' }}>₹{gstTotal(o).toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -569,8 +653,8 @@ const InvoicesPage = () => {
                 </div>
                 <div>
                   <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', marginBottom: 2 }}>PENDING</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: (o.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                    ₹{(o.pendingAmount || 0).toLocaleString()}
+                  <div style={{ fontSize: 15, fontWeight: 800, color: gstBalance(o) > 0 ? '#ef4444' : '#10b981' }}>
+                    ₹{gstBalance(o).toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -634,7 +718,7 @@ const InvoicesPage = () => {
     const u = previewUser
     const userOrders  = allOrders.filter(o => o.userEmail === u.email || o.userMobile === u.mobile)
     const totalSpent  = userOrders.reduce((s, o) => s + (o.totalPaid || 0), 0)
-    const outstanding = userOrders.reduce((s, o) => s + (o.pendingAmount || 0), 0)
+    const outstanding = userOrders.reduce((s, o) => s + gstBalance(o), 0)
     const kycStatus   = u.kycStatus || 'Not Uploaded'
     const kycColor    = KYC_COLOR[kycStatus] || '#94a3b8'
 
@@ -726,7 +810,7 @@ const InvoicesPage = () => {
                   {userOrders.slice(0, 5).map(o => (
                     <div
                       key={o._id}
-                      onClick={() => { setPreviewUser(null); setPreviewOrder(o) }}
+                      onClick={() => { setPreviewUser(null); setEditingCode(false); setPreviewOrder(o) }}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f9fafb', borderRadius: 10, border: '1px solid #f0f0f0', cursor: 'pointer' }}
                     >
                       <div>
@@ -735,7 +819,7 @@ const InvoicesPage = () => {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontSize: 11, fontWeight: 700, color: ocfg(o.status).color }}>{ocfg(o.status).label}</span>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginTop: 2 }}>₹{(o.totalPrice || 0).toLocaleString()}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#111827', marginTop: 2 }}>₹{gstTotal(o).toLocaleString()}</div>
                       </div>
                     </div>
                   ))}

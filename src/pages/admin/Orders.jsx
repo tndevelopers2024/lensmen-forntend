@@ -42,6 +42,11 @@ const STATUS_CFG = {
 
 const cfg = (status) => STATUS_CFG[status] || { color: '#94a3b8', bg: '#f8fafc', label: status }
 
+// ── GST-inclusive amount helpers ─────────────────────────────────────
+const gstAmount  = (order) => order.gstEnabled ? +((order.totalPrice || 0) * (order.gstRate || 18) / 100).toFixed(2) : 0
+const gstTotal   = (order) => +((order.totalPrice || 0) + gstAmount(order)).toFixed(2)
+const gstBalance = (order) => Math.max(0, +(gstTotal(order) - (order.totalPaid || 0)).toFixed(2))
+
 // ── Active rental statuses ───────────────────────────────────────────
 const ACTIVE_STATUSES        = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup', 'Reopened']
 const RENTED_OUT_STATUSES    = ['Picked Up', 'During Rental', 'Return Pending', 'Active']
@@ -99,6 +104,9 @@ const OrdersMonitor = () => {
   const [unitLoading,       setUnitLoading]       = useState(false)
   const [assigningUnit,     setAssigningUnit]     = useState(false)
   const [editingPrice,      setEditingPrice]      = useState(null)  // { itemIndex, value }
+  const [editingCode,       setEditingCode]       = useState(false)
+  const [codeValue,         setCodeValue]         = useState('')
+  const [codeSaving,        setCodeSaving]        = useState(false)
   const [adminNoteInput,    setAdminNoteInput]    = useState('')
   const [adminNoteSaving,   setAdminNoteSaving]   = useState(false)
   const [adminNoteAdding,   setAdminNoteAdding]   = useState(false)
@@ -264,7 +272,10 @@ const OrdersMonitor = () => {
     const baseTotal   = order.totalPrice || (subTotal - discount)
     const gstEnabled  = order.gstEnabled || false
     const gstRate     = order.gstRate || 18
-    const gstAmt      = gstEnabled ? +(baseTotal * gstRate / 100).toFixed(2) : 0
+    const halfGstRate = gstRate / 2
+    const cgstAmt     = gstEnabled ? +(baseTotal * halfGstRate / 100).toFixed(2) : 0
+    const sgstAmt     = gstEnabled ? +(baseTotal * halfGstRate / 100).toFixed(2) : 0
+    const gstAmt      = +(cgstAmt + sgstAmt).toFixed(2)
     const total       = +(baseTotal + gstAmt).toFixed(2)
     const balanceDue  = Math.max(0, total - (order.totalPaid || 0))
 
@@ -288,6 +299,7 @@ const OrdersMonitor = () => {
     }
 
     const logoUrl = `${window.location.origin}/logo.jpg`
+    const qrUrl   = `${window.location.origin}/upi-qr.png`
     const signatureUrl = `${window.location.origin}/signature.png`
 
     const html = `<!DOCTYPE html><html><head>
@@ -386,6 +398,7 @@ const OrdersMonitor = () => {
         <th class="c">#</th>
         <th>Item &amp; Description</th>
         <th class="r" style="width:50px">Qty</th>
+        <th class="r" style="width:50px">Days</th>
         <th class="r" style="width:80px">Rate</th>
         <th class="r" style="width:85px">Amount</th>
       </tr>
@@ -397,8 +410,9 @@ const OrdersMonitor = () => {
         const amt  = qty * rate
         return `<tr>
           <td class="c">${i + 1}</td>
-          <td>${item?.name || 'Unknown'}<span class="sub"> &nbsp;${days} day${days !== 1 ? 's' : ''} rental</span></td>
+          <td>${item?.name || 'Unknown'}</td>
           <td class="r">${qty}</td>
+          <td class="r">${days}</td>
           <td class="r">${rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
           <td class="r">${amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         </tr>`
@@ -413,11 +427,25 @@ const OrdersMonitor = () => {
         <div style="font-size:10px;color:#555;margin-bottom:2px;">Total In Words</div>
         <div style="font-weight:700;font-style:italic;">${amountInWords(total)}</div>
       </div>
-      <div style="margin-bottom:24px;">
+      <div style="margin-bottom:14px;">
         <div style="font-size:10px;color:#555;margin-bottom:2px;">Notes</div>
         <div>${order.notes || 'Thanks for your business.'}</div>
       </div>
-      <div style="font-size:10px;color:#555;margin-top:6px;">Customer Signature.</div>
+      <div style="padding-top:8px;border-top:1px solid #ccc;">
+        <div style="font-size:10px;font-weight:700;color:#555;margin-bottom:6px;">Bank Details</div>
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <img src="${qrUrl}" alt="UPI QR" style="width:64px;height:auto;border:1px solid #ddd;border-radius:4px;flex-shrink:0;" />
+          <div style="font-size:9.5px;line-height:1.65;color:#333;">
+            <div>Account Name: <b>Lens Men</b></div>
+            <div>Account Type: <b>Current Account</b></div>
+            <div>Account No.: <b>234605500007</b></div>
+            <div>IFSC Code: <b>ICIC0002346</b></div>
+            <div>Branch: <b>Vadapalani</b></div>
+            <div>UPI ID: <b>lensmen@icici</b></div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#555;margin-top:10px;">Customer Signature.</div>
     </div>
     <div class="footer-right">
       <div class="totals-row">
@@ -427,8 +455,12 @@ const OrdersMonitor = () => {
       ${discount > 0 ? `<div class="totals-row"><span>Discount</span><span>(-) ${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>` : ''}
       ${gstEnabled ? `
       <div class="totals-row">
-        <span>GST (${gstRate}%)</span>
-        <span>${gstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        <span>CGST (${halfGstRate}%)</span>
+        <span>${cgstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+      </div>
+      <div class="totals-row">
+        <span>SGST (${halfGstRate}%)</span>
+        <span>${sgstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
       </div>` : ''}
       <div class="totals-row bold" style="border-top:2px solid #111;">
         <span>Total${gstEnabled ? ' (Incl. GST)' : ''}</span>
@@ -550,6 +582,28 @@ const OrdersMonitor = () => {
       } else toast.error('Update failed')
     } catch { toast.error('Error') }
     finally { setEditingPrice(null) }
+  }
+
+  const saveBookingCodeEdit = async (order, newCode) => {
+    if (!order) return
+    const trimmed = (newCode || '').trim()
+    if (!trimmed || trimmed === order.bookingCode) { setEditingCode(false); return }
+    setCodeSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${order._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingCode: trimmed }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Order/Invoice number updated')
+        setAllOrders(prev => prev.map(o => o._id === data._id ? data : o))
+        if (selectedOrder?._id === data._id) setSelectedOrder(data)
+        setEditingCode(false)
+      } else toast.error(data.message || 'Update failed')
+    } catch { toast.error('Error updating number') }
+    finally { setCodeSaving(false) }
   }
 
   const handleSendReminder = async (order) => {
@@ -1039,23 +1093,18 @@ const OrdersMonitor = () => {
     },
     {
       title: 'Amount',
-      dataIndex: 'totalPrice',
       key: 'totalPrice',
       width: 95,
-      sorter: (a, b) => (a.totalPrice || 0) - (b.totalPrice || 0),
-      render: amt => <span style={{ fontWeight: 600, fontSize: 13 }}>₹{(amt || 0).toLocaleString()}</span>,
+      sorter: (a, b) => gstTotal(a) - gstTotal(b),
+      render: (_, record) => <span style={{ fontWeight: 600, fontSize: 13 }}>₹{gstTotal(record).toLocaleString()}</span>,
     },
     {
       title: 'Balance',
       key: 'pendingAmount',
       width: 95,
-      sorter: (a, b) => {
-        const balA = Math.max(0, (a.totalPrice || 0) - (a.totalPaid || 0))
-        const balB = Math.max(0, (b.totalPrice || 0) - (b.totalPaid || 0))
-        return balA - balB
-      },
+      sorter: (a, b) => gstBalance(a) - gstBalance(b),
       render: (_, record) => {
-        const balance = Math.max(0, (record.totalPrice || 0) - (record.totalPaid || 0))
+        const balance = gstBalance(record)
         return (
           <span style={{ fontWeight: 600, fontSize: 13, color: balance > 0 ? '#ef4444' : '#10b981' }}>
             ₹{balance.toLocaleString()}
@@ -1661,9 +1710,28 @@ const OrdersMonitor = () => {
           </Button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ color: '#1e1b4b', fontWeight: 700, fontSize: 18 }}>Order Details</span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#6b7280' }}>
-              {selectedOrder.bookingCode || '#' + selectedOrder._id?.slice(-8).toUpperCase()}
-            </span>
+            {editingCode ? (
+              <Input
+                size="small"
+                autoFocus
+                value={codeValue}
+                onChange={e => setCodeValue(e.target.value.toUpperCase())}
+                onPressEnter={() => saveBookingCodeEdit(selectedOrder, codeValue)}
+                onBlur={() => saveBookingCodeEdit(selectedOrder, codeValue)}
+                disabled={codeSaving}
+                style={{ width: 150, fontFamily: 'monospace', fontSize: 13, fontWeight: 700 }}
+              />
+            ) : (
+              <Tooltip title="Click to edit Invoice / Order number">
+                <span
+                  onClick={() => { setCodeValue(selectedOrder.bookingCode || ''); setEditingCode(true) }}
+                  style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#6b7280', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {selectedOrder.bookingCode || '#' + selectedOrder._id?.slice(-8).toUpperCase()}
+                  <EditOutlined style={{ fontSize: 11, color: '#d1d5db' }} />
+                </span>
+              </Tooltip>
+            )}
             <Tooltip title="Internal Order ID">
               <span style={{ fontFamily: 'monospace', fontSize: 10, color: '#9ca3af', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 4, padding: '2px 6px', letterSpacing: '0.02em' }}>
                 ID: {selectedOrder._id}
@@ -2069,19 +2137,33 @@ const OrdersMonitor = () => {
             {/* Payment breakdown */}
             <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {selectedOrder.gstEnabled && (() => {
-                const base  = selectedOrder.totalPrice || 0
-                const rate  = selectedOrder.gstRate || 18
-                const gst   = +(base * rate / 100).toFixed(2)
-                const grand = +(base + gst).toFixed(2)
+                const base     = selectedOrder.totalPrice || 0
+                const rate     = selectedOrder.gstRate || 18
+                const halfRate = rate / 2
+                const discount = selectedOrder.discountAmount || 0
+                const subTotal = base + discount
+                const cgst     = +(base * halfRate / 100).toFixed(2)
+                const sgst     = +(base * halfRate / 100).toFixed(2)
+                const grand    = +(base + cgst + sgst).toFixed(2)
                 return (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Text style={{ fontSize: 11, color: '#9ca3af' }}>Sub Total</Text>
-                      <Text style={{ fontSize: 12 }}>₹{base.toLocaleString()}</Text>
+                      <Text style={{ fontSize: 12 }}>₹{subTotal.toLocaleString()}</Text>
+                    </div>
+                    {discount > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Text style={{ fontSize: 11, color: '#9ca3af' }}>Discount</Text>
+                        <Text style={{ fontSize: 12 }}>(-) ₹{discount.toLocaleString()}</Text>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: 11, color: '#9ca3af' }}>CGST ({halfRate}%)</Text>
+                      <Text style={{ fontSize: 12 }}>₹{cgst.toLocaleString()}</Text>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Text style={{ fontSize: 11, color: '#9ca3af' }}>GST ({rate}%)</Text>
-                      <Text style={{ fontSize: 12 }}>₹{gst.toLocaleString()}</Text>
+                      <Text style={{ fontSize: 11, color: '#9ca3af' }}>SGST ({halfRate}%)</Text>
+                      <Text style={{ fontSize: 12 }}>₹{sgst.toLocaleString()}</Text>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
                       <Text style={{ fontSize: 11, fontWeight: 700, color: '#374151' }}>Grand Total</Text>
@@ -2096,8 +2178,8 @@ const OrdersMonitor = () => {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Text style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>Pending</Text>
-                <Text strong style={{ color: (selectedOrder.pendingAmount || 0) > 0 ? '#ef4444' : '#10b981' }}>
-                  ₹{(selectedOrder.pendingAmount || 0).toLocaleString()}
+                <Text strong style={{ color: gstBalance(selectedOrder) > 0 ? '#ef4444' : '#10b981' }}>
+                  ₹{gstBalance(selectedOrder).toLocaleString()}
                 </Text>
               </div>
               {(selectedOrder.payments || []).map((p, i) => (
