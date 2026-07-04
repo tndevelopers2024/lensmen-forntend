@@ -107,6 +107,7 @@ const OrdersMonitor = () => {
   const [editingCode,       setEditingCode]       = useState(false)
   const [codeValue,         setCodeValue]         = useState('')
   const [codeSaving,        setCodeSaving]        = useState(false)
+  const [posSaving,         setPosSaving]         = useState(false)
   const [adminNoteInput,    setAdminNoteInput]    = useState('')
   const [adminNoteSaving,   setAdminNoteSaving]   = useState(false)
   const [adminNoteAdding,   setAdminNoteAdding]   = useState(false)
@@ -114,7 +115,7 @@ const OrdersMonitor = () => {
   const [manualOrderSaving, setManualOrderSaving] = useState(false)
   const [moItems,           setMoItems]           = useState([])
   const [moDates,           setMoDates]           = useState(null)   // [dayjs, dayjs]
-  const [moCustomer,        setMoCustomer]        = useState({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
+  const [moCustomer,        setMoCustomer]        = useState({ name: '', email: '', mobile: '', secondMobile: '', companyName: '', gstNumber: '', gstBusinessName: '', address: '', accountType: 'Private' })
   const [moDiscount,        setMoDiscount]        = useState(0)
   const [moNotes,           setMoNotes]           = useState('')
   const [moGst,             setMoGst]             = useState(false)
@@ -212,7 +213,7 @@ const OrdersMonitor = () => {
 
   const resetManualOrder = () => {
     setMoItems([]); setMoDates(null)
-    setMoCustomer({ name: '', email: '', mobile: '', address: '', accountType: 'Private' })
+    setMoCustomer({ name: '', email: '', mobile: '', secondMobile: '', companyName: '', gstNumber: '', gstBusinessName: '', address: '', accountType: 'Private' })
     setMoDiscount(0); setMoNotes(''); setMoUserSearch(''); setMoGst(false)
   }
 
@@ -232,6 +233,10 @@ const OrdersMonitor = () => {
           userName:    moCustomer.name,
           userEmail:   moCustomer.email,
           userMobile:  moCustomer.mobile,
+          userSecondMobile: moCustomer.secondMobile,
+          userCompanyName:  moCustomer.companyName,
+          userGstNumber:    moCustomer.gstNumber,
+          userGstBusinessName: moCustomer.gstBusinessName,
           userAddress: moCustomer.address,
           accountType: moCustomer.accountType,
           items:       moItems.map(it => ({ productId: it.productId, name: it.name, pricePerDay: it.pricePerDay, imageUrl: it.imageUrl, quantity: it.quantity || 1 })),
@@ -260,8 +265,9 @@ const OrdersMonitor = () => {
   }
 
   // ── Print order ────────────────────────────────────────────────────
-  const printOrder = (order) => {
+  const printOrder = (order, mode = 'invoice') => {
     if (!order) return
+    const isDC = mode === 'dc'
     const items = order.items?.length ? order.items : [order.productId ? [order.productId] : []].flat()
     const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '/')
     const invoiceDate = fmtDate(order.createdAt || new Date())
@@ -349,7 +355,7 @@ const OrdersMonitor = () => {
 
   @media print {
     body { margin: 0; }
-    .page { border: none; padding: 16px; max-width: 100%; }
+    .page { border: 1px solid #ccc; padding: 16px; max-width: 100%; }
   }
 </style>
 </head><body>
@@ -365,8 +371,7 @@ const OrdersMonitor = () => {
       </div>
     </div>
     <div class="invoice-ref">
-      <div class="inv-num">INVOICE</div>
-      <div class="inv-meta">${invoiceNo}<br>${invoiceDate}</div>
+      <div class="inv-num">${isDC ? 'DC Copy' : 'INVOICE'}</div>
     </div>
   </div>
 
@@ -374,20 +379,23 @@ const OrdersMonitor = () => {
   <div class="info-row">
     <div class="bill-to">
       <div class="bill-to-label">Bill To</div>
-      <div class="bill-to-name">${order.userGstBusinessName || order.userName || '—'}</div>
-      ${order.userGstBusinessName && order.userGstBusinessName !== order.userName ? `<div style="font-size:11px;color:#555;margin-bottom:2px;">${order.userName}</div>` : ''}
+      <div class="bill-to-name">${order.userName || '—'}</div>
+      ${order.userCompanyName ? `<div style="font-size:11px;color:#555;margin-bottom:2px;">${order.userCompanyName}</div>` : ''}
       <div class="bill-to-detail">
         ${order.userMobile  ? order.userMobile + '<br>' : ''}
+        ${order.userSecondMobile ? order.userSecondMobile + ' (alt)<br>' : ''}
         ${order.userEmail   ? order.userEmail  + '<br>' : ''}
         ${order.userAddress ? order.userAddress + '<br>' : ''}
-        ${order.userGstNumber ? `<span style="font-weight:700;color:#111;">GSTIN: ${order.userGstNumber}</span>` : ''}
+        ${order.userGstNumber ? `<span style="font-weight:700;color:#111;">GSTIN: ${order.userGstNumber}</span><br>` : ''}
+        ${order.userGstBusinessName ? order.userGstBusinessName : ''}
       </div>
     </div>
     <div class="inv-meta-box">
-      <div class="inv-meta-row"><span class="lbl">Invoice #</span><span class="val">${invoiceNo}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Invoice Date</span><span class="val">${invoiceDate}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invoiceDate}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>
+      <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan #' : 'Invoice #'}</span><span class="val">${invoiceNo}</span></div>
+      <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan Date' : 'Invoice Date'}</span><span class="val">${invoiceDate}</span></div>
+      ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invoiceDate}</span></div>` : ''}
+      ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>` : ''}
+      ${order.placeOfSupply ? `<div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply}</span></div>` : ''}
     </div>
   </div>
 
@@ -445,7 +453,6 @@ const OrdersMonitor = () => {
           </div>
         </div>
       </div>
-      <div style="font-size:10px;color:#555;margin-top:10px;">Customer Signature.</div>
     </div>
     <div class="footer-right">
       <div class="totals-row">
@@ -604,6 +611,27 @@ const OrdersMonitor = () => {
       } else toast.error(data.message || 'Update failed')
     } catch { toast.error('Error updating number') }
     finally { setCodeSaving(false) }
+  }
+
+  const savePlaceOfSupply = async (order, newValue) => {
+    if (!order) return
+    const trimmed = (newValue || '').trim()
+    if (trimmed === (order.placeOfSupply || '')) return
+    setPosSaving(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/bookings/${order._id}/details`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeOfSupply: trimmed }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Place of Supply updated')
+        setAllOrders(prev => prev.map(o => o._id === data._id ? data : o))
+        if (selectedOrder?._id === data._id) setSelectedOrder(data)
+      } else toast.error(data.message || 'Update failed')
+    } catch { toast.error('Error updating Place of Supply') }
+    finally { setPosSaving(false) }
   }
 
   const handleSendReminder = async (order) => {
@@ -921,7 +949,7 @@ const OrdersMonitor = () => {
               disabled={blocked}
               loading={actionLoading}
               onClick={() => {
-                if (a.modal) { setIsEarlyReturn(false); setActualReturnDate(null); setIsReturnConfirming(order) }
+                if (a.modal) { setIsEarlyReturn(false); setActualReturnDate(null); setReturnDateTime(dayjs()); setIsReturnConfirming(order) }
                 else if (a.needsReason) { setRejectReason(''); setRejectTarget({ orderId: order._id, targetStatus: a.target }) }
                 else if (a.needsNotes) { setReopenNotes(''); setReopenTarget(order._id) }
                 else if (a.target === 'Approved') { setApproveLocation(pickupLocs[0]?.id || ''); setApproveTarget({ orderId: order._id, targetStatus: 'Approved' }) }
@@ -1749,6 +1777,7 @@ const OrdersMonitor = () => {
             {cfg(selectedOrder.status).label}
           </span>
           <Button icon={<PrinterOutlined />} onClick={() => printOrder(selectedOrder)}>Print</Button>
+          <Button icon={<PrinterOutlined />} onClick={() => printOrder(selectedOrder, 'dc')}>DC Copy</Button>
         </div>
 
         {/* ── Status stepper ─────────────────────────────── */}
@@ -1803,8 +1832,12 @@ const OrdersMonitor = () => {
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Customer</div>
                 <div style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 15 }}>{selectedOrder.userName}</div>
                 {selectedOrder.userMobile  && <div style={{ color: '#E5550F', fontSize: 13, marginTop: 3 }}>{selectedOrder.userMobile}</div>}
+                {selectedOrder.userSecondMobile && <div style={{ color: '#E5550F', fontSize: 13, marginTop: 2 }}>{selectedOrder.userSecondMobile} <span style={{ color: '#9ca3af', fontSize: 11 }}>(alt)</span></div>}
                 {selectedOrder.userEmail   && <div style={{ color: '#6b7280', fontSize: 12, marginTop: 2 }}>{selectedOrder.userEmail}</div>}
                 {selectedOrder.userAddress && <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>{selectedOrder.userAddress}</div>}
+                {selectedOrder.userCompanyName && <div style={{ color: '#1e1b4b', fontSize: 12, marginTop: 6, fontWeight: 600 }}>{selectedOrder.userCompanyName}</div>}
+                {selectedOrder.userGstNumber && <div style={{ color: '#6b7280', fontSize: 11, marginTop: 2 }}>GSTIN: <span style={{ fontWeight: 700, color: '#111' }}>{selectedOrder.userGstNumber}</span></div>}
+                {selectedOrder.userGstBusinessName && <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 2 }}>{selectedOrder.userGstBusinessName}</div>}
               </div>
               {/* Rental Period */}
               <div style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', border: '1px solid #f0f0f0' }}>
@@ -1839,6 +1872,15 @@ const OrdersMonitor = () => {
                     <span style={{ fontSize: 12, color: '#6b7280' }}>
                       {new Date(selectedOrder.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}{' '}
                       {new Date(selectedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
+                {selectedOrder.returnedAt && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Returned</span>
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      {new Date(selectedOrder.returnedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}{' '}
+                      {new Date(selectedOrder.returnedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 )}
@@ -1923,14 +1965,14 @@ const OrdersMonitor = () => {
               </div>
             ) : (
               <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 56px 130px', padding: '10px 16px', background: '#1e1b4b' }}>
-                  {['Equipment', 'Rate/Day', 'Qty', 'Amount'].map(h => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 60px 60px 100px', padding: '10px 16px', background: '#1e1b4b' }}>
+                  {['Equipment', 'Rate/Day', 'Qty', 'Days', 'Amount'].map(h => (
                     <Text key={h} style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase' }}>{h}</Text>
                   ))}
                 </div>
                 {items.map((item, i) => (
                   <div key={i} style={{ padding: '10px 16px', background: i % 2 === 0 ? '#fff' : '#fafafa', borderTop: '1px solid #f3f4f6' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 60px 100px', alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 60px 60px 100px', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <img src={getImageUrl(item?.productId?.imageUrl || item?.imageUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'contain', background: '#f9fafb', border: '1px solid #f0f0f0', padding: 2, flexShrink: 0 }} />
                         <div>
@@ -1977,6 +2019,7 @@ const OrdersMonitor = () => {
                         </Tooltip>
                       )}
                       <Text style={{ fontSize: 13, color: '#6b7280' }}>{item?.quantity || 1}</Text>
+                      <Text style={{ fontSize: 13, color: '#6b7280' }}>{selectedOrder.totalDays || 1}</Text>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Text style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 14, whiteSpace: 'nowrap' }}>
                           ₹{((item?.pricePerDay || 0) * (item?.quantity || 1) * (selectedOrder.totalDays || 1)).toLocaleString()}
@@ -2104,6 +2147,21 @@ const OrdersMonitor = () => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Place of Supply */}
+            <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #f0f0f0', padding: '14px 16px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+                Place of Supply
+              </div>
+              <Input
+                key={selectedOrder._id}
+                defaultValue={selectedOrder.placeOfSupply || ''}
+                placeholder="e.g. Tamil Nadu"
+                disabled={posSaving}
+                onBlur={e => savePlaceOfSupply(selectedOrder, e.target.value)}
+                onPressEnter={e => e.target.blur()}
+              />
             </div>
           </div>
 
@@ -2453,7 +2511,12 @@ const OrdersMonitor = () => {
             }
             onChange={(_, opt) => {
               const u = opt?.u
-              if (u) setMoCustomer({ name: u.fullName, email: u.email || '', mobile: u.mobile || '', address: u.address || '', accountType: u.accountType || 'Private' })
+              if (u) setMoCustomer({
+                name: u.fullName, email: u.email || '', mobile: u.mobile || '',
+                secondMobile: u.secondMobile || '', companyName: u.companyName || '',
+                gstNumber: u.gstNumber || '', gstBusinessName: u.gstBusinessName || '',
+                address: u.address || '', accountType: u.accountType || 'Private',
+              })
             }}
           />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

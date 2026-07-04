@@ -207,7 +207,7 @@ const ProductDetails = ({ setShowBookingModal }) => {
               {[
                 { emoji: '🏆', title: 'Premium Quality', desc: 'Professionally maintained & ready to use' },
                 { emoji: '💰', title: 'Affordable Rates', desc: 'Save up to 80% compared to buying' },
-                { emoji: '🚚', title: 'Doorstep Delivery', desc: 'Delivered & picked up at your location' },
+                { emoji: '🚚', title: 'Store Pickup', desc: 'Collect your order from our store' },
               ].map((b, i) => (
                 <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 text-center">
                   <div className="text-3xl mb-2">{b.emoji}</div>
@@ -362,7 +362,7 @@ const ProductDetails = ({ setShowBookingModal }) => {
             {[
               'Zero Security Deposit',
               'Zero Hidden Charges',
-              'Zero Delivery Charges above ₹1,200',
+             
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 py-1.5">
                 <HiOutlineCheckCircle className="text-[#E5550F] text-sm shrink-0" />
@@ -393,10 +393,8 @@ const ProductDetails = ({ setShowBookingModal }) => {
               { label: 'Category',    value: product.category || '—' },
               { label: 'Condition',   value: 'Excellent / Pro-Grade' },
               { label: 'Max Rental',  value: '10 days per booking' },
-              {
-                label: 'Stock',
-                value: `${product.availableQuantity ?? 1} unit${(product.availableQuantity ?? 1) !== 1 ? 's' : ''} available`,
-              },
+            
+              
             ].map((s, i) => (
               <div key={i} className="flex justify-between items-center px-4 py-2.5 border-b border-gray-100 last:border-none">
                 <span className="text-[12px] text-gray-400">{s.label}</span>

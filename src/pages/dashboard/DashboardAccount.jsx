@@ -6,6 +6,7 @@ import useWindowWidth from '../../utils/useWindowWidth'
 import {
   HiOutlineUser, HiOutlinePhone, HiOutlineLocationMarker, HiOutlineMail,
   HiOutlineShieldCheck, HiOutlineSparkles, HiOutlineArrowNarrowRight,
+  HiOutlineOfficeBuilding, HiOutlineDocumentText,
 } from 'react-icons/hi'
 
 const BRAND = '#1e1b4b'
@@ -18,9 +19,13 @@ const DashboardAccount = () => {
   const { user, updateProfile } = useGlobal()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    fullName: user?.fullName || '',
-    mobile:   user?.mobile   || '',
-    address:  user?.address  || '',
+    fullName:        user?.fullName        || '',
+    mobile:          user?.mobile          || '',
+    secondMobile:    user?.secondMobile    || '',
+    companyName:     user?.companyName     || '',
+    gstNumber:       user?.gstNumber       || '',
+    gstBusinessName: user?.gstBusinessName || '',
+    address:         user?.address         || '',
   })
   const width    = useWindowWidth()
   const isMobile = width < 640
@@ -33,18 +38,6 @@ const DashboardAccount = () => {
     if (res.success) toast.success('Profile updated!')
     else toast.error(res.message || 'Update failed')
   }
-
-  const Field = ({ label, icon: Icon, children }) => (
-    <div style={{ marginBottom: 18 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 6 }}>
-        {label}
-      </label>
-      <div style={{ position: 'relative' }}>
-        <Icon style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: 18, pointerEvents: 'none' }} />
-        {children}
-      </div>
-    </div>
-  )
 
   const kycMap = {
     Approved:       { color: '#16a34a', label: 'Verified' },
@@ -98,6 +91,28 @@ const DashboardAccount = () => {
                 <Field label="Mobile Number" icon={HiOutlinePhone}>
                   <input type="tel" required value={formData.mobile}
                     onChange={e => setFormData({ ...formData, mobile: e.target.value })} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
+                <Field label="Second Mobile" icon={HiOutlinePhone}>
+                  <input type="tel" value={formData.secondMobile}
+                    onChange={e => setFormData({ ...formData, secondMobile: e.target.value })} style={inputStyle} />
+                </Field>
+                <Field label="Company Name" icon={HiOutlineOfficeBuilding}>
+                  <input type="text" value={formData.companyName}
+                    onChange={e => setFormData({ ...formData, companyName: e.target.value })} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? 0 : 16 }}>
+                <Field label="GST Number" icon={HiOutlineDocumentText}>
+                  <input type="text" value={formData.gstNumber}
+                    onChange={e => setFormData({ ...formData, gstNumber: e.target.value })} style={inputStyle} />
+                </Field>
+                <Field label="GST Business Name" icon={HiOutlineOfficeBuilding}>
+                  <input type="text" value={formData.gstBusinessName}
+                    onChange={e => setFormData({ ...formData, gstBusinessName: e.target.value })} style={inputStyle} />
                 </Field>
               </div>
 
@@ -171,6 +186,18 @@ const DashboardAccount = () => {
     </div>
   )
 }
+
+const Field = ({ label, icon: Icon, children }) => (
+  <div style={{ marginBottom: 18 }}>
+    <label style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.12em', display: 'block', marginBottom: 6 }}>
+      {label}
+    </label>
+    <div style={{ position: 'relative' }}>
+      <Icon style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', fontSize: 18, pointerEvents: 'none' }} />
+      {children}
+    </div>
+  </div>
+)
 
 const SummaryRow = ({ icon: Icon, label, children, last }) => (
   <div style={{

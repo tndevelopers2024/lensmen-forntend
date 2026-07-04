@@ -117,6 +117,8 @@ const BookingModal = ({ product, onClose, setAuthMode }) => {
           userAddress: bookingData.address,
           userMobile:  bookingData.mobile,
           accountType:        currentUser?.accountType || 'Private',
+          userSecondMobile:   currentUser?.secondMobile   || undefined,
+          userCompanyName:    currentUser?.companyName    || undefined,
           userGstNumber:      currentUser?.gstNumber      || undefined,
           userGstBusinessName: currentUser?.gstBusinessName || undefined,
           startDate:   bookingData.startDate,

@@ -132,7 +132,8 @@ const InvoicesPage = () => {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   }, [allOrders, search, statusFilter])
 
-  const printInvoice = (order) => {
+  const printInvoice = (order, mode = 'invoice') => {
+    const isDC = mode === 'dc'
     const items   = order.items?.length ? order.items : [order.productId].filter(Boolean)
     const days    = order.totalDays || 1
     const discount= order.discountAmount || 0
@@ -149,6 +150,7 @@ const InvoicesPage = () => {
     const invDate = fmtDate(order.createdAt)
     const logoUrl = `${window.location.origin}/logo.jpg`
     const qrUrl   = `${window.location.origin}/upi-qr.png`
+    const signatureUrl = `${window.location.origin}/signature.png`
 
     const amountInWords = (n) => {
       const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
@@ -180,7 +182,7 @@ const InvoicesPage = () => {
   .company-name { font-size: 14px; font-weight: 800; letter-spacing: 0.04em; margin-bottom: 2px; }
   .company-addr { font-size: 10px; line-height: 1.4; color: #444; }
   .invoice-ref { text-align: right; }
-  .invoice-ref .inv-num { font-size: 16px; font-weight: 800; }
+  .invoice-ref .inv-num { font-size: 16px; font-weight: 800; color: #111; }
   .invoice-ref .inv-meta { font-size: 10px; color: #555; margin-top: 3px; line-height: 1.6; }
   .info-row { display: flex; border: 1px solid #ccc; border-top: none; }
   .bill-to { flex: 1; padding: 8px 12px; border-right: 1px solid #ccc; }
@@ -203,7 +205,7 @@ const InvoicesPage = () => {
   .totals-row { display: flex; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid #ccc; }
   .totals-row.bold { font-weight: 700; font-size: 12px; }
   .sig-box { padding: 10px; text-align: center; min-height: 60px; display: flex; flex-direction: column; justify-content: space-between; border-top: 1px solid #ccc; }
-  @media print { body { margin: 0; } .page { border: none; padding: 16px; max-width: 100%; } }
+  @media print { body { margin: 0; } .page { border: 1px solid #ccc; padding: 16px; max-width: 100%; } }
 </style></head><body><div class="page">
   <div class="inv-header">
     <img src="${logoUrl}" alt="Lensmen Logo" />
@@ -212,27 +214,29 @@ const InvoicesPage = () => {
       <div class="company-addr">Flat S3, 2nd floor, Sri Niketan Apt, Sasi Nagar Main Rd, Sasinagar (Old No.7, New No.16), near Anbu Hospital, Velachery, Chennai – 600042 &nbsp;|&nbsp; +91 90800 86600 &nbsp;|&nbsp; lensmen@live.com</div>
     </div>
     <div class="invoice-ref">
-      <div class="inv-num">INVOICE</div>
-      <div class="inv-meta">${invNo}<br>${invDate}</div>
+      <div class="inv-num">${isDC ? 'DC Copy' : 'INVOICE'}</div>
     </div>
   </div>
   <div class="info-row">
     <div class="bill-to">
       <div class="bill-to-label">Bill To</div>
-      <div class="bill-to-name">${order.userGstBusinessName || order.userName || '—'}</div>
-      ${order.userGstBusinessName && order.userGstBusinessName !== order.userName ? `<div style="font-size:11px;color:#555;margin-bottom:2px;">${order.userName}</div>` : ''}
+      <div class="bill-to-name">${order.userName || '—'}</div>
+      ${order.userCompanyName ? `<div style="font-size:11px;color:#555;margin-bottom:2px;">${order.userCompanyName}</div>` : ''}
       <div class="bill-to-detail">
         ${order.userMobile  ? order.userMobile  + '<br>' : ''}
+        ${order.userSecondMobile ? order.userSecondMobile + ' (alt)<br>' : ''}
         ${order.userEmail   ? order.userEmail   + '<br>' : ''}
         ${order.userAddress ? order.userAddress + '<br>' : ''}
-        ${order.userGstNumber ? `<span style="font-weight:700;color:#111;">GSTIN: ${order.userGstNumber}</span>` : ''}
+        ${order.userGstNumber ? `<span style="font-weight:700;color:#111;">GSTIN: ${order.userGstNumber}</span><br>` : ''}
+        ${order.userGstBusinessName ? order.userGstBusinessName : ''}
       </div>
     </div>
     <div class="inv-meta-box">
-      <div class="inv-meta-row"><span class="lbl">Invoice #</span><span class="val">${invNo}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Invoice Date</span><span class="val">${invDate}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invDate}</span></div>
-      <div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>
+      <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan #' : 'Invoice #'}</span><span class="val">${invNo}</span></div>
+      <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan Date' : 'Invoice Date'}</span><span class="val">${invDate}</span></div>
+      ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invDate}</span></div>` : ''}
+      ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>` : ''}
+      ${order.placeOfSupply ? `<div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply}</span></div>` : ''}
     </div>
   </div>
   <table class="items-table">
@@ -264,17 +268,19 @@ const InvoicesPage = () => {
           </div>
         </div>
       </div>
-      <div style="font-size:10px;color:#555;margin-top:10px;">Customer Signature.</div>
     </div>
     <div class="footer-right">
-      <div class="totals-row"><span>Sub Total</span><span>${subTotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+      <div class="totals-row"><span>Sub Total</span><span>${baseTotal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       ${discount > 0 ? `<div class="totals-row"><span>Discount</span><span>(-) ${discount.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>` : ''}
       ${gstEnabled ? `
       <div class="totals-row"><span>CGST (${halfGstRate}%)</span><span>${cgstAmt.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       <div class="totals-row"><span>SGST (${halfGstRate}%)</span><span>${sgstAmt.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>` : ''}
       <div class="totals-row bold"><span>Total${gstEnabled ? ' (Incl. GST)' : ''}</span><span>₹${total.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
       <div class="totals-row bold" style="border-bottom:none;"><span>Balance Due</span><span>₹${balDue.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
-      <div class="sig-box"><div style="font-size:12px;margin-bottom:8px;">N Indrakumar</div><div style="font-size:11px;color:#555;">Authorized Signature</div></div>
+      <div class="sig-box" style="border-top:1px solid #ccc;">
+        <img src="${signatureUrl}" alt="Authorized Signature" style="height:48px;object-fit:contain;margin:0 auto 4px;" />
+        <div style="font-size:11px;color:#555;">Authorized Signature</div>
+      </div>
     </div>
   </div>
 </div></body></html>`
@@ -546,7 +552,9 @@ const InvoicesPage = () => {
               <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>CUSTOMER</div>
               <div style={{ fontSize: 16, fontWeight: 800, color: NAVY }}>{o.userName}</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: BRAND, marginTop: 3 }}>{o.userMobile}</div>
+              {o.userSecondMobile && <div style={{ fontSize: 12, color: BRAND, marginTop: 2 }}>{o.userSecondMobile} <span style={{ color: '#9ca3af', fontSize: 11 }}>(alt)</span></div>}
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{o.userEmail}</div>
+              {o.userCompanyName && <div style={{ fontSize: 12, fontWeight: 600, color: NAVY, marginTop: 6 }}>{o.userCompanyName}</div>}
               {o.userGstNumber && (
                 <div style={{ marginTop: 6, fontSize: 11, color: '#374151' }}>
                   <span style={{ color: '#9ca3af', marginRight: 4 }}>GSTIN</span>
@@ -691,6 +699,9 @@ const InvoicesPage = () => {
         }}>
           <Button icon={<PrinterOutlined />} onClick={() => printInvoice(o)}>
             Print Invoice
+          </Button>
+          <Button icon={<PrinterOutlined />} onClick={() => printInvoice(o, 'dc')}>
+            DC Copy
           </Button>
           <Button
             icon={<span style={{ fontSize: 13 }}>✉</span>}

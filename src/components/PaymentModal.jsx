@@ -18,7 +18,9 @@ const PaymentModal = ({ open, onClose, booking, onSuccess }) => {
   if (!booking) return null
 
   const alreadyPaid = booking.totalPaid    || 0
-  const totalPrice  = booking.totalPrice   || 0
+  const baseTotal   = booking.totalPrice   || 0
+  const gstAmount   = booking.gstEnabled ? +((baseTotal * (booking.gstRate || 18)) / 100).toFixed(2) : 0
+  const totalPrice  = +(baseTotal + gstAmount).toFixed(2)
   const remaining   = Math.max(0, totalPrice - alreadyPaid)
   const hasAdvance  = (booking.payments || []).some(p => p.type === 'advance')
   const defaultType = hasAdvance ? 'final' : 'advance'

@@ -20,7 +20,7 @@ const Footer = () => {
       <div className="border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-7 grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
-            { icon: HiOutlineShieldCheck, title: 'Fully Insured Gear', sub: 'Every rental is protected & covered' },
+            { icon: HiOutlineShieldCheck, title: 'Quality Checked', sub: 'Every item is inspected before rental' },
             { icon: HiOutlineClock,       title: '24/7 Support',       sub: 'We are here whenever you need us' },
             { icon: HiOutlineTruck,       title: 'Pickup & Delivery',  sub: 'Flexible logistics across the city' },
           ].map((f, i) => (

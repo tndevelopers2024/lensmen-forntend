@@ -34,11 +34,11 @@ const FAQS = [
   },
   {
     q: 'What is KYC and why do I need it?',
-    a: 'KYC (Know Your Customer) is a one-time identity verification step. Upload photos of your Aadhaar (front & back) and PAN (front & back) from your dashboard. Verified accounts get faster approvals — usually within 1–2 hours.',
+    a: 'KYC (Know Your Customer) is a one-time identity verification step. Upload photos of your Aadhaar (front & back) and PAN (front & back) from your dashboard. Verified accounts get faster approvals — usually within 1–2 hours. Customers must bring a copy of their valid driving licence at the time of pickup.',
   },
   {
     q: 'Where do I pick up my equipment?',
-    a: 'We have two offices in Chennai — Velachery Studio and T. Nagar Office. Once your order is approved, you will be notified with the exact pickup location and address.',
+    a: 'We have two offices in Chennai — Velachery Studio and Saligramam Office. Once your order is approved, you will be notified with the exact pickup location and address.',
   },
   {
     q: 'Can I rent multiple items together?',
@@ -50,7 +50,7 @@ const FAQS = [
   },
   {
     q: 'How are rental charges calculated?',
-    a: 'Charges are based on the number of rental days × daily rate per item. A minimum of 1 day is always charged. GST is included in the displayed price.',
+    a: 'Charges are based on the number of rental days × daily rate per item. A minimum of 1 day is always charged. GST is excluded in the displayed price.',
   },
   {
     q: 'Can I cancel a booking?',
