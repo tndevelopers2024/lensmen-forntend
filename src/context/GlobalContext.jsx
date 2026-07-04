@@ -4,7 +4,7 @@ import { io } from 'socket.io-client'
 
 const GlobalContext = createContext()
 
-export const API_URL = import.meta.env.VITE_API_URL || 'https://api.lensmenrentals.in /api'
+export const API_URL = import.meta.env.VITE_API_URL || 'https://api.lensmenrentals.in/api'
 export const BACKEND_URL = API_URL.replace(/\/api$/, '')
 export const getImageUrl = (path) => {
   if (!path) return ''
