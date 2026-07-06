@@ -7,8 +7,9 @@ import useWindowWidth from '../../utils/useWindowWidth'
 import {
   HiX, HiArrowRight, HiCheckCircle, HiExclamationCircle,
   HiCalendar, HiUser, HiPhone, HiMail, HiLocationMarker,
-  HiChevronRight, HiOutlineShoppingBag,
+  HiChevronRight, HiOutlineShoppingBag, HiOutlinePrinter,
 } from 'react-icons/hi'
+import { printInvoice } from '../../utils/printInvoice'
 
 const NAVY  = '#1e1b4b'
 const SOFT  = '#eef2ff'
@@ -246,6 +247,21 @@ const DashboardOrders = () => {
                   <div style={{ fontWeight: 700, color: NAVY, fontSize: isMobile ? 13 : 16 }}>
                     ₹{order.totalPrice?.toLocaleString()}
                   </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); printInvoice(order); }}
+                    style={{
+                      background: '#fff', border: '1px solid #d9d9d9', cursor: 'pointer',
+                      padding: isMobile ? '4px 8px' : '4px 12px', display: 'flex', alignItems: 'center', gap: 6,
+                      color: 'rgba(0, 0, 0, 0.88)', transition: 'all 0.2s', borderRadius: 6,
+                      fontSize: 13, fontWeight: 400
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#1677ff'; e.currentTarget.style.color = '#1677ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d9d9d9'; e.currentTarget.style.color = 'rgba(0, 0, 0, 0.88)'; }}
+                    title="Print Invoice"
+                  >
+                    <HiOutlinePrinter style={{ fontSize: 16 }} />
+                    <span style={{ display: isMobile ? 'none' : 'inline' }}>Print Invoice</span>
+                  </button>
                   <HiChevronRight style={{ color: '#cbd5e1', fontSize: 17 }} />
                 </div>
               </div>

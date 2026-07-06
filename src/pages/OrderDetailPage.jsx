@@ -4,8 +4,9 @@ import { useGlobal, API_URL, getImageUrl } from '../context/GlobalContext'
 import { getAdminSettings } from './admin/Settings'
 import {
   HiArrowLeft, HiArrowRight, HiExclamationCircle,
-  HiCheckCircle, HiOutlineShoppingBag,
+  HiCheckCircle, HiOutlineShoppingBag, HiOutlineDownload,
 } from 'react-icons/hi'
+import { printInvoice } from '../utils/printInvoice'
 
 const NAVY = '#1e1b4b'
 const SOFT = '#eef2ff'
@@ -173,7 +174,18 @@ export default function OrderDetailPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: NAVY }}>Order Details</h1>
-              <StatusBadge status={order.status} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button
+                  onClick={() => printInvoice(order)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #e2e8f0', color: NAVY, padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                >
+                  <HiOutlineDownload style={{ fontSize: 16 }} />
+                  Invoice
+                </button>
+                <StatusBadge status={order.status} />
+              </div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', marginTop: 6, fontFamily: 'monospace', letterSpacing: '0.04em' }}>
               {order.bookingCode}
