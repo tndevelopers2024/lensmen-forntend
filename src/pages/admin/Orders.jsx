@@ -314,7 +314,7 @@ const OrdersMonitor = () => {
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; background: #fff; }
-  .page { max-width: 780px; margin: 0 auto; padding: 24px 28px; border: 1px solid #ccc; }
+  .page { max-width: 780px; margin: 0 auto; padding: 24px 28px; border: 1px solid #ccc; min-height: 1040px; position: relative; }
 
   /* Compact header */
   .inv-header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 0; }
@@ -355,7 +355,7 @@ const OrdersMonitor = () => {
 
   @media print {
     body { margin: 0; }
-    .page { border: 1px solid #ccc; padding: 16px; max-width: 100%; }
+    .page { border: 1px solid #ccc; padding: 16px; max-width: 100%; min-height: 98vh; position: relative; }
   }
 </style>
 </head><body>
@@ -367,7 +367,7 @@ const OrdersMonitor = () => {
     <div class="company-block">
       <div class="company-name">LENSMEN RENTALS</div>
       <div class="company-addr">
-        Flat S3, 2nd floor, Sri Niketan Apt, Sasi Nagar Main Rd, Sasinagar (Old No.7, New No.16), near Anbu Hospital, Velachery, Chennai – 600042 &nbsp;|&nbsp; +91 90800 86600 &nbsp;|&nbsp; lensmen@live.com
+        Flat S3, 2nd floor, Sri Niketan Apt, Sasi Nagar Main Rd, Sasinagar (Old No.7, New No.16), near Anbu Hospital, Velachery, Chennai – 600042 &nbsp;|&nbsp; +91 90800 88600 &nbsp;|&nbsp; lensmen@live.com <br/> GSTIN : 33AALPI0642M1ZQ
       </div>
     </div>
     <div class="invoice-ref">
@@ -453,6 +453,7 @@ const OrdersMonitor = () => {
           </div>
         </div>
       </div>
+      ${isDC ? `<div style="margin-top: 50px; text-align: center;"><div style="font-size:11px;color:#555;font-weight:700;">Customer Signature</div></div>` : ''}
     </div>
     <div class="footer-right">
       <div class="totals-row">
