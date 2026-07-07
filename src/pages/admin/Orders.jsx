@@ -103,6 +103,7 @@ const OrdersMonitor = () => {
   const [unitOptions,       setUnitOptions]       = useState([])
   const [unitLoading,       setUnitLoading]       = useState(false)
   const [assigningUnit,     setAssigningUnit]     = useState(false)
+  const [unitPickupLocation,setUnitPickupLocation]= useState('')
   const [editingPrice,      setEditingPrice]      = useState(null)  // { itemIndex, value }
   const [editingCode,       setEditingCode]       = useState(false)
   const [codeValue,         setCodeValue]         = useState('')
@@ -395,7 +396,7 @@ const OrdersMonitor = () => {
       <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan Date' : 'Invoice Date'}</span><span class="val">${invoiceDate}</span></div>
       ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invoiceDate}</span></div>` : ''}
       ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>` : ''}
-      ${order.placeOfSupply ? `<div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply}</span></div>` : ''}
+      <div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply || '33-Tamil Nadu'}</span></div>
     </div>
   </div>
 
@@ -508,6 +509,7 @@ const OrdersMonitor = () => {
 
   const openUnitPicker = async (item, itemIndex) => {
     setUnitTarget({ item, itemIndex })
+    setUnitPickupLocation(selectedOrder?.pickupLocation || pickupLocs[0]?.id || '')
     setUnitLoading(true)
     try {
       const res = await fetch(
@@ -531,6 +533,7 @@ const OrdersMonitor = () => {
           itemIndex: unitTarget.itemIndex,
           unitId:    unitId || null,
           unitCode:  unit?.unitCode || '',
+          pickupLocation: unitPickupLocation || undefined,
         }),
       })
       const data = await res.json()
@@ -1471,16 +1474,16 @@ const OrdersMonitor = () => {
       {/* Assign Unit Modal */}
       <Modal
         open={!!unitTarget}
-        onCancel={() => { setUnitTarget(null); setUnitOptions([]) }}
+        onCancel={() => { setUnitTarget(null); setUnitOptions([]); setUnitPickupLocation('') }}
         footer={null}
         width={400}
         centered
         destroyOnHidden
         title={
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ApartmentOutlined style={{ color: '#3730a3' }} />
+            <EnvironmentOutlined style={{ color: '#3730a3' }} />
             <span style={{ color: '#1e1b4b', fontWeight: 700 }}>
-              Assign Unit — {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.name}
+              Assign Unit & Location — {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.name}
             </span>
           </div>
         }
@@ -1493,7 +1496,17 @@ const OrdersMonitor = () => {
             <span style={{ fontSize: 12 }}>Add units from Inventory → Products → Unit IDs.</span>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBlock: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBlock: 8 }}>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Pickup Location</Text>
+              <Select
+                value={unitPickupLocation}
+                onChange={setUnitPickupLocation}
+                style={{ width: '100%' }}
+                options={pickupLocs.map(l => ({ value: l.id, label: l.label }))}
+              />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Clear option */}
             {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.unitCode && (
               <button
@@ -1529,6 +1542,7 @@ const OrdersMonitor = () => {
                 </button>
               )
             })}
+            </div>
           </div>
         )}
       </Modal>
@@ -1984,9 +1998,20 @@ const OrdersMonitor = () => {
                                 fontSize: 10, fontWeight: 700, fontFamily: 'monospace',
                                 background: '#eef2ff', color: '#3730a3',
                                 border: '1px solid #c7d2fe', borderRadius: 4,
-                                padding: '1px 6px', letterSpacing: '0.04em',
+                                padding: '2px 6px', letterSpacing: '0.02em',
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                width: 'fit-content'
                               }}>
-                                {item.unitCode}
+                                <span>{item.unitCode}</span>
+                                {selectedOrder?.pickupLocation && (
+                                  <>
+                                    <span style={{ width: 1, height: 10, background: '#c7d2fe' }}></span>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600, fontFamily: 'sans-serif' }}>
+                                      <EnvironmentOutlined style={{ fontSize: 9 }} />
+                                      {pickupLocs.find(l => l.id === selectedOrder.pickupLocation)?.label || selectedOrder.pickupLocation}
+                                    </span>
+                                  </>
+                                )}
                               </span>
                             )}
                             {item?.vendorName && (
@@ -2025,7 +2050,7 @@ const OrdersMonitor = () => {
                         <Text style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 14, whiteSpace: 'nowrap' }}>
                           ₹{((item?.pricePerDay || 0) * (item?.quantity || 1) * (selectedOrder.totalDays || 1)).toLocaleString()}
                         </Text>
-                        <Tooltip title={item?.unitCode ? `Unit: ${item.unitCode} — click to change` : 'Assign unit ID'}>
+                        <Tooltip title={item?.unitCode ? `Unit: ${item.unitCode} — click to change unit & location` : 'Assign unit & location'}>
                           <button
                             onClick={() => openUnitPicker(item, i)}
                             style={{
@@ -2037,7 +2062,7 @@ const OrdersMonitor = () => {
                               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                             }}
                           >
-                            <ApartmentOutlined />
+                            <EnvironmentOutlined />
                           </button>
                         </Tooltip>
                         <Tooltip title={item?.vendorName ? 'Change vendor' : 'Assign vendor'}>

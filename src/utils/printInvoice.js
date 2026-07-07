@@ -108,7 +108,7 @@ export const printInvoice = (order, mode = 'invoice') => {
       <div class="inv-meta-row"><span class="lbl">${isDC ? 'Challan Date' : 'Invoice Date'}</span><span class="val">${invDate}</span></div>
       ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Due Date</span><span class="val">${invDate}</span></div>` : ''}
       ${!isDC ? `<div class="inv-meta-row"><span class="lbl">Terms</span><span class="val">Due on Receipt</span></div>` : ''}
-      ${order.placeOfSupply ? `<div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply}</span></div>` : ''}
+      <div class="inv-meta-row"><span class="lbl">Place of Supply</span><span class="val">${order.placeOfSupply || '33-Tamil Nadu'}</span></div>
     </div>
   </div>
   <table class="items-table">
