@@ -12,7 +12,7 @@ const KYC_DOCS = [
   { key: 'aadhaarFront', label: 'Aadhaar Front' },
   { key: 'aadhaarBack',  label: 'Aadhaar Back'  },
   { key: 'panFront',     label: 'PAN Front'      },
-  { key: 'panBack',      label: 'PAN Back'       },
+  { key: 'drivingLicense', label: 'Driving Licence' },
 ]
 
 const LEFT = {
@@ -33,7 +33,7 @@ const AuthModal = ({ mode, setMode }) => {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [otp, setOtp] = useState('')
-  const [kycFiles, setKycFiles] = useState({ aadhaarFront: null, aadhaarBack: null, panFront: null, panBack: null })
+  const [kycFiles, setKycFiles] = useState({ aadhaarFront: null, aadhaarBack: null, panFront: null, drivingLicense: null })
   const [authData, setAuthData] = useState({
     fullName: '', email: '', password: '', confirmPassword: '',
     mobile: '', secondMobile: '', companyName: '', address: '', accountType: 'Private',

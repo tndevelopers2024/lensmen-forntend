@@ -206,7 +206,7 @@ const AdminHelp = () => (
           </div>
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[
-              { label: 'Support Email', value: 'support@lensmenrentals.com' },
+              { label: 'Support Email', value: 'lensmen@live.com' },
               { label: 'Version',       value: 'v1.0.0' },
             ].map(r => (
               <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>

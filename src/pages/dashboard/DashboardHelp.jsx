@@ -37,7 +37,7 @@ const FAQS = [
   { q: 'How are rental charges calculated?',
     a: 'Charges are based on number of days × daily rate per item. Minimum 1 day is always charged.' },
   { q: 'What should I do if equipment is damaged?',
-    a: 'Inform us immediately. Minor accidental damage may be covered under our policy. Contact support@lensmenrentals.com with photos.' },
+    a: 'Inform us immediately. Minor accidental damage may be covered under our policy. Contact lensmen@live.com with photos.' },
   { q: 'How do I track my order status?',
     a: 'All orders are in My Orders with real-time status. You\'ll also get notifications when the status changes.' },
   { q: 'Can I extend my rental period?',
@@ -162,7 +162,7 @@ const DashboardHelp = () => {
             </div>
             <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                { label: 'Support Email', value: 'support@lensmenrentals.com' },
+                { label: 'Support Email', value: 'lensmen@live.com' },
                 { label: 'Hours',         value: 'Mon–Sat, 9am – 7pm' },
               ].map(r => (
                 <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, flexWrap: 'wrap', gap: 4 }}>

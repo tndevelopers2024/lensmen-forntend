@@ -12,12 +12,6 @@ const OFFER_COLORS = ['#E5550F', '#c94a0d', '#a83b0b', '#7c2d12', '#92400e']
 const offerLabel = (o) =>
   o.discountType === 'percentage' ? `${o.discountValue}% OFF` : `₹${o.discountValue} OFF`
 
-const bookedThisMonth = (id = '') => {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0
-  return Math.abs(h % 650) + 80
-}
-
 const FAQS = [
   { q: 'What documents are needed for KYC?', a: 'A valid government-issued photo ID (Aadhaar, PAN, Passport or Driving License) is required for first-time renters.' },
   { q: 'When does the rental period start?', a: 'You can pick up your gear anytime between 7AM and 11PM. Returns are accepted from 8AM to 8PM on the return date. Each calendar day (12AM–11PM) counts as one rental day.' },
@@ -103,13 +97,13 @@ const ProductDetails = ({ setShowBookingModal }) => {
   const [activeImg, setActiveImg]     = useState(0)
   const [wishlisted, setWishlisted]   = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
-
-  const booked = bookedThisMonth(product?._id || '')
-
   const rentalDays = useMemo(() => {
     if (!rentalDates.from || !rentalDates.to) return 1
     return Math.max(1, differenceInDays(rentalDates.to, rentalDates.from))
   }, [rentalDates])
+
+  const originalPrice = (product?.dailyRate || 0) * rentalDays
+  const offer = product?.offer || null
 
   const totalPrice = product ? (product.pricePerDay * rentalDays).toLocaleString('en-IN') : '0'
   const cartItem   = cart.find(i => i._id === product?._id)
@@ -253,12 +247,6 @@ const ProductDetails = ({ setShowBookingModal }) => {
             {product.description && (
               <p className="text-[13px] text-gray-400 line-clamp-2 leading-snug mb-3">{product.description}</p>
             )}
-
-            {/* Booked count */}
-            <div className="flex items-center gap-1.5 mb-4">
-              <HiTrendingUp className="text-green-500 text-sm shrink-0" />
-              <span className="text-green-600 text-[12px] font-semibold">{booked} booked this month</span>
-            </div>
 
             {/* Duration */}
             <p className="text-[13px] text-gray-500 mb-1">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGlobal } from '../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 import toast from 'react-hot-toast'
 import * as Icons from 'react-icons/hi'
 
@@ -19,7 +19,7 @@ const ProfilePage = () => {
   const [aadhaarFront, setAadhaarFront] = useState(null)
   const [aadhaarBack, setAadhaarBack] = useState(null)
   const [panFront, setPanFront] = useState(null)
-  const [panBack, setPanBack] = useState(null)
+  const [drivingLicense, setDrivingLicense] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -35,7 +35,7 @@ const ProfilePage = () => {
 
   const handleKycSubmit = async (e) => {
     e.preventDefault()
-    if (!aadhaarFront || !aadhaarBack || !panFront || !panBack) {
+    if (!aadhaarFront || !aadhaarBack || !panFront || !drivingLicense) {
       toast.error('Please select all 4 KYC documents')
       return
     }
@@ -46,7 +46,7 @@ const ProfilePage = () => {
     form.append('aadhaarFront', aadhaarFront)
     form.append('aadhaarBack', aadhaarBack)
     form.append('panFront', panFront)
-    form.append('panBack', panBack)
+    form.append('drivingLicense', drivingLicense)
 
     try {
       const res = await fetch(`${API_URL}/user/kyc`, {
@@ -303,18 +303,18 @@ const ProfilePage = () => {
                     </div>
                   </div>
 
-                  {/* PAN Back */}
+                  {/* Driving Licence */}
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">PAN Back</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Driving Licence</label>
                     <div className="relative group border-2 border-dashed border-slate-200 hover:border-primary rounded-2xl p-4 transition-all text-center cursor-pointer bg-slate-50/50">
                       <input 
                         type="file" accept="image/*" required
-                        onChange={e => setPanBack(e.target.files[0])}
+                        onChange={e => setDrivingLicense(e.target.files[0])}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
                       <Icons.HiUpload className="mx-auto text-slate-300 group-hover:text-primary transition-colors text-xl mb-1" />
                       <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block truncate">
-                        {panBack ? panBack.name : 'Select Image'}
+                        {drivingLicense ? drivingLicense.name : 'Select Image'}
                       </span>
                     </div>
                   </div>
@@ -343,10 +343,12 @@ const ProfilePage = () => {
                   { name: 'Aadhaar Front', key: 'aadhaarFront' },
                   { name: 'Aadhaar Back', key: 'aadhaarBack' },
                   { name: 'PAN Front', key: 'panFront' },
-                  { name: 'PAN Back', key: 'panBack' }
+                  { name: 'Driving Licence', key: 'drivingLicense' }
                 ].map(doc => {
-                  const url = user.kycDocuments[doc.key]
+                  let url = user.kycDocuments[doc.key]
+                  if (!url && doc.key === 'drivingLicense') url = user.kycDocuments.panBack
                   if (!url) return null
+                  url = getImageUrl(url)
                   return (
                     <div key={doc.key} className="bg-slate-50 border border-slate-100 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden group">
                       <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">{doc.name}</p>

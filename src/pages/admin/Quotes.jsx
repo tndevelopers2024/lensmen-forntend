@@ -42,7 +42,8 @@ const buildWAText = (q) => encodeURIComponent([
 ].filter(Boolean).join('\n'))
 
 // ── Quote Preview Modal ───────────────────────────────────────────────
-const QuotePreview = ({ quote, onClose, onConvert, onEdit }) => {
+const QuotePreview = ({ quote, onClose, onConvert, onEdit, onRefresh }) => {
+  const { API_URL } = useGlobal();
   if (!quote) return null
   const items = quote.items || []
   return (
@@ -144,7 +145,39 @@ const QuotePreview = ({ quote, onClose, onConvert, onEdit }) => {
           <Button
             icon={<WhatsAppOutlined />}
             style={{ borderColor: '#25d366', color: '#25d366' }}
-            onClick={() => window.open(`https://wa.me/${quote.customerMobile.replace(/\D/g, '')}?text=${buildWAText(quote)}`, '_blank')}
+            onClick={() => {
+              Modal.confirm({
+                title: 'Send WhatsApp Message?',
+                content: (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ fontSize: 13, color: '#6b7280' }}>This will automatically send the quotation details directly to the customer's WhatsApp.</p>
+                  </div>
+                ),
+                okText: 'Send Now',
+                cancelText: 'Cancel',
+                centered: true,
+                okButtonProps: { style: { background: '#25d366', borderColor: '#25d366' } },
+                onOk: async () => {
+                  try {
+                    const text = decodeURIComponent(buildWAText(quote));
+                    const res = await fetch(`${API_URL}/quotes/${quote._id}/whatsapp`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ text })
+                    });
+                    if (res.ok) {
+                      toast.success('WhatsApp message sent!');
+                      if (onRefresh) onRefresh();
+                    } else {
+                      const data = await res.json();
+                      toast.error(data.message || 'Failed to send message');
+                    }
+                  } catch (e) {
+                    toast.error('Network error');
+                  }
+                }
+              })
+            }}
           >WhatsApp</Button>
         )}
         {quote.customerEmail && (
@@ -625,7 +658,40 @@ const Quotes = () => {
           {q.customerMobile && (
             <Tooltip title="WhatsApp">
               <Button size="small" icon={<WhatsAppOutlined />} style={{ color: '#25d366', borderColor: '#25d366' }}
-                onClick={() => window.open(`https://wa.me/${q.customerMobile.replace(/\D/g, '')}?text=${buildWAText(q)}`, '_blank')} />
+                onClick={() => {
+                  Modal.confirm({
+                    title: 'Send WhatsApp Message?',
+                    content: (
+                      <div style={{ marginTop: 8 }}>
+                        <p style={{ fontSize: 13, color: '#6b7280' }}>This will automatically send the quotation details directly to the customer's WhatsApp.</p>
+                      </div>
+                    ),
+                    okText: 'Send Now',
+                    cancelText: 'Cancel',
+                    centered: true,
+                    okButtonProps: { style: { background: '#25d366', borderColor: '#25d366' } },
+                    onOk: async () => {
+                      try {
+                        const text = decodeURIComponent(buildWAText(q));
+                        const res = await fetch(`${API_URL}/quotes/${q._id}/whatsapp`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ text })
+                        });
+                        if (res.ok) {
+                          toast.success('WhatsApp message sent!');
+                          loadQuotes();
+                        } else {
+                          const data = await res.json();
+                          toast.error(data.message || 'Failed to send message');
+                        }
+                      } catch (e) {
+                        toast.error('Network error');
+                      }
+                    }
+                  })
+                }}
+              />
             </Tooltip>
           )}
           {q.status !== 'Converted' && (
@@ -694,6 +760,7 @@ const Quotes = () => {
         onClose={() => setPreviewQuote(null)}
         onConvert={() => handleConvert(previewQuote)}
         onEdit={() => { navigate(`/admin/quotes/${previewQuote._id}/edit`); setPreviewQuote(null) }}
+        onRefresh={loadQuotes}
       />
 
       {/* ── Unregistered user confirm modal ── */}

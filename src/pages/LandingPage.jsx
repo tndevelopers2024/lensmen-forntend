@@ -21,12 +21,6 @@ const offerLabel = (o) =>
   o.discountType === 'percentage' ? `${o.discountValue}% OFF` : `₹${o.discountValue} OFF`
 
 
-const bookedThisMonth = (id = '') => {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (Math.imul(31, h) + id.charCodeAt(i)) | 0
-  return Math.abs(h % 650) + 80
-}
-
 const FAQS = [
   {
     q: 'How do I place a rental request?',
@@ -332,7 +326,6 @@ const LandingPage = ({ setShowBookingModal }) => {
             <div className="mx-3 md:mx-5 mt-4 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-5">
               {filteredProducts.map(product => {
                 const soldOut     = !product.isAvailable || (product.availableQuantity ?? 0) <= 0
-                const booked      = bookedThisMonth(product._id)
                 const isWishlisted = wishlist.has(product._id)
                 const isNew       = parseInt((product._id || '').slice(-2), 16) % 3 === 0
                 const badge       = isNew
@@ -386,15 +379,6 @@ const LandingPage = ({ setShowBookingModal }) => {
                       >
                         {product.name}
                       </Link>
-
-                      {!soldOut && (
-                        <div className="flex items-center gap-1 mb-1.5">
-                          <HiTrendingUp className="text-green-500 text-[11px] shrink-0" />
-                          <span className="text-green-600 text-[11px] md:text-[12px] font-medium">
-                            {booked} booked this month
-                          </span>
-                        </div>
-                      )}
 
                       <p className="text-gray-500 text-[12px] md:text-[13px]">
                         Rent for{' '}
@@ -493,10 +477,10 @@ const LandingPage = ({ setShowBookingModal }) => {
                   <div className="text-[13px] font-bold text-white mb-1">Still have questions?</div>
                   <div className="text-[12px] text-white/50 mb-3">We're happy to help.</div>
                   <a
-                    href="mailto:support@lensmenrentals.com"
+                    href="mailto:lensmen@live.com"
                     className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[#E5550F] hover:underline"
                   >
-                    support@lensmenrentals.com
+                    lensmen@live.com
                   </a>
                 </div>
               </div>

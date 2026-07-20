@@ -19,7 +19,7 @@ export const printInvoice = (order, mode = 'invoice') => {
   const total   = gstTotal(order)
   const balDue  = gstBalance(order)
   const invNo   = order.bookingCode || ('#' + order._id?.slice(-8).toUpperCase())
-  const invDate = fmtDate(order.createdAt)
+  const invDate = fmtDate(order.startDate || order.createdAt)
   const logoUrl = `${window.location.origin}/logo.jpg`
   const qrUrl   = `${window.location.origin}/upi-qr.png`
   const signatureUrl = `${window.location.origin}/signature.png`

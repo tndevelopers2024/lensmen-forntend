@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useGlobal } from '../../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import toast from 'react-hot-toast'
 import useWindowWidth from '../../utils/useWindowWidth'
 import { HiUpload, HiCheckCircle, HiClock, HiExclamationCircle, HiEye } from 'react-icons/hi'
@@ -13,12 +13,12 @@ const KYC_DOCS = [
   { key: 'aadhaarFront', label: 'Aadhaar Front' },
   { key: 'aadhaarBack',  label: 'Aadhaar Back' },
   { key: 'panFront',     label: 'PAN Front' },
-  { key: 'panBack',      label: 'PAN Back' },
+  { key: 'drivingLicense', label: 'Driving Licence' },
 ]
 
 const DashboardKYC = () => {
   const { user, setUser, API_URL } = useGlobal()
-  const [files,     setFiles]     = useState({ aadhaarFront: null, aadhaarBack: null, panFront: null, panBack: null })
+  const [files,     setFiles]     = useState({ aadhaarFront: null, aadhaarBack: null, panFront: null, drivingLicense: null })
   const [uploading, setUploading] = useState(false)
   const width    = useWindowWidth()
   const isMobile = width < 640
@@ -40,7 +40,7 @@ const DashboardKYC = () => {
       if (res.ok) {
         toast.success('KYC documents uploaded!')
         setUser(data)
-        setFiles({ aadhaarFront: null, aadhaarBack: null, panFront: null, panBack: null })
+        setFiles({ aadhaarFront: null, aadhaarBack: null, panFront: null, drivingLicense: null })
       } else { toast.error(data.message || 'Upload failed') }
     } catch { toast.error('Network error') }
     finally { setUploading(false) }
@@ -173,8 +173,10 @@ const DashboardKYC = () => {
               gap: 12,
             }}>
               {KYC_DOCS.map(doc => {
-                const url = user?.kycDocuments?.[doc.key]
+                let url = user?.kycDocuments?.[doc.key]
+                if (!url && doc.key === 'drivingLicense') url = user?.kycDocuments?.panBack
                 if (!url) return null
+                url = getImageUrl(url)
                 return (
                   <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 12, padding: '10px', border: `1px solid ${LINE}` }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>

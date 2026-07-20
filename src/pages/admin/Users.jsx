@@ -5,7 +5,7 @@ import {
 import {
   SearchOutlined, EyeOutlined, UserOutlined, CheckCircleOutlined,
   CloseCircleOutlined, PlusOutlined, MailOutlined, PhoneOutlined,
-  EnvironmentOutlined, CalendarOutlined, IdcardOutlined, DeleteOutlined, PrinterOutlined,
+  EnvironmentOutlined, CalendarOutlined, IdcardOutlined, DeleteOutlined, PrinterOutlined, EditOutlined,
 } from '@ant-design/icons'
 import { HiCheckCircle, HiUpload } from 'react-icons/hi'
 import toast from 'react-hot-toast'
@@ -28,7 +28,7 @@ const KYC_DOCS = [
   { key: 'aadhaarFront', label: 'Aadhaar Front' },
   { key: 'aadhaarBack',  label: 'Aadhaar Back'  },
   { key: 'panFront',     label: 'PAN Front'      },
-  { key: 'panBack',      label: 'PAN Back'       },
+  { key: 'drivingLicense', label: 'Driving Licence' },
 ]
 
 const KYC_TAG = {
@@ -45,8 +45,8 @@ const CLASS_COLORS = {
 
 const CLASSES = ['New', 'Regular', 'Frequent', 'VIP', 'Celebrity', 'Corporate']
 
-const EMPTY_FORM = { fullName: '', email: '', mobile: '', address: '', password: '', accountType: 'Private' }
-const EMPTY_KYC  = { aadhaarFront: null, aadhaarBack: null, panFront: null, panBack: null }
+const EMPTY_FORM = { fullName: '', email: '', mobile: '', address: '', password: '', accountType: 'Private', companyName: '', gstNumber: '', gstBusinessName: '' }
+const EMPTY_KYC  = { aadhaarFront: null, aadhaarBack: null, panFront: null, drivingLicense: null }
 
 const divStyle = {
   fontSize: 11, color: '#9ca3af', fontWeight: 700,
@@ -67,6 +67,8 @@ const UsersPage = () => {
   const openedFromUrlRef = useRef(false)
 
   const [searchTerm, setSearchTerm]       = useState('')
+  const [typeFilter, setTypeFilter]       = useState('All')
+  const [classFilter, setClassFilter]     = useState('All')
   const [selectedUser, setSelectedUser]   = useState(null)
   const [drawerTab, setDrawerTab]         = useState('overview')
   const [kycReason, setKycReason]         = useState('')
@@ -77,15 +79,21 @@ const UsersPage = () => {
   const [addForm, setAddForm]             = useState(EMPTY_FORM)
   const [addKyc, setAddKyc]               = useState(EMPTY_KYC)
   const [addLoading, setAddLoading]       = useState(false)
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
+  const [editProfileForm, setEditProfileForm] = useState({})
+  const [editProfileLoading, setEditProfileLoading] = useState(false)
 
   useEffect(() => { fetchAdminData('/admin/users') }, [])
 
-  const filteredUsers = allUsers.filter(u =>
-    u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    u.mobile?.includes(searchTerm) ||
-    u.userId?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredUsers = allUsers.filter(u => {
+    const matchesSearch = u.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          u.mobile?.includes(searchTerm) ||
+                          u.userId?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = typeFilter === 'All' || (u.accountType || 'Private') === typeFilter
+    const matchesClass = classFilter === 'All' || (u.customerClass || 'New') === classFilter
+    return matchesSearch && matchesType && matchesClass
+  })
 
   // Restore drawer from URL on mount (after allUsers loads)
   useEffect(() => {
@@ -166,6 +174,30 @@ const UsersPage = () => {
       }
     } catch { toast.error('Server error') }
     finally { setDeleteLoading(false) }
+  }
+
+  const handleUpdateProfile = async () => {
+    setEditProfileLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/admin/users/${selectedUser._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editProfileForm),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Profile updated successfully')
+        setEditProfileOpen(false)
+        fetchAdminData('/admin/users')
+        setSelectedUser(data)
+      } else {
+        toast.error(data.message || 'Update failed')
+      }
+    } catch {
+      toast.error('Server error')
+    } finally {
+      setEditProfileLoading(false)
+    }
   }
 
   const handleAddUser = async (e) => {
@@ -338,12 +370,26 @@ const UsersPage = () => {
         </button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-3">
         <Input
           prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
           placeholder="Search by name, email or mobile..."
           value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
           allowClear size="large" style={{ maxWidth: 400 }}
+        />
+        <Select
+          value={typeFilter}
+          onChange={setTypeFilter}
+          size="large"
+          style={{ width: 160 }}
+          options={[{ value: 'All', label: 'All Types' }, { value: 'Private', label: 'Private' }, { value: 'Company', label: 'Company' }]}
+        />
+        <Select
+          value={classFilter}
+          onChange={setClassFilter}
+          size="large"
+          style={{ width: 160 }}
+          options={[{ value: 'All', label: 'All Classes' }, ...CLASSES.map(c => ({ value: c, label: c }))]}
         />
       </div>
 
@@ -587,7 +633,22 @@ const UsersPage = () => {
                 {/* OVERVIEW */}
                 {drawerTab === 'overview' && (
                   <div>
-                    <Divider orientation="left" style={divStyle}>Profile Information</Divider>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 8 }}>
+                      <Divider orientation="left" style={{ ...divStyle, margin: 0, border: 'none' }}>Profile Information</Divider>
+                      <Button size="small" type="dashed" icon={<EditOutlined />} onClick={() => {
+                        setEditProfileForm({
+                          fullName: selectedUser.fullName,
+                          email: selectedUser.email,
+                          mobile: selectedUser.mobile,
+                          secondMobile: selectedUser.secondMobile,
+                          address: selectedUser.address,
+                          companyName: selectedUser.companyName,
+                          gstNumber: selectedUser.gstNumber,
+                          gstBusinessName: selectedUser.gstBusinessName,
+                        })
+                        setEditProfileOpen(true)
+                      }}>Edit Info</Button>
+                    </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 24px', marginBottom: 4 }}>
                       <div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -671,7 +732,9 @@ const UsersPage = () => {
                     {hasDocs ? (
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                         {KYC_DOCS.map(doc => {
-                          const url = toUploadUrl(selectedUser.kycDocuments?.[doc.key])
+                          let url = selectedUser.kycDocuments?.[doc.key]
+                          if (!url && doc.key === 'drivingLicense') url = selectedUser.kycDocuments?.panBack
+                          url = toUploadUrl(url)
                           return (
                             <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 10, padding: 12, border: '1px solid #e5e7eb' }}>
                               <div style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{doc.label}</div>
@@ -892,6 +955,28 @@ const UsersPage = () => {
                 </label>
               ))}
             </div>
+            
+            {addForm.accountType === 'Company' && (
+              <div className="mt-4 space-y-3 pt-3 border-t border-slate-200">
+                <div className="space-y-1">
+                  <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">Company Name</label>
+                  <input placeholder="Enter company name" value={addForm.companyName}
+                    onChange={e => setAddForm({ ...addForm, companyName: e.target.value })} className={fieldCls} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">GSTIN</label>
+                    <input placeholder="GST Number" value={addForm.gstNumber}
+                      onChange={e => setAddForm({ ...addForm, gstNumber: e.target.value })} className={fieldCls} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-widest">GST Business Name</label>
+                    <input placeholder="Name as per GST" value={addForm.gstBusinessName}
+                      onChange={e => setAddForm({ ...addForm, gstBusinessName: e.target.value })} className={fieldCls} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -948,6 +1033,55 @@ const UsersPage = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* EDIT PROFILE MODAL */}
+      <Modal
+        title="Edit Profile Information"
+        open={editProfileOpen}
+        onCancel={() => setEditProfileOpen(false)}
+        onOk={handleUpdateProfile}
+        confirmLoading={editProfileLoading}
+        okText="Save Changes"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Full Name</label>
+            <Input value={editProfileForm.fullName} onChange={e => setEditProfileForm({ ...editProfileForm, fullName: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Email Address</label>
+            <Input value={editProfileForm.email} onChange={e => setEditProfileForm({ ...editProfileForm, email: e.target.value })} />
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Mobile Number</label>
+              <Input value={editProfileForm.mobile} onChange={e => setEditProfileForm({ ...editProfileForm, mobile: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Alt Mobile Number</label>
+              <Input value={editProfileForm.secondMobile} onChange={e => setEditProfileForm({ ...editProfileForm, secondMobile: e.target.value })} />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Address</label>
+            <TextArea value={editProfileForm.address} onChange={e => setEditProfileForm({ ...editProfileForm, address: e.target.value })} rows={2} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>Company Name</label>
+            <Input value={editProfileForm.companyName} onChange={e => setEditProfileForm({ ...editProfileForm, companyName: e.target.value })} />
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>GSTIN</label>
+              <Input value={editProfileForm.gstNumber} onChange={e => setEditProfileForm({ ...editProfileForm, gstNumber: e.target.value })} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: '#555' }}>GST Business Name</label>
+              <Input value={editProfileForm.gstBusinessName} onChange={e => setEditProfileForm({ ...editProfileForm, gstBusinessName: e.target.value })} />
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   )

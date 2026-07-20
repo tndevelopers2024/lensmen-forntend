@@ -45,7 +45,10 @@ const cfg = (status) => STATUS_CFG[status] || { color: '#94a3b8', bg: '#f8fafc',
 // ── GST-inclusive amount helpers ─────────────────────────────────────
 const gstAmount  = (order) => order.gstEnabled ? +((order.totalPrice || 0) * (order.gstRate || 18) / 100).toFixed(2) : 0
 const gstTotal   = (order) => +((order.totalPrice || 0) + gstAmount(order)).toFixed(2)
-const gstBalance = (order) => Math.max(0, +(gstTotal(order) - (order.totalPaid || 0)).toFixed(2))
+const gstBalance = (order) => {
+  if (['Cancelled', 'Rejected'].includes(order.status)) return 0
+  return Math.max(0, +(gstTotal(order) - (order.totalPaid || 0)).toFixed(2))
+}
 
 // ── Active rental statuses ───────────────────────────────────────────
 const ACTIVE_STATUSES        = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Request Submitted', 'KYC Pending', 'KYC Approved', 'Approved', 'Ready for Pickup', 'Reopened']
@@ -284,7 +287,8 @@ const OrdersMonitor = () => {
     const sgstAmt     = gstEnabled ? +(baseTotal * halfGstRate / 100).toFixed(2) : 0
     const gstAmt      = +(cgstAmt + sgstAmt).toFixed(2)
     const total       = +(baseTotal + gstAmt).toFixed(2)
-    const balanceDue  = Math.max(0, total - (order.totalPaid || 0))
+    const isCancelled = ['Cancelled', 'Rejected'].includes(order.status)
+    const balanceDue  = isCancelled ? 0 : Math.max(0, total - (order.totalPaid || 0))
 
     const amountInWords = (n) => {
       const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen']
@@ -813,6 +817,12 @@ const OrdersMonitor = () => {
         body: JSON.stringify({ status: targetStatus, ...extraBody }),
       })
       if (res.ok) {
+        const data = await res.json()
+        const updated = data.booking || data
+        if (updated && updated._id) {
+          setAllOrders(prev => prev.map(o => o._id === updated._id ? { ...o, ...updated } : o))
+          if (selectedOrder?._id === updated._id) setSelectedOrder(prev => ({ ...prev, ...updated }))
+        }
         toast.success(opts.keepOpen ? 'Location updated' : `→ ${targetStatus}`)
         if (!opts.keepOpen) { setSelectedOrder(null); navigate('/admin/orders') }
       } else toast.error('Failed')
@@ -1003,13 +1013,13 @@ const OrdersMonitor = () => {
   // ── Table columns ─────────────────────────────────────────────────
   const tableColumns = [
     {
-      title: showArchive ? 'Archived On' : 'Date',
-      dataIndex: showArchive ? 'archivedAt' : 'createdAt',
+      title: showArchive ? 'Archived On' : 'Start Date',
+      dataIndex: showArchive ? 'archivedAt' : 'startDate',
       key: 'date',
       width: 100,
       sorter: showArchive
         ? (a, b) => new Date(a.archivedAt) - new Date(b.archivedAt)
-        : (a, b) => new Date(a.createdAt) - new Date(b.createdAt),
+        : (a, b) => new Date(a.startDate) - new Date(b.startDate),
       defaultSortOrder: 'descend',
       render: d => (
         <span style={{ fontSize: 12, color: showArchive ? '#f59e0b' : '#6b7280' }}>
@@ -1699,8 +1709,10 @@ const OrdersMonitor = () => {
         {selectedKycOrder && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              {[{ name: 'Aadhaar Front', key: 'aadhaarFront' }, { name: 'Aadhaar Back', key: 'aadhaarBack' }, { name: 'PAN Front', key: 'panFront' }, { name: 'PAN Back', key: 'panBack' }].map(doc => {
-                const url = selectedKycOrder.userKyc?.kycDocuments?.[doc.key]
+              {[{ name: 'Aadhaar Front', key: 'aadhaarFront' }, { name: 'Aadhaar Back', key: 'aadhaarBack' }, { name: 'PAN Front', key: 'panFront' }, { name: 'Driving Licence', key: 'drivingLicense' }].map(doc => {
+                let url = selectedKycOrder.userKyc?.kycDocuments?.[doc.key]
+                if (!url && doc.key === 'drivingLicense') url = selectedKycOrder.userKyc?.kycDocuments?.panBack
+                url = getImageUrl(url)
                 return (
                   <div key={doc.key} style={{ background: '#f9fafb', borderRadius: 12, padding: 12, border: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Text type="secondary" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>{doc.name}</Text>
@@ -1922,7 +1934,7 @@ const OrdersMonitor = () => {
                     </div>
                   )
                 })()}
-                {(['Approved', 'Ready for Pickup', 'Picked Up', 'During Rental', 'Return Pending'].includes(selectedOrder.status)) && selectedOrder.pickupLocation && (
+                {(['Approved', 'Ready for Pickup', 'Picked Up', 'During Rental', 'Return Pending', 'Returned', 'Closed'].includes(selectedOrder.status)) && selectedOrder.pickupLocation && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e5e7eb', fontSize: 12 }}>
                     <span style={{ color: '#4338ca', fontWeight: 700 }}>📍 </span>
                     <span style={{ color: '#1e1b4b', fontWeight: 600 }}>

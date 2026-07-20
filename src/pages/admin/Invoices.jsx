@@ -46,6 +46,7 @@ const gstTotal   = (order) => +((order.totalPrice || 0) + gstAmount(order)).toFi
 const gstBalance = (order) => Math.max(0, +(gstTotal(order) - (order.totalPaid || 0)).toFixed(2))
 
 const invoiceStatus = (order) => {
+  if (['Cancelled', 'Rejected'].includes(order.status)) return { label: 'CANCELLED', color: '#ef4444', bg: '#fef2f2', overdue: 0 }
   const pending = gstBalance(order)
   if (pending <= 0) return { label: 'PAID', color: '#16a34a', bg: '#f0fdf4', overdue: 0 }
   const today   = new Date()
@@ -123,10 +124,11 @@ const InvoicesPage = () => {
         const matchQ = !q || name.includes(q) || inv.toLowerCase().includes(q) || (o.userMobile || '').includes(q)
         const st = invoiceStatus(o)
         const matchStatus =
-          statusFilter === 'all'     ? true :
-          statusFilter === 'paid'    ? st.label === 'PAID' :
-          statusFilter === 'overdue' ? st.overdue > 0 :
-          statusFilter === 'pending' ? st.label === 'PENDING' : true
+          statusFilter === 'all'       ? true :
+          statusFilter === 'paid'      ? st.label === 'PAID' :
+          statusFilter === 'overdue'   ? st.overdue > 0 :
+          statusFilter === 'pending'   ? st.label === 'PENDING' :
+          statusFilter === 'cancelled' ? st.label === 'CANCELLED' : true
         return matchQ && matchStatus
       })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -147,7 +149,7 @@ const InvoicesPage = () => {
     const total   = gstTotal(order)
     const balDue  = gstBalance(order)
     const invNo   = order.bookingCode || ('#' + order._id?.slice(-8).toUpperCase())
-    const invDate = fmtDate(order.createdAt)
+    const invDate = fmtDate(order.startDate || order.createdAt)
     const logoUrl = `${window.location.origin}/logo.jpg`
     const qrUrl   = `${window.location.origin}/upi-qr.png`
     const signatureUrl = `${window.location.origin}/signature.png`
@@ -359,12 +361,14 @@ const InvoicesPage = () => {
         { text: 'Paid', value: 'paid' },
         { text: 'Overdue', value: 'overdue' },
         { text: 'Pending', value: 'pending' },
+        { text: 'Cancelled', value: 'cancelled' },
       ],
       onFilter: (value, record) => {
         const st = invoiceStatus(record)
-        if (value === 'paid')    return st.label === 'PAID'
-        if (value === 'overdue') return st.overdue > 0
-        if (value === 'pending') return st.label === 'PENDING'
+        if (value === 'paid')      return st.label === 'PAID'
+        if (value === 'overdue')   return st.overdue > 0
+        if (value === 'pending')   return st.label === 'PENDING'
+        if (value === 'cancelled') return st.label === 'CANCELLED'
         return true
       },
       render: (_, r) => {
@@ -427,10 +431,10 @@ const InvoicesPage = () => {
     },
   ]
 
-  const paidCount    = allOrders.filter(o => invoiceStatus(o).label === 'PAID').length
-  const overdueCount = allOrders.filter(o => invoiceStatus(o).overdue > 0).length
-  const pendingCount = allOrders.filter(o => invoiceStatus(o).label === 'PENDING').length
-
+  const paidCount      = allOrders.filter(o => invoiceStatus(o).label === 'PAID').length
+  const overdueCount   = allOrders.filter(o => invoiceStatus(o).overdue > 0).length
+  const pendingCount   = allOrders.filter(o => invoiceStatus(o).label === 'PENDING').length
+  const cancelledCount = allOrders.filter(o => invoiceStatus(o).label === 'CANCELLED').length
   // ── Order preview modal ──────────────────────────────────────────────
   const renderOrderPreview = () => {
     if (!previewOrder) return null
@@ -864,10 +868,11 @@ const InvoicesPage = () => {
       {/* Summary chips */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
         {[
-          { key: 'all',     label: 'All Invoices', count: allOrders.length, color: NAVY,      bg: '#f0f1f7' },
-          { key: 'paid',    label: 'Paid',          count: paidCount,        color: '#16a34a', bg: '#f0fdf4' },
-          { key: 'overdue', label: 'Overdue',        count: overdueCount,     color: '#dc2626', bg: '#fef2f2' },
-          { key: 'pending', label: 'Pending',        count: pendingCount,     color: '#d97706', bg: '#fffbeb' },
+          { key: 'all',       label: 'All Invoices', count: allOrders.length, color: NAVY,      bg: '#f0f1f7' },
+          { key: 'paid',      label: 'Paid',         count: paidCount,        color: '#16a34a', bg: '#f0fdf4' },
+          { key: 'overdue',   label: 'Overdue',      count: overdueCount,     color: '#dc2626', bg: '#fef2f2' },
+          { key: 'pending',   label: 'Pending',      count: pendingCount,     color: '#d97706', bg: '#fffbeb' },
+          { key: 'cancelled', label: 'Cancelled',    count: cancelledCount,   color: '#ef4444', bg: '#fef2f2' },
         ].map(chip => (
           <button
             key={chip.key}
