@@ -8,9 +8,13 @@ export const API_URL = import.meta.env.VITE_API_URL || 'https://api.lensmenrenta
 export const BACKEND_URL = API_URL.replace(/\/api$/, '')
 export const getImageUrl = (path) => {
   if (!path) return ''
-  if (path.includes('localhost:5000')) {
-    path = path.replace(/http:\/\/localhost:5000(\/api)?/g, '')
+  
+  // Force all /uploads/ paths to use the current BACKEND_URL, regardless of what domain was saved
+  const match = path.match(/\/uploads\/.+/)
+  if (match) {
+    return `${BACKEND_URL}${match[0]}`
   }
+
   if (path.startsWith('http')) return path  // legacy absolute URLs still work
   return `${BACKEND_URL}${path.startsWith('/') ? '' : '/'}${path}`
 }
