@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Table, Button, Tag, Drawer, Form, Input, InputNumber, Select,
   Upload, Space, Popconfirm, Image, Tooltip, Divider, Modal, Spin,
@@ -324,6 +324,10 @@ const AdminInventory = () => {
     } catch { toast.error('Sync failed') }
     finally { setSyncing(false) }
   }
+
+  useEffect(() => {
+    syncStock()
+  }, [])
 
   // ── Delete ─────────────────────────────────────────────────────────
   const deleteProduct = async (id) => {
