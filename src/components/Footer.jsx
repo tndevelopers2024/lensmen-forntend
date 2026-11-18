@@ -15,10 +15,10 @@ const Footer = () => {
   }
 
   return (
-    <footer className="bg-[#0f0f1e] text-slate-300 mt-20">
+    <footer className="bg-gradient-to-b from-[#16162b] to-[#0b0b17] text-slate-300 mt-20 border-t-4 border-primary">
       {/* Trust strip */}
       <div className="border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-7 grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="max-w-[1440px] mx-auto px-6 py-7 grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             { icon: HiOutlineShieldCheck, title: 'Quality Checked', sub: 'Every item is inspected before rental' },
             { icon: HiOutlineClock,       title: '24/7 Support',       sub: 'We are here whenever you need us' },
@@ -38,29 +38,31 @@ const Footer = () => {
       </div>
 
       {/* Main */}
-      <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 md:grid-cols-12 gap-10">
+      <div className="max-w-[1440px] mx-auto px-6 py-14 grid grid-cols-1 md:grid-cols-12 gap-10">
 
         {/* Brand */}
         <div className="md:col-span-4">
-          <Link to="/" className="flex items-center gap-2.5 mb-4">
-            <img src="/logo.jpg" alt="Lensmen" className="w-10 h-10 rounded-lg object-cover" />
-            <span className="text-[17px] font-bold text-white">Lensmen <span className="text-primary">Rentals</span></span>
+          <Link to="/" className="inline-block mb-5">
+            <img src="/logo.jpg" alt="Lens Men – Rent, Create, Inspire" className="h-28 w-auto rounded-xl bg-white px-4 py-2 object-contain shadow-lg" />
           </Link>
-          <p className="text-[13px] text-slate-400 leading-relaxed max-w-xs">
+          <p className="text-[14px] text-slate-400 leading-relaxed max-w-sm">
             Chennai's trusted destination for professional camera, lighting and cinema equipment rentals. Pro-grade gear, verified and ready to shoot.
           </p>
+          <a
+            href="https://wa.me/919080086600" target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mt-6 px-5 py-2.5 rounded-full bg-primary text-white text-[13px] font-semibold hover:bg-primary-dark transition-colors"
+          >
+            <HiOutlinePhone className="text-base" /> Chat on WhatsApp
+          </a>
         </div>
 
         {/* Categories */}
-        <div className="md:col-span-3">
-          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-4">Categories</h4>
-          <ul className="space-y-2.5">
+        <div className="md:col-span-2">
+          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-5">Categories</h4>
+          <ul className="space-y-3">
             {(categories.length ? categories : ['Cameras', 'Lenses', 'Lights']).slice(0, 6).map(cat => (
               <li key={cat}>
-                <button
-                  onClick={() => goToCategory(cat)}
-                  className="text-[13px] text-slate-400 hover:text-primary transition-colors"
-                >
+                <button onClick={() => goToCategory(cat)} className="text-[13px] text-slate-400 hover:text-primary transition-colors">
                   {cat}
                 </button>
               </li>
@@ -70,12 +72,13 @@ const Footer = () => {
 
         {/* Quick links */}
         <div className="md:col-span-2">
-          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-4">Company</h4>
-          <ul className="space-y-2.5">
+          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-5">Quick Links</h4>
+          <ul className="space-y-3">
             {[
               { label: 'Browse Gear', to: '/' },
               { label: 'My Orders',   to: '/dashboard/orders' },
               { label: 'My Account',  to: '/dashboard/account' },
+              { label: 'Help & Support', to: '/dashboard/help' },
             ].map(l => (
               <li key={l.label}>
                 <Link to={l.to} className="text-[13px] text-slate-400 hover:text-primary transition-colors">{l.label}</Link>
@@ -85,29 +88,23 @@ const Footer = () => {
         </div>
 
         {/* Contact */}
-        <div className="md:col-span-3">
-          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-4">Get in Touch</h4>
+        <div className="md:col-span-4">
+          <h4 className="text-[12px] font-bold text-white uppercase tracking-widest mb-5">Visit & Contact</h4>
+          <div className="grid sm:grid-cols-2 gap-3 mb-4">
+            {[
+              { name: 'Velachery Studio', addr: 'Flat S3, 2nd Floor, Sri Niketan Apartment, Sasi Nagar, Velachery, Chennai – 600042', href: 'https://maps.app.goo.gl/velachery' },
+              { name: 'Saligramam Office', addr: 'Saligramam, Chennai – 600093', href: 'https://maps.app.goo.gl/saligramam' },
+            ].map(loc => (
+              <a key={loc.name} href={loc.href} target="_blank" rel="noopener noreferrer"
+                className="group rounded-xl bg-white/5 border border-white/10 p-4 hover:border-primary/60 hover:bg-white/[0.08] transition-colors">
+                <div className="flex items-center gap-2 text-white text-[13px] font-semibold mb-1.5">
+                  <HiOutlineLocationMarker className="text-primary text-base" /> {loc.name}
+                </div>
+                <p className="text-[12px] text-slate-400 leading-snug">{loc.addr}</p>
+              </a>
+            ))}
+          </div>
           <ul className="space-y-3">
-            <li className="flex items-start gap-2.5 text-[13px] text-slate-400">
-              <HiOutlineLocationMarker className="text-base text-primary mt-[2px] flex-shrink-0" />
-              <div className="flex flex-col gap-1">
-                <a
-                  href="https://maps.app.goo.gl/velachery"
-                  target="_blank" rel="noopener noreferrer"
-                  className="hover:text-primary transition-colors leading-snug"
-                >
-                  flat no S3, 2nd floor, Sri Niketan Apartment,<br />
-                  Sasi Nagar, Velachery, Chennai – 600042
-                </a>
-                <a
-                  href="https://maps.app.goo.gl/saligramam"
-                  target="_blank" rel="noopener noreferrer"
-                  className="hover:text-primary transition-colors leading-snug mt-1"
-                >
-                  Saligramam, Chennai – 600093
-                </a>
-              </div>
-            </li>
             <li className="flex items-center gap-2.5 text-[13px] text-slate-400">
               <HiOutlinePhone className="text-base text-primary flex-shrink-0" />
               <a href="tel:+919080086600" className="hover:text-primary transition-colors">+91 90800 86600</a>
@@ -122,7 +119,7 @@ const Footer = () => {
 
       {/* Bottom bar */}
       <div className="border-t border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-[1440px] mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-[12px] text-slate-500">© 2026 Lensmen Rentals. All rights reserved.</p>
           <div className="flex items-center gap-5">
             <span className="text-[12px] text-slate-500 hover:text-slate-300 cursor-pointer transition-colors">Privacy Policy</span>

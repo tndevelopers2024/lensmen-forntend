@@ -49,6 +49,9 @@ export const GlobalProvider = ({ children }) => {
   // Admin specific states
   const [adminStats, setAdminStats] = useState({ productCount: 0, bookingCount: 0, totalRevenue: 0 })
   const [allOrders, setAllOrders] = useState([])
+  const [adminDashLoading, setAdminDashLoading] = useState(true)
+  const [dashOrders, setDashOrders] = useState([])
+  const [userOrdersLoading, setUserOrdersLoading] = useState(true)
   const [adminProductList, setAdminProductList] = useState([])
   const [userOrders, setUserOrders] = useState([])
   const [allUsers, setAllUsers]               = useState([])
@@ -69,6 +72,25 @@ export const GlobalProvider = ({ children }) => {
       const data = await res.json()
       if (Array.isArray(data)) setNotifications(data)
     } catch {}
+  }
+
+  // Single lean request for the dashboard (stats + only the fields its widgets need)
+  const refreshAdminDash = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/dashboard`)
+      let data
+      if (res.ok) {
+        data = await res.json()
+      } else {
+        // Backend without the lean endpoint yet: fall back to the two older calls (in parallel)
+        const [sr, br] = await Promise.all([fetch(`${API_URL}/admin/stats`), fetch(`${API_URL}/admin/bookings`)])
+        data = { stats: await sr.json(), bookings: await br.json() }
+      }
+      if (data?.stats) setAdminStats(data.stats)
+      if (Array.isArray(data?.bookings)) setDashOrders(data.bookings)
+    } catch {} finally {
+      setAdminDashLoading(false)
+    }
   }
 
   const refreshAllOrders = () =>
@@ -93,7 +115,7 @@ export const GlobalProvider = ({ children }) => {
     socket.on('booking:new', ({ userEmail }) => {
       fetchProducts()
       const u = userRef.current
-      if (u?.role === 'admin') refreshAllOrders()
+      if (u?.role === 'admin') { refreshAllOrders(); refreshAdminDash() }
       if (u && u.email === userEmail) {
         fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
           .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
@@ -102,7 +124,7 @@ export const GlobalProvider = ({ children }) => {
 
     socket.on('booking:updated', ({ userEmail }) => {
       const u = userRef.current
-      if (u?.role === 'admin') refreshAllOrders()
+      if (u?.role === 'admin') { refreshAllOrders(); refreshAdminDash() }
       if (u && u.email === userEmail) {
         fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
           .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
@@ -112,7 +134,7 @@ export const GlobalProvider = ({ children }) => {
     socket.on('booking:cancelled', ({ userEmail }) => {
       fetchProducts()
       const u = userRef.current
-      if (u?.role === 'admin') refreshAllOrders()
+      if (u?.role === 'admin') { refreshAllOrders(); refreshAdminDash() }
       if (u && u.email === userEmail) {
         fetch(`${API_URL}/bookings/user/${encodeURIComponent(u.email)}`)
           .then(r => r.json()).then(data => setUserOrders(data)).catch(() => {})
@@ -207,13 +229,7 @@ export const GlobalProvider = ({ children }) => {
   const fetchAdminData = async (path) => {
     try {
       if (path === '/admin') {
-        const statsRes = await fetch(`${API_URL}/admin/stats`)
-        const statsData = await statsRes.json()
-        setAdminStats(statsData)
-
-        const ordersRes = await fetch(`${API_URL}/admin/bookings`)
-        const ordersData = await ordersRes.json()
-        setAllOrders(ordersData)
+        await refreshAdminDash()
       } else if (path === '/admin/orders') {
         const res = await fetch(`${API_URL}/admin/bookings`)
         const data = await res.json()
@@ -231,6 +247,8 @@ export const GlobalProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Fetch admin data error:', error)
+    } finally {
+      if (path === '/admin') setAdminDashLoading(false)
     }
   }
 
@@ -257,6 +275,8 @@ export const GlobalProvider = ({ children }) => {
       setUserOrders(data)
     } catch (error) {
       console.error('Fetch user orders error:', error)
+    } finally {
+      setUserOrdersLoading(false)
     }
   }
 
@@ -365,6 +385,7 @@ export const GlobalProvider = ({ children }) => {
       rentalDates, setRentalDates,
       adminStats, setAdminStats,
       allOrders, setAllOrders,
+      adminDashLoading, userOrdersLoading, dashOrders, refreshAdminDash,
       adminProductList, setAdminProductList,
       userOrders, setUserOrders,
       allUsers, setAllUsers,

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Layout, Menu, ConfigProvider, Button, Tooltip } from 'antd'
 import {
   BarChartOutlined, AppstoreOutlined, ShoppingCartOutlined, TeamOutlined,
-  PlusOutlined, SettingOutlined, LogoutOutlined,
+  SettingOutlined, LogoutOutlined,
   LeftOutlined, RightOutlined, LineChartOutlined, FileTextOutlined,
   TagsOutlined, UnorderedListOutlined, BellOutlined, GiftOutlined, AuditOutlined,
   MenuOutlined, ShopOutlined,
@@ -15,30 +15,64 @@ const { Sider, Content } = Layout
 const BRAND = '#E5550F'
 const NAVY  = '#1e1b4b'
 
+const SIDE_CSS = `
+.lm-side .ant-menu{ background:transparent !important; border:none !important }
+.lm-side .ant-menu-item-group-title{ font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; padding:16px 12px 6px !important }
+.lm-side .ant-menu-inline-collapsed .ant-menu-item-group-title{ visibility:hidden; height:8px; padding:0 !important }
+.lm-side .ant-menu-item, .lm-side .ant-menu-submenu-title{ margin-block:2px !important; width:100% !important; font-weight:500; transition:background .15s, color .15s }
+.lm-side .ant-menu-item .anticon, .lm-side .ant-menu-submenu-title .anticon{ transition:color .15s }
+.lm-side .ant-menu-item a{ color:inherit !important }
+.lm-side .ant-menu-item-selected{
+  background:linear-gradient(90deg, rgba(229,85,15,0.32), rgba(229,85,15,0.06)) !important;
+  box-shadow: inset 3px 0 0 #E5550F; font-weight:600;
+}
+.lm-side .ant-menu-item-selected .anticon{ color:#ff8a4c !important }
+.lm-side .ant-menu-submenu-selected > .ant-menu-submenu-title{ color:#fff !important }
+.lm-side .ant-menu-submenu-selected > .ant-menu-submenu-title .anticon{ color:#ff8a4c !important }
+.lm-side .ant-menu-sub.ant-menu-inline{ background:transparent !important }
+.lm-scroll::-webkit-scrollbar{ width:6px }
+.lm-scroll::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.14); border-radius:6px }
+`
+
 const AdminLayout = ({ children, location }) => {
   const { user, logout, notifications } = useGlobal()
   const unreadCount = notifications.filter(n => !n.read).length
   const [collapsed, setCollapsed] = useState(false)
 
   const navItems = [
-    { key: '/admin',          icon: <BarChartOutlined />,     label: <Link to="/admin">Overview</Link> },
+    { key: '/admin', icon: <BarChartOutlined />, label: <Link to="/admin">Overview</Link> },
     {
-      key: 'inventory',
-      icon: <AppstoreOutlined />,
-      label: 'Inventory',
+      type: 'group', label: 'Operations',
       children: [
-        { key: '/admin/all-products', icon: <UnorderedListOutlined />, label: <Link to="/admin/all-products">Products</Link> },
-        { key: '/admin/categories',   icon: <TagsOutlined />,          label: <Link to="/admin/categories">Categories</Link> },
+        { key: '/admin/orders',   icon: <ShoppingCartOutlined />, label: <Link to="/admin/orders">Orders</Link> },
+        { key: '/admin/quotes',   icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
+        { key: '/admin/invoices', icon: <AuditOutlined />,        label: <Link to="/admin/invoices">Invoices</Link> },
+        { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
       ],
     },
-    { key: '/admin/orders',   icon: <ShoppingCartOutlined />, label: <Link to="/admin/orders">Orders</Link> },
-    { key: '/admin/users',    icon: <TeamOutlined />,         label: <Link to="/admin/users">Users</Link> },
-    { key: '/admin/accounts',  icon: <LineChartOutlined />,  label: <Link to="/admin/accounts">Reports</Link> },
-    { key: '/admin/invoices',  icon: <AuditOutlined />,        label: <Link to="/admin/invoices">Invoices</Link> },
-    { key: '/admin/quotes',    icon: <FileTextOutlined />,     label: <Link to="/admin/quotes">Quotes</Link> },
-    { key: '/admin/offers',    icon: <GiftOutlined />,         label: <Link to="/admin/offers">Offers</Link> },
-    { key: '/admin/menus',     icon: <MenuOutlined />,         label: <Link to="/admin/menus">Menus</Link> },
-    { key: '/admin/vendors',   icon: <ShopOutlined />,         label: <Link to="/admin/vendors">Vendors</Link> },
+    {
+      type: 'group', label: 'Catalog',
+      children: [
+        {
+          key: 'inventory',
+          icon: <AppstoreOutlined />,
+          label: 'Inventory',
+          children: [
+            { key: '/admin/all-products', icon: <UnorderedListOutlined />, label: <Link to="/admin/all-products">Products</Link> },
+            { key: '/admin/categories',   icon: <TagsOutlined />,          label: <Link to="/admin/categories">Categories</Link> },
+          ],
+        },
+        { key: '/admin/vendors', icon: <ShopOutlined />, label: <Link to="/admin/vendors">Vendors</Link> },
+        { key: '/admin/offers',  icon: <GiftOutlined />, label: <Link to="/admin/offers">Offers</Link> },
+        { key: '/admin/menus',   icon: <MenuOutlined />, label: <Link to="/admin/menus">Menus</Link> },
+      ],
+    },
+    {
+      type: 'group', label: 'Insights',
+      children: [
+        { key: '/admin/accounts', icon: <LineChartOutlined />, label: <Link to="/admin/accounts">Reports</Link> },
+      ],
+    },
   ]
 
   const utilItems = [
@@ -101,6 +135,15 @@ const AdminLayout = ({ children, location }) => {
             collapsedIconSize: 17,
             itemColor: '#4b5563',
             iconMarginInlineEnd: 10,
+            darkItemBg: 'transparent',
+            darkSubMenuItemBg: 'rgba(0,0,0,0.18)',
+            darkItemColor: 'rgba(255,255,255,0.68)',
+            darkItemHoverColor: '#ffffff',
+            darkItemHoverBg: 'rgba(255,255,255,0.07)',
+            darkItemSelectedBg: 'transparent',
+            darkItemSelectedColor: '#ffffff',
+            darkGroupTitleColor: 'rgba(255,255,255,0.38)',
+            itemBorderRadius: 10,
           },
           Table: {
             borderRadius: 0,
@@ -126,9 +169,11 @@ const AdminLayout = ({ children, location }) => {
           collapsedWidth={64}
           width={220}
           trigger={null}
+          theme="dark"
+          className="lm-side"
           style={{
-            background: '#fff',
-            borderRight: '1px solid #f0f0f0',
+            background: 'linear-gradient(180deg, #1e1b4b 0%, #17143c 55%, #100e2e 100%)',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
             position: 'sticky',
             top: 0,
             height: '100vh',
@@ -136,28 +181,26 @@ const AdminLayout = ({ children, location }) => {
             flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <style>{SIDE_CSS}</style>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: -90, left: -70, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(229,85,15,0.28), transparent 70%)', pointerEvents: 'none' }} />
 
             {/* Logo + collapse */}
             <div style={{
-              height: 60,
+              height: 92,
               display: 'flex',
               alignItems: 'center',
               justifyContent: collapsed ? 'center' : 'space-between',
-              padding: '0 16px',
-              borderBottom: '1px solid #f0f0f0',
+              padding: '0 10px 0 14px',
               flexShrink: 0,
+              position: 'relative',
             }}>
               {!collapsed && (
                 <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
                   <img
-                    src="/logo.jpg" alt="Logo"
-                    style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', border: '1px solid #f0f0f0' }}
+                    src="/logo.jpg" alt="Lens Men"
+                    style={{ height: 68, width: 'auto', maxWidth: 150, borderRadius: 10, objectFit: 'contain', background: '#fff', padding: '3px 10px', boxShadow: '0 2px 10px rgba(0,0,0,0.35)' }}
                   />
-                  <div style={{ lineHeight: 1.25 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: NAVY, letterSpacing: '-0.02em' }}>Lensmen</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>Rentals</div>
-                  </div>
                 </Link>
               )}
               <Button
@@ -167,7 +210,7 @@ const AdminLayout = ({ children, location }) => {
                   : <LeftOutlined  style={{ fontSize: 11 }} />
                 }
                 onClick={() => setCollapsed(c => !c)}
-                style={{ color: '#9ca3af', width: 28, height: 28 }}
+                style={{ color: 'rgba(255,255,255,0.5)', width: 28, height: 28 }}
               />
             </div>
 
@@ -207,9 +250,9 @@ const AdminLayout = ({ children, location }) => {
             </div> */}
 
             {/* Main Nav */}
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingTop: 6 }}>
+            <div className="lm-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px 0', position: 'relative' }}>
               <Menu
-                mode="inline"
+                mode="inline" theme="dark"
                 selectedKeys={[location.pathname]}
                 defaultOpenKeys={['/admin/all-products', '/admin/categories'].includes(location.pathname) ? ['inventory'] : []}
                 inlineCollapsed={collapsed}
@@ -219,9 +262,9 @@ const AdminLayout = ({ children, location }) => {
             </div>
 
             {/* Util Nav */}
-            <div style={{ flexShrink: 0, borderTop: '1px solid #f0f0f0', paddingBlock: 4 }}>
+            <div style={{ flexShrink: 0, borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 10px 4px', margin: '0 4px', position: 'relative' }}>
               <Menu
-                mode="inline"
+                mode="inline" theme="dark"
                 selectedKeys={[location.pathname]}
                 inlineCollapsed={collapsed}
                 items={utilItems}
@@ -230,50 +273,42 @@ const AdminLayout = ({ children, location }) => {
             </div>
 
             {/* User Profile */}
-            <div style={{
-              flexShrink: 0,
-              borderTop: '1px solid #f0f0f0',
-              padding: '12px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              justifyContent: collapsed ? 'center' : 'flex-start',
-            }}>
-              <Tooltip title={collapsed ? user?.fullName : ''} placement="right">
-                <div style={{
-                  width: 32, height: 32,
-                  borderRadius: '50%',
-                  background: BRAND,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: 11, fontWeight: 700,
-                  flexShrink: 0, cursor: 'default',
-                }}>
-                  {initials}
-                </div>
-              </Tooltip>
-
-              {!collapsed && (
-                <>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 13, fontWeight: 600, color: '#111827',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {user?.fullName}
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Admin</div>
+            <div style={{ flexShrink: 0, padding: 12, position: 'relative' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: collapsed ? 6 : '10px 10px',
+                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.09)', borderRadius: 14,
+              }}>
+                <Tooltip title={collapsed ? user?.fullName : ''} placement="right">
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 10, flexShrink: 0, cursor: 'default',
+                    background: `linear-gradient(135deg, ${BRAND}, #f97316)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 12, fontWeight: 700, boxShadow: '0 4px 10px rgba(229,85,15,0.4)',
+                  }}>
+                    {initials}
                   </div>
-                  <Button
-                    type="text" size="small"
-                    icon={<LogoutOutlined style={{ fontSize: 13 }} />}
-                    onClick={logout}
-                    title="Sign out"
-                    style={{ color: '#9ca3af', width: 28, height: 28, flexShrink: 0 }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = '#fef2f2' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.background = 'transparent' }}
-                  />
-                </>
-              )}
+                </Tooltip>
+                {!collapsed && (
+                  <>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {user?.fullName}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Administrator</div>
+                    </div>
+                    <Button
+                      type="text" size="small"
+                      icon={<LogoutOutlined style={{ fontSize: 14 }} />}
+                      onClick={logout} title="Sign out"
+                      style={{ color: 'rgba(255,255,255,0.55)', width: 30, height: 30, flexShrink: 0 }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.background = 'rgba(239,68,68,0.35)' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; e.currentTarget.style.background = 'transparent' }}
+                    />
+                  </>
+                )}
+              </div>
             </div>
 
           </div>

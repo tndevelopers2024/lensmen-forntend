@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Input, Button, Modal, Typography, Radio, DatePicker, TimePicker, Image,
   Table, Space, Tooltip, Popconfirm, Select, InputNumber, Tag,
-  Drawer, Form, Switch,
+  Drawer, Form, Switch, Checkbox,
 } from 'antd'
 import {
   EyeOutlined, SafetyCertificateOutlined,
@@ -10,13 +10,13 @@ import {
   PrinterOutlined, EnvironmentOutlined, ExclamationCircleOutlined, DeleteOutlined,
   EditOutlined, PlusOutlined, InboxOutlined, UndoOutlined, CloseCircleOutlined, ShopOutlined,
   ApartmentOutlined,
+  ShoppingCartOutlined, ExportOutlined, WarningOutlined, WalletOutlined,
 } from '@ant-design/icons'
 import toast from 'react-hot-toast'
 import dayjs from 'dayjs'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useGlobal, getImageUrl } from '../../context/GlobalContext'
 import { getAdminSettings } from './Settings'
-import PageHeader from '../../components/PageHeader'
 import PaymentModal from '../../components/PaymentModal'
 
 const { Text } = Typography
@@ -41,6 +41,52 @@ const STATUS_CFG = {
 }
 
 const cfg = (status) => STATUS_CFG[status] || { color: '#94a3b8', bg: '#f8fafc', label: status }
+
+// ── List-page styling ────────────────────────────────────────────────
+const ORD_CSS = `
+.ord .ant-table{ background:transparent }
+.ord .ant-table-thead>tr>th{
+  background:#f9fafb !important; color:#667085 !important; font-size:11.5px !important; font-weight:600 !important;
+  text-transform:uppercase; letter-spacing:.05em; padding:13px 12px !important; border-bottom:1px solid #eaecf0 !important;
+}
+.ord .ant-table-thead>tr>th::before{ display:none !important }
+.ord .ant-table-tbody>tr>td{ padding:14px 12px !important; border-bottom:1px solid #f2f4f7 !important; vertical-align:middle }
+.ord .ant-table-measure-row>td{ padding:0 !important; border:none !important; height:0 !important }
+.ord .ant-table-tbody>tr:hover>td{ background:#f8f9ff !important }
+.ord .ant-table-tbody>tr:last-child>td{ border-bottom:none !important }
+.ord .ant-pagination{ margin:0 !important }
+.ord .ant-pagination-item-active{ border-color:#1e1b4b !important; background:#1e1b4b !important }
+.ord .ant-pagination-item-active a{ color:#fff !important }
+.ord .ant-btn.ord-icon{ border-radius:8px; border-color:#e4e7ec; color:#475467; box-shadow:none; width:30px; height:30px; padding:0 }
+.ord .ant-btn.ord-icon:hover{ border-color:#1e1b4b !important; color:#1e1b4b !important; background:#f5f5ff }
+.ord-stat{ transition:box-shadow .15s, transform .15s }
+.ord-stat:hover{ box-shadow:0 8px 24px rgba(16,24,40,.08) !important; transform:translateY(-2px) }
+`
+
+const Pill = ({ children, color, bg, dot }) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+    background: bg, color, borderRadius: 999, padding: '3px 10px 3px 8px',
+    fontSize: 12, fontWeight: 600, lineHeight: '18px',
+  }}>
+    {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />}
+    {children}
+  </span>
+)
+
+const StatCard = ({ icon, label, value, sub, tone, fg, alert }) => (
+  <div className="ord-stat" style={{
+    background: '#fff', border: `1px solid ${alert ? '#fecdca' : '#eaecf0'}`, borderRadius: 16,
+    boxShadow: '0 1px 2px rgba(16,24,40,0.04)', padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14,
+  }}>
+    <span style={{ width: 44, height: 44, borderRadius: 12, background: tone, color: fg, display: 'grid', placeItems: 'center', fontSize: 19, flexShrink: 0 }}>{icon}</span>
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 13, color: '#667085', fontWeight: 500 }}>{label}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: alert ? '#b42318' : '#101828', letterSpacing: '-0.02em', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: '#98a2b3' }}>{sub}</div>}
+    </div>
+  </div>
+)
 
 // ── GST-inclusive amount helpers ─────────────────────────────────────
 const gstAmount  = (order) => order.gstEnabled ? +((order.totalPrice || 0) * (order.gstRate || 18) / 100).toFixed(2) : 0
@@ -107,6 +153,7 @@ const OrdersMonitor = () => {
   const [unitLoading,       setUnitLoading]       = useState(false)
   const [assigningUnit,     setAssigningUnit]     = useState(false)
   const [unitPickupLocation,setUnitPickupLocation]= useState('')
+  const [selectedUnitIds,   setSelectedUnitIds]   = useState([])
   const [editingPrice,      setEditingPrice]      = useState(null)  // { itemIndex, value }
   const [editingCode,       setEditingCode]       = useState(false)
   const [codeValue,         setCodeValue]         = useState('')
@@ -511,23 +558,37 @@ const OrdersMonitor = () => {
     } catch { toast.error('Error') }
   }
 
+  const getItemUnitIds = (item) => {
+    const ids = (item?.units || []).map(u => String(u.unitId))
+    if (!ids.length && item?.unitId) ids.push(String(item.unitId))
+    return ids
+  }
+
   const openUnitPicker = async (item, itemIndex) => {
     setUnitTarget({ item, itemIndex })
     setUnitPickupLocation(selectedOrder?.pickupLocation || pickupLocs[0]?.id || '')
+    const current = getItemUnitIds(item)
+    setSelectedUnitIds(current)
     setUnitLoading(true)
     try {
       const res = await fetch(
         `${API_URL}/products/${item.productId?._id || item.productId}/units/available` +
-        (item.unitId ? `?currentUnitId=${item.unitId}` : '')
+        (current.length ? `?currentUnitIds=${current.join(',')}` : '')
       )
       setUnitOptions(await res.json())
     } catch { toast.error('Could not load units') }
     finally { setUnitLoading(false) }
   }
 
-  const handleAssignUnit = async (unitId) => {
+  const toggleUnit = (id) =>
+    setSelectedUnitIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+
+  const handleAssignUnit = async (ids = selectedUnitIds) => {
     if (!unitTarget || !selectedOrder) return
-    const unit = unitOptions.find(u => u._id === unitId)
+    const units = ids
+      .map(id => unitOptions.find(u => u._id === id))
+      .filter(Boolean)
+      .map(u => ({ unitId: u._id, unitCode: u.unitCode }))
     setAssigningUnit(true)
     try {
       const res = await fetch(`${API_URL}/admin/bookings/${selectedOrder._id}/item-unit`, {
@@ -535,18 +596,18 @@ const OrdersMonitor = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemIndex: unitTarget.itemIndex,
-          unitId:    unitId || null,
-          unitCode:  unit?.unitCode || '',
+          units,
           pickupLocation: unitPickupLocation || undefined,
         }),
       })
       const data = await res.json()
       if (res.ok) {
-        toast.success(unitId ? `Unit ${unit?.unitCode} assigned` : 'Unit cleared')
+        toast.success(units.length ? `${units.length} unit${units.length > 1 ? 's' : ''} assigned` : 'Units cleared')
         setAllOrders(prev => prev.map(o => o._id === data.booking._id ? data.booking : o))
         setSelectedOrder(data.booking)
         setUnitTarget(null)
         setUnitOptions([])
+        setSelectedUnitIds([])
       } else { toast.error(data.message || 'Failed') }
     } catch { toast.error('Network error') }
     finally { setAssigningUnit(false) }
@@ -879,24 +940,14 @@ const OrdersMonitor = () => {
   // ── Row: status badge only ─────────────────────────────────────────
   const InlineStatus = ({ order }) => {
     const { color, bg, label } = cfg(order.status)
-    return (
-      <span style={{
-        fontSize: 12, fontWeight: 600, color,
-        background: bg,
-        border: `1px solid ${color}30`,
-        borderRadius: 6, padding: '3px 10px',
-        whiteSpace: 'nowrap',
-      }}>
-        {label}
-      </span>
-    )
+    return <Pill color={color} bg={bg} dot>{label}</Pill>
   }
 
   // ── Detail modal action buttons ────────────────────────────────────
   const DetailActions = ({ order }) => {
     const s = order.status
     const items = order.items?.length ? order.items : []
-    const unassignedItems = items.filter(it => !it.unitId)
+    const unassignedItems = items.filter(it => getItemUnitIds(it).length === 0)
     const allUnitsAssigned = unassignedItems.length === 0
     const paymentSettled = (order.pendingAmount || 0) <= 0
 
@@ -982,27 +1033,25 @@ const OrdersMonitor = () => {
   // ── Tab pill ───────────────────────────────────────────────────────
   const TabPill = ({ id, label }) => {
     const active = activeTab === id
+    const alert  = id === 'due' && counts.due > 0
     return (
       <button
         onClick={() => { setActiveTab(id); setCurrentPage(1) }}
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 14px',
-          borderRadius: 20,
-          border: active ? '1.5px solid #1e1b4b' : '1.5px solid #e5e7eb',
-          background: active ? '#1e1b4b' : 'transparent',
-          color: active ? '#fff' : '#6b7280',
-          fontSize: 13, fontWeight: active ? 600 : 500,
-          cursor: 'pointer', transition: 'all 0.15s',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 14px', borderRadius: 10, border: 'none',
+          background: active ? '#fff' : 'transparent',
+          boxShadow: active ? '0 1px 3px rgba(16,24,40,0.12), 0 1px 2px rgba(16,24,40,0.06)' : 'none',
+          color: active ? '#101828' : '#667085',
+          fontSize: 13.5, fontWeight: active ? 600 : 500,
+          cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap',
         }}
       >
         {label}
         <span style={{
-          fontSize: 11, fontWeight: 700,
-          background: active ? 'rgba(255,255,255,0.2)' : '#e5e7eb',
-          color: active ? '#fff' : '#6b7280',
-          borderRadius: 10, padding: '1px 7px',
-          minWidth: 20, textAlign: 'center',
+          fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: '1px 8px', minWidth: 22, textAlign: 'center',
+          background: alert ? '#fef3f2' : active ? '#1e1b4b' : '#e4e7ec',
+          color: alert ? '#b42318' : active ? '#fff' : '#475467',
         }}>
           {counts[id]}
         </span>
@@ -1022,7 +1071,7 @@ const OrdersMonitor = () => {
         : (a, b) => new Date(a.startDate) - new Date(b.startDate),
       defaultSortOrder: 'descend',
       render: d => (
-        <span style={{ fontSize: 12, color: showArchive ? '#f59e0b' : '#6b7280' }}>
+        <span style={{ fontSize: 13, color: showArchive ? '#f59e0b' : '#475467', fontVariantNumeric: 'tabular-nums' }}>
           {d ? new Date(d).toLocaleDateString('en-GB') : '—'}
         </span>
       ),
@@ -1034,7 +1083,7 @@ const OrdersMonitor = () => {
       width: 115,
       render: (code, record) => (
         <span
-          style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#E5550F', cursor: 'pointer' }}
+          style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: '#c4320a', background: '#fff4ed', border: '1px solid #ffd6ae', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap' }}
           onClick={e => { e.stopPropagation(); setSelectedOrder(record); setSearchParams({ orderId: record._id }) }}
         >
           {code || '#' + record._id?.slice(-8).toUpperCase()}
@@ -1048,9 +1097,17 @@ const OrdersMonitor = () => {
       width: 160,
       sorter: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
       render: (name, record) => (
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{name}</div>
-          <div style={{ fontSize: 11, color: '#9ca3af' }}>{record.userMobile}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{
+            width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
+            background: 'linear-gradient(135deg,#eef2ff,#e0e7ff)', color: '#4338ca', fontSize: 13, fontWeight: 700,
+          }}>
+            {(name || '?').trim().charAt(0).toUpperCase()}
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#101828' }}>{name}</div>
+            <div style={{ fontSize: 12, color: '#98a2b3' }}>{record.userMobile}</div>
+          </div>
         </div>
       ),
     },
@@ -1063,15 +1120,15 @@ const OrdersMonitor = () => {
         return (
           <div>
             {items.slice(0, 2).map((item, i) => (
-              <div key={i} style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#d1d5db', flexShrink: 0 }} />
+              <div key={i} style={{ fontSize: 13, color: '#344054', display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1.6 }}>
+                <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#a5b4fc', flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {item?.name || '—'}
                 </span>
               </div>
             ))}
             {items.length > 2 && (
-              <div style={{ fontSize: 11, color: '#9ca3af' }}>+{items.length - 2} more</div>
+              <div style={{ fontSize: 11.5, color: '#4f46e5', fontWeight: 600, marginTop: 2 }}>+{items.length - 2} more</div>
             )}
           </div>
         )
@@ -1095,11 +1152,11 @@ const OrdersMonitor = () => {
         const noPending = (record.pendingAmount || 0) === 0
         const hasPaid   = (record.totalPaid || 0) > 0
         if ((noPending && hasPaid) || record.paymentStatus === 'Fully Paid')
-          return <span style={{ color: '#10b981', fontWeight: 700, fontSize: 12 }}>PAID</span>
+          return <Pill color="#067647" bg="#ecfdf3">Paid</Pill>
         if (overdue)
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: '#ef4444', fontWeight: 700, fontSize: 12 }}>OVERDUE {overdueDays}d</span>
+              <Pill color="#b42318" bg="#fef3f2" dot>Overdue {overdueDays}d</Pill>
               <Tooltip title="Send WhatsApp reminder">
                 <button
                   onClick={e => { e.stopPropagation(); handleSendReminder(record) }}
@@ -1117,8 +1174,8 @@ const OrdersMonitor = () => {
             </div>
           )
         if (record.paymentStatus === 'Advance Paid')
-          return <span style={{ color: '#f59e0b', fontWeight: 700, fontSize: 12 }}>PARTIAL</span>
-        return <span style={{ color: '#9ca3af', fontWeight: 700, fontSize: 12 }}>UNPAID</span>
+          return <Pill color="#b54708" bg="#fffaeb">Partial</Pill>
+        return <Pill color="#475467" bg="#f2f4f7">Unpaid</Pill>
       },
     },
     {
@@ -1128,7 +1185,7 @@ const OrdersMonitor = () => {
       width: 100,
       sorter: (a, b) => new Date(a.endDate) - new Date(b.endDate),
       render: d => (
-        <span style={{ fontSize: 12, color: '#374151' }}>
+        <span style={{ fontSize: 13, color: '#475467', fontVariantNumeric: 'tabular-nums' }}>
           {new Date(d).toLocaleDateString('en-GB')}
         </span>
       ),
@@ -1138,7 +1195,7 @@ const OrdersMonitor = () => {
       key: 'totalPrice',
       width: 95,
       sorter: (a, b) => gstTotal(a) - gstTotal(b),
-      render: (_, record) => <span style={{ fontWeight: 600, fontSize: 13 }}>₹{gstTotal(record).toLocaleString()}</span>,
+      render: (_, record) => <span style={{ fontWeight: 600, fontSize: 14, color: '#101828', fontVariantNumeric: 'tabular-nums' }}>₹{gstTotal(record).toLocaleString('en-IN')}</span>,
     },
     {
       title: 'Balance',
@@ -1148,8 +1205,8 @@ const OrdersMonitor = () => {
       render: (_, record) => {
         const balance = gstBalance(record)
         return (
-          <span style={{ fontWeight: 600, fontSize: 13, color: balance > 0 ? '#ef4444' : '#10b981' }}>
-            ₹{balance.toLocaleString()}
+          <span style={{ fontWeight: 600, fontSize: 14, color: balance > 0 ? '#d92d20' : '#079455', fontVariantNumeric: 'tabular-nums' }}>
+            ₹{balance.toLocaleString('en-IN')}
           </span>
         )
       },
@@ -1160,7 +1217,7 @@ const OrdersMonitor = () => {
       key: 'totalDays',
       width: 60,
       sorter: (a, b) => (a.totalDays || 0) - (b.totalDays || 0),
-      render: d => <span style={{ fontSize: 13, color: '#374151' }}>{d || 1}</span>,
+      render: d => <span style={{ fontSize: 13.5, color: '#475467', fontVariantNumeric: 'tabular-nums' }}>{d || 1}</span>,
     },
     {
       title: '',
@@ -1193,16 +1250,16 @@ const OrdersMonitor = () => {
         return (
           <Space size={4} onClick={e => e.stopPropagation()}>
             <Tooltip title="View Details">
-              <Button size="small" icon={<EyeOutlined />} onClick={() => { setSelectedOrder(record); setSearchParams({ orderId: record._id }) }} />
+              <Button className="ord-icon" size="small" icon={<EyeOutlined />} onClick={() => { setSelectedOrder(record); setSearchParams({ orderId: record._id }) }} />
             </Tooltip>
             {hasKyc && (
               <Tooltip title="KYC Docs">
-                <Button size="small" icon={<SafetyCertificateOutlined />} onClick={() => setSelectedKycOrder(record)} />
+                <Button className="ord-icon" size="small" icon={<SafetyCertificateOutlined />} onClick={() => setSelectedKycOrder(record)} />
               </Tooltip>
             )}
             {['Ready for Pickup', 'During Rental', 'Picked Up', 'Return Pending', 'Returned', 'Closed', 'Reopened', 'Active'].includes(record.status) && (
               <Tooltip title={record.pendingAmount > 0 ? `₹${record.pendingAmount?.toLocaleString()} pending` : 'Fully Paid'}>
-                <Button size="small" style={{ fontWeight: 800 }} onClick={() => setPaymentTarget(record)}>₹</Button>
+                <Button className="ord-icon" size="small" style={{ fontWeight: 800 }} onClick={() => setPaymentTarget(record)}>₹</Button>
               </Tooltip>
             )}
           </Space>
@@ -1484,7 +1541,7 @@ const OrdersMonitor = () => {
       {/* Assign Unit Modal */}
       <Modal
         open={!!unitTarget}
-        onCancel={() => { setUnitTarget(null); setUnitOptions([]); setUnitPickupLocation('') }}
+        onCancel={() => { setUnitTarget(null); setUnitOptions([]); setUnitPickupLocation(''); setSelectedUnitIds([]) }}
         footer={null}
         width={400}
         centered
@@ -1493,7 +1550,7 @@ const OrdersMonitor = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <EnvironmentOutlined style={{ color: '#3730a3' }} />
             <span style={{ color: '#1e1b4b', fontWeight: 700 }}>
-              Assign Unit & Location — {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.name}
+              Assign Units & Location — {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.name}
             </span>
           </div>
         }
@@ -1517,34 +1574,37 @@ const OrdersMonitor = () => {
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* Clear option */}
-            {unitTarget && selectedOrder?.items?.[unitTarget.itemIndex]?.unitCode && (
-              <button
-                onClick={() => handleAssignUnit(null)}
-                disabled={assigningUnit}
-                style={{ padding: '8px 12px', borderRadius: 8, border: '1px dashed #d1d5db', background: '#fafafa', cursor: 'pointer', textAlign: 'left', color: '#6b7280', fontSize: 12 }}
-              >
-                ✕ Clear unit assignment
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ fontSize: 12, color: '#6b7280' }}>
+                Selected <b style={{ color: '#1e1b4b' }}>{selectedUnitIds.length}</b> of {selectedOrder?.items?.[unitTarget?.itemIndex]?.quantity || 1} requested
+              </Text>
+              {selectedUnitIds.length > 0 && (
+                <button onClick={() => setSelectedUnitIds([])} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 12, cursor: 'pointer' }}>
+                  ✕ Clear selection
+                </button>
+              )}
+            </div>
             {unitOptions.map(unit => {
-              const isCurrent = unit._id === unitTarget && selectedOrder?.items?.[unitTarget?.itemIndex]?.unitId
+              const isSelected = selectedUnitIds.includes(unit._id)
               const statusColor = { available: '#10b981', rented: '#3b82f6', maintenance: '#f59e0b', damaged: '#ef4444' }[unit.status] || '#9ca3af'
               return (
                 <button key={unit._id}
-                  onClick={() => handleAssignUnit(unit._id)}
+                  onClick={() => toggleUnit(unit._id)}
                   disabled={assigningUnit}
                   style={{
                     padding: '10px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
-                    border: `1px solid ${isCurrent ? '#c7d2fe' : '#e5e7eb'}`,
-                    background: isCurrent ? '#eef2ff' : '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    border: `1px solid ${isSelected ? '#6366f1' : '#e5e7eb'}`,
+                    background: isSelected ? '#eef2ff' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 800, color: '#1e1b4b', fontFamily: 'monospace', fontSize: 14 }}>{unit.unitCode}</div>
-                    {unit.serialNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>SN: {unit.serialNumber}</div>}
-                    {unit.notes && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{unit.notes}</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Checkbox checked={isSelected} style={{ pointerEvents: 'none' }} />
+                    <div>
+                      <div style={{ fontWeight: 800, color: '#1e1b4b', fontFamily: 'monospace', fontSize: 14 }}>{unit.unitCode}</div>
+                      {unit.serialNumber && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>SN: {unit.serialNumber}</div>}
+                      {unit.notes && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{unit.notes}</div>}
+                    </div>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: statusColor, background: statusColor + '18', padding: '2px 8px', borderRadius: 10 }}>
                     {unit.status}
@@ -1553,6 +1613,10 @@ const OrdersMonitor = () => {
               )
             })}
             </div>
+            <Button type="primary" loading={assigningUnit} onClick={() => handleAssignUnit()}
+              style={{ background: '#4f46e5', borderColor: '#4f46e5', fontWeight: 600 }}>
+              {selectedUnitIds.length ? `Assign ${selectedUnitIds.length} unit${selectedUnitIds.length > 1 ? 's' : ''}` : 'Save (no units)'}
+            </Button>
           </div>
         )}
       </Modal>
@@ -2005,8 +2069,8 @@ const OrdersMonitor = () => {
                         <div>
                           <Text style={{ fontWeight: 600, color: '#1e1b4b', fontSize: 14 }}>{item?.name || '—'}</Text>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
-                            {item?.unitCode && (
-                              <span style={{
+                            {getItemUnitIds(item).length > 0 && (item?.units?.length ? item.units : [{ unitCode: item.unitCode }]).map((u, ui) => (
+                              <span key={ui} style={{
                                 fontSize: 10, fontWeight: 700, fontFamily: 'monospace',
                                 background: '#eef2ff', color: '#3730a3',
                                 border: '1px solid #c7d2fe', borderRadius: 4,
@@ -2014,8 +2078,8 @@ const OrdersMonitor = () => {
                                 display: 'flex', alignItems: 'center', gap: 6,
                                 width: 'fit-content'
                               }}>
-                                <span>{item.unitCode}</span>
-                                {selectedOrder?.pickupLocation && (
+                                <span>{u.unitCode}</span>
+                                {ui === 0 && selectedOrder?.pickupLocation && (
                                   <>
                                     <span style={{ width: 1, height: 10, background: '#c7d2fe' }}></span>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600, fontFamily: 'sans-serif' }}>
@@ -2025,7 +2089,7 @@ const OrdersMonitor = () => {
                                   </>
                                 )}
                               </span>
-                            )}
+                            ))}
                             {item?.vendorName && (
                               <>
                                 <Tag color="purple" style={{ fontSize: 10, padding: '0 5px', lineHeight: '16px', margin: 0 }}>VENDOR</Tag>
@@ -2062,7 +2126,7 @@ const OrdersMonitor = () => {
                         <Text style={{ fontWeight: 700, color: '#1e1b4b', fontSize: 14, whiteSpace: 'nowrap' }}>
                           ₹{((item?.pricePerDay || 0) * (item?.quantity || 1) * (selectedOrder.totalDays || 1)).toLocaleString()}
                         </Text>
-                        <Tooltip title={item?.unitCode ? `Unit: ${item.unitCode} — click to change unit & location` : 'Assign unit & location'}>
+                        <Tooltip title={item?.unitCode ? `Units: ${item.unitCode} — click to change units & location` : 'Assign units & location'}>
                           <button
                             onClick={() => openUnitPicker(item, i)}
                             style={{
@@ -2390,74 +2454,94 @@ const OrdersMonitor = () => {
     )
   }
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Rental Pipeline"
-        title="Orders Monitor"
-        subtitle="Track, search and manage every booking"
-        actions={
-          <Space>
-            <Input
-              prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-              placeholder="Search by name, mobile..."
-              value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
-              allowClear
-              style={{ width: 240 }}
-            />
-            <DatePicker.RangePicker
-              placeholder={['From date', 'To date']}
-              value={dateFilter}
-              onChange={d => { setDateFilter(d); setCurrentPage(1) }}
-              allowClear
-              style={{ width: 240 }}
-              format="DD MMM YYYY"
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => { resetManualOrder(); setManualOrderOpen(true) }}
-              style={{ background: '#1e1b4b', borderColor: '#1e1b4b', fontWeight: 600 }}
-            >
-              New Order
-            </Button>
-          </Space>
-        }
-      />
+  const outstanding = activeOrders.reduce((sum, o) => sum + gstBalance(o), 0)
 
-      {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+  return (
+    <div className="ord">
+      <style>{ORD_CSS}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#E5550F', marginBottom: 4 }}>Rental Pipeline</div>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: '#101828', lineHeight: 1.2 }}>Orders Monitor</h1>
+          <div style={{ fontSize: 14, color: '#667085', marginTop: 4 }}>Track, search and manage every booking</div>
+        </div>
+        <Button
+          type="primary" size="large" icon={<PlusOutlined />}
+          onClick={() => { resetManualOrder(); setManualOrderOpen(true) }}
+          style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)', borderColor: '#1e1b4b', fontWeight: 600, borderRadius: 10, boxShadow: '0 4px 12px rgba(30,27,75,0.3)' }}
+        >
+          New Order
+        </Button>
+      </div>
+
+      {/* Summary */}
+      {!showArchive && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+          <StatCard icon={<ShoppingCartOutlined />} label="Active Orders" value={counts.all.toLocaleString('en-IN')} sub={`${counts.upcoming} upcoming`} tone="#eef2ff" fg="#4f46e5" />
+          <StatCard icon={<ExportOutlined />} label="Rented Out" value={counts.rented} sub={`${counts.ready} ready for pickup`} tone="#eff8ff" fg="#175cd3" />
+          <StatCard icon={<WarningOutlined />} label="Overdue Returns" value={counts.due} sub={counts.due ? 'Needs follow-up' : 'All on time'} tone="#fef3f2" fg="#d92d20" alert={counts.due > 0} />
+          <StatCard icon={<WalletOutlined />} label="Outstanding Balance" value={`₹${Math.round(outstanding).toLocaleString('en-IN')}`} sub="across active orders" tone="#fffaeb" fg="#b54708" />
+        </div>
+      )}
+
+      {/* Toolbar: tabs + search */}
+      <div style={{
+        background: '#fff', border: '1px solid #eaecf0', borderRadius: 16, padding: 12, marginBottom: 16,
+        boxShadow: '0 1px 2px rgba(16,24,40,0.04)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', width: '100%' }}>
         {!showArchive && (
-          <>
+          <div style={{ display: 'flex', gap: 2, background: '#f2f4f7', padding: 4, borderRadius: 12, flexWrap: 'wrap' }}>
             <TabPill id="all"      label="All Rentals" />
             <TabPill id="upcoming" label="Upcoming" />
             <TabPill id="ready"    label="Ready for Pickup" />
             <TabPill id="rented"   label="Rented Out" />
             <TabPill id="returned" label="Returned" />
             <TabPill id="due"      label="Due Orders" />
-          </>
+          </div>
         )}
-        <button
-          onClick={() => { setShowArchive(v => !v); setCurrentPage(1); setSearchQuery('') }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '5px 14px', borderRadius: 20, border: '1.5px solid',
-            fontWeight: 700, fontSize: 12, cursor: 'pointer',
-            borderColor: showArchive ? '#f59e0b' : '#e5e7eb',
-            background: showArchive ? '#fffbeb' : '#fff',
-            color: showArchive ? '#d97706' : '#6b7280',
-            marginLeft: 'auto',
-          }}
-        >
-          <InboxOutlined />
-          Archive
-          {counts.archived > 0 && (
-            <span style={{ background: '#f59e0b', color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>
-              {counts.archived}
-            </span>
-          )}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+        <DatePicker.RangePicker
+            placeholder={['From date', 'To date']}
+            value={dateFilter}
+            onChange={d => { setDateFilter(d); setCurrentPage(1) }}
+            allowClear
+            style={{ width: 250 }}
+            format="DD MMM YYYY"
+          />
+          <button
+            onClick={() => { setShowArchive(v => !v); setCurrentPage(1); setSearchQuery('') }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, height: 32,
+              padding: '0 14px', borderRadius: 8, border: '1px solid',
+              fontWeight: 600, fontSize: 13, cursor: 'pointer',
+              borderColor: showArchive ? '#fcd34d' : '#d0d5dd',
+              background: showArchive ? '#fffbeb' : '#fff',
+              color: showArchive ? '#b45309' : '#344054',
+            }}
+          >
+            <InboxOutlined />
+            {showArchive ? 'Back to Orders' : 'Archive'}
+            {counts.archived > 0 && (
+              <span style={{ background: '#f59e0b', color: '#fff', borderRadius: 10, padding: '0 7px', fontSize: 11, fontWeight: 700, lineHeight: '18px' }}>
+                {counts.archived}
+              </span>
+            )}
+          </button>
+        </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Input
+            prefix={<SearchOutlined style={{ color: '#98a2b3' }} />}
+            placeholder="Search by name, mobile..."
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1) }}
+            allowClear
+            style={{ width: 280 }}
+          />
+        </div>
       </div>
 
       {/* Archive banner */}
@@ -2475,9 +2559,9 @@ const OrdersMonitor = () => {
       <div style={{
         background: '#fff',
         borderRadius: 16,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+        boxShadow: '0 1px 2px rgba(16,24,40,0.04)',
         overflow: 'hidden',
-        border: showArchive ? '2px solid #fde68a' : '1px solid #f0f0f0',
+        border: showArchive ? '2px solid #fde68a' : '1px solid #eaecf0',
       }}>
         <Table
           columns={tableColumns}

@@ -10,12 +10,13 @@ import {
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { differenceInCalendarDays } from 'date-fns'
-import { useGlobal } from '../context/GlobalContext'
+import { useGlobal, getImageUrl } from '../context/GlobalContext'
 import Footer from './Footer'
 
 // Resolve a menu item to a URL string
 const resolveItemUrl = (item) => {
   if (!item) return '/'
+  if (item.children?.length > 0 && item.type === 'category') return `/?group=${encodeURIComponent(item.label)}`
   if (item.type === 'all') return '/'
   if (item.type === 'category' && item.categoryName) return `/?category=${encodeURIComponent(item.categoryName)}`
   if (item.type === 'product' && item.productId) return `/product/${item.productId}`
@@ -24,7 +25,7 @@ const resolveItemUrl = (item) => {
 }
 
 const Layout = ({ children }) => {
-  const { user, cart, logout, setAuthMode, setCartOpen, categories, categoriesData, mainMenu, rentalDates, setRentalDates } = useGlobal()
+  const { user, cart, logout, setAuthMode, setCartOpen, products = [], categories, categoriesData, mainMenu, rentalDates, setRentalDates } = useGlobal()
   const navigate = useNavigate()
   const location = useLocation()
   const [showDatePicker, setShowDatePicker] = useState(false)
@@ -35,6 +36,7 @@ const Layout = ({ children }) => {
   const searchParams = new URLSearchParams(location.search)
   const activeCategory = searchParams.get('category') || 'All'
   const activeSub = searchParams.get('sub') || ''
+  const activeGroupParam = searchParams.get('group') || ''
   const [openMenu, setOpenMenu] = useState(null)
   const [dropdownPos, setDropdownPos] = useState({ left: 0, top: 0 })
 
@@ -50,11 +52,53 @@ const Layout = ({ children }) => {
       ]
 
   const isItemActive = (item) => {
-    if (item.type === 'all') return location.pathname === '/' && !searchParams.get('category')
+    if (item.type === 'all') return location.pathname === '/' && !searchParams.get('category') && !activeGroupParam
+    if (item.children?.length > 0) {
+      return activeGroupParam === item.label ||
+        item.children.some(c => (c.categoryName || c.label) === searchParams.get('category'))
+    }
     if (item.type === 'category') return activeCategory === item.categoryName
     if (item.type === 'product') return location.pathname === `/product/${item.productId}`
     return false
   }
+
+  // ── Mega-menu helpers: resolve imagery + counts for menu entries ──────────
+  const productImgFor = (category, label) => {
+    const l = (label || '').toLowerCase()
+    const inCat = products.filter(p => p.imageUrl && (!category || p.category === category))
+    const hit = (l && inCat.find(p => (p.name || '').toLowerCase().includes(l))) || null
+    return hit ? getImageUrl(hit.imageUrl) : ''
+  }
+  const menuImage = (item, parentCategory) => {
+    if (item.imageUrl) return getImageUrl(item.imageUrl)
+    if (item.type === 'product') {
+      const p = products.find(pr => String(pr._id) === String(item.productId))
+      return p?.imageUrl ? getImageUrl(p.imageUrl) : ''
+    }
+    if (item.type === 'category' || !parentCategory) {
+      const cat = item.categoryName || item.label
+      const c = categoriesData.find(x => x.name === cat)
+      if (c?.imageUrl) return getImageUrl(c.imageUrl)
+      const first = products.find(p => p.category === cat && p.imageUrl)
+      return first ? getImageUrl(first.imageUrl) : ''
+    }
+    const direct = products.find(p => p.category === (item.categoryName || item.label) && p.imageUrl)
+    return direct ? getImageUrl(direct.imageUrl) : (productImgFor(parentCategory, item.label) || '')
+  }
+  const menuCount = (item, parentCategory) => {
+    if (item.type === 'product') return null
+    if (!parentCategory) {
+      const cat = item.categoryName || item.label
+      const n = products.filter(p => p.category === cat).length
+      return n || null
+    }
+    const n = products.filter(p => p.category === (item.categoryName || item.label)).length
+    return n || null
+  }
+  const [menuHoverTimer, setMenuHoverTimer] = useState(null)
+  const hoverOpen = (key) => { clearTimeout(menuHoverTimer); setMenuHoverTimer(setTimeout(() => setOpenMenu(key), 90)) }
+  const hoverClose = () => { clearTimeout(menuHoverTimer); setMenuHoverTimer(setTimeout(() => setOpenMenu(null), 160)) }
+  const keepOpen = () => clearTimeout(menuHoverTimer)
 
   useEffect(() => {
     if (!showSearch) return
@@ -242,16 +286,13 @@ const Layout = ({ children }) => {
       />
 
       {isPublic && (
-        <nav className="sticky top-0 z-40">
+        <nav className="contents md:block md:sticky md:top-0 md:z-40">
           <div className="bg-[#1a1a2e]">
 
             {/* ── Desktop header (md+): single row ─────────────── */}
-            <div className="hidden md:flex max-w-[1400px] mx-auto items-center justify-between gap-2 px-5 h-[58px]">
+            <div className="hidden md:flex max-w-[1440px] mx-auto items-center justify-between gap-2 px-6 h-[76px]">
               <Link to="/" className="flex items-center gap-2 shrink-0 mr-1">
-                <img src="/logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover border border-white/10" />
-                <span className="text-white font-bold text-[15px]">
-                  Lensmen <span className="text-[#E5550F]">Rentals</span>
-                </span>
+                <img src="/logo.jpg" alt="Lens Men – Rent, Create, Inspire" className="h-[64px] w-auto rounded-lg bg-white px-3 py-1 object-contain shadow-md" />
               </Link>
               <div className="flex items-center gap-2">
                 {locationChip}
@@ -266,32 +307,51 @@ const Layout = ({ children }) => {
             {/* ── Mobile header (<md): two rows ────────────────── */}
             <div className="md:hidden">
               {/* Row 1: Logo + actions */}
-              <div className="flex items-center justify-between px-4 h-[48px]">
+              <div className="flex items-center justify-between px-4 h-[54px]">
                 <Link to="/" className="flex items-center gap-2 shrink-0">
-                  <img src="/logo.jpg" alt="Logo" className="w-7 h-7 rounded-lg object-cover border border-white/10" />
-                  <span className="text-white font-bold text-[14px]">
+                  <img src="/logo.jpg" alt="Lens Men – Rent, Create, Inspire" className="h-[38px] w-auto rounded-md bg-white px-2 py-0.5 object-contain" />
+                  <span className="text-white font-extrabold text-[16px] leading-none tracking-tight">
                     Lensmen <span className="text-[#E5550F]">Rentals</span>
                   </span>
                 </Link>
                 {rightActions}
               </div>
-              {/* Row 2: Location + date chips */}
-              <div
-                className="flex items-center gap-2 px-4 pb-2.5 overflow-x-auto"
-                style={{ scrollbarWidth: 'none' }}
-              >
-                {locationChip}
-                {deliveryChip}
-                {pickupChip}
-                {editBtn}
+              {/* Row 2: rental window card */}
+              <div className="px-3 pb-2.5">
+                <div className="flex items-stretch rounded-xl bg-white/[0.08] border border-white/10 overflow-hidden">
+                  <button className="flex items-center gap-1.5 pl-3 pr-3 text-white text-[12px] font-semibold border-r border-white/10 shrink-0">
+                    <HiLocationMarker className="text-[#E5550F] text-base" /> Chennai
+                  </button>
+                  <button onClick={() => setShowDatePicker(true)} className="flex-1 flex items-center justify-center gap-2.5 py-1.5 min-w-0">
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] font-bold uppercase tracking-widest text-white/40">Pickup</span>
+                      <span className="block text-[12.5px] font-bold text-white">{fmtDate(rentalDates.from)}</span>
+                    </span>
+                    <span className="flex flex-col items-center leading-none gap-0.5">
+                      <span className="text-[#ff8a4c] text-[14px]">→</span>
+                      {rentalDates.from && rentalDates.to && (
+                        <span className="text-[9px] font-semibold text-white/50">
+                          {Math.max(1, differenceInCalendarDays(rentalDates.to, rentalDates.from))}d
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-left leading-tight">
+                      <span className="block text-[9px] font-bold uppercase tracking-widest text-white/40">Return</span>
+                      <span className="block text-[12.5px] font-bold text-white">{fmtDate(rentalDates.to)}</span>
+                    </span>
+                  </button>
+                  <button onClick={() => setShowDatePicker(true)} className="flex items-center gap-1 px-3.5 bg-[#E5550F] text-white text-[12px] font-bold shrink-0 active:bg-[#c94a0d]">
+                    <HiPencilAlt className="text-sm" /> Edit
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ── Nav menu row ───────────────────────────────────── */}
-          <div className="bg-white border-b border-gray-200 shadow-sm">
+          {/* ── Nav menu row + mega menu ───────────────────────── */}
+          <div id="menu-row" className="sticky top-0 z-40 md:static md:z-auto relative bg-white border-b border-gray-200 shadow-sm" onMouseLeave={hoverClose} onMouseEnter={keepOpen}>
             <div
-              className="max-w-[1400px] mx-auto px-3 md:px-5 flex items-center overflow-x-auto"
+              className="max-w-[1440px] mx-auto px-3 md:px-6 flex items-center md:justify-center overflow-x-auto"
               style={{ scrollbarWidth: 'none' }}
             >
               {navItems.map(item => {
@@ -299,68 +359,106 @@ const Layout = ({ children }) => {
                 const isActive    = isItemActive(item)
                 const itemKey     = String(item._id || item.label)
                 const isOpen      = openMenu === itemKey
+                const thumb       = item.type === 'all' ? '' : menuImage(item)
 
                 return (
                   <div key={itemKey} className="shrink-0">
                     <button
-                      onClick={(e) => {
-                        if (hasChildren) {
-                          if (isOpen) { setOpenMenu(null); return }
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setDropdownPos({ left: rect.left, top: rect.bottom })
-                          setOpenMenu(itemKey)
-                        } else {
-                          goToItem(item)
-                        }
+                      onMouseEnter={() => (hasChildren ? hoverOpen(itemKey) : setOpenMenu(null))}
+                      onClick={() => {
+                        const canHover = window.matchMedia?.('(hover: hover)').matches
+                        if (hasChildren && !canHover) setOpenMenu(isOpen ? null : itemKey)
+                        else goToItem(item)
                       }}
-                      className={`flex items-center gap-1 px-4 md:px-6 py-3.5 text-[13px] md:text-[14px] font-semibold whitespace-nowrap border-b-2 transition-all ${
-                        isActive
+                      className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-5 py-2 md:py-2.5 text-[13px] md:text-[14px] font-semibold whitespace-nowrap border-b-[3px] transition-all ${
+                        isActive || isOpen
                           ? 'border-[#E5550F] text-[#E5550F]'
-                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                          : 'border-transparent text-gray-600 hover:text-gray-900'
                       }`}
                     >
+                      {thumb && (
+                        <img src={thumb} alt="" className="w-6 h-6 md:w-7 md:h-7 rounded-full object-cover bg-gray-100 ring-1 ring-gray-200" />
+                      )}
                       {item.label}
                       {hasChildren && (
-                        <HiChevronDown className={`text-[12px] mt-0.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        <HiChevronDown className={`text-[12px] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                       )}
                     </button>
                   </div>
                 )
               })}
             </div>
-          </div>
 
-          {/* ── Dropdown portal — fixed, escapes overflow ──────── */}
-          {openMenu && (() => {
-            const item = navItems.find(i => String(i._id || i.label) === openMenu)
-            const children = item?.children || []
-            return children.length > 0 ? (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} onClick={() => setOpenMenu(null)} />
-                <div
-                  style={{ position: 'fixed', left: dropdownPos.left, top: dropdownPos.top, zIndex: 9999 }}
-                  className="min-w-[180px] bg-white border border-gray-100 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.15)] py-1.5"
-                >
-                  <button
-                    onClick={() => goToItem(item)}
-                    className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-gray-700 hover:bg-orange-50 hover:text-[#E5550F] transition-colors"
+            {/* Mega panel */}
+            {openMenu && (() => {
+              const item = navItems.find(i => String(i._id || i.label) === openMenu)
+              const children = item?.children || []
+              if (!children.length) return null
+              const cat = item.categoryName || item.label
+              const groupTotal = products.filter(p => children.some(c => (c.categoryName || c.label) === p.category)).length
+              return (
+                <>
+                  <div className="md:hidden fixed inset-0 bg-black/40 z-[9997]" onClick={() => setOpenMenu(null)} />
+                  <div
+                    onMouseEnter={keepOpen}
+                    className="absolute left-0 right-0 top-full z-[9999] bg-white border-t border-gray-100 shadow-[0_24px_50px_rgba(15,15,30,0.18)] animate-[fadeIn_.15s_ease-out]"
                   >
-                    All {item.label}
-                  </button>
-                  <div className="mx-3 h-px bg-gray-100 my-1" />
-                  {children.map(child => (
-                    <button
-                      key={String(child._id || child.label)}
-                      onClick={() => { goToItem(child); }}
-                      className="w-full text-left px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
-                    >
-                      {child.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null
-          })()}
+                    <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-5 md:py-7 grid md:grid-cols-[260px_1fr] gap-6 md:gap-10 max-h-[75vh] overflow-y-auto">
+                      {/* Overview card — clean, no text over images */}
+                      <div className="hidden md:flex flex-col rounded-2xl bg-orange-50/70 border border-orange-100 p-5 self-start">
+                        <div className="flex -space-x-3 mb-4">
+                          {products.filter(p => children.some(c => (c.categoryName || c.label) === p.category) && p.imageUrl).slice(0, 4).map(p => (
+                            <img key={p._id} src={getImageUrl(p.imageUrl)} alt="" className="w-12 h-12 rounded-full object-cover bg-white ring-2 ring-orange-50 shadow-sm" />
+                          ))}
+                        </div>
+                        <h3 className="text-[22px] font-black text-gray-900 leading-tight">{item.label}</h3>
+                        <p className="text-[13px] text-gray-500 mt-1 leading-snug">
+                          {children.length} types{groupTotal ? ` · ${groupTotal} items` : ''} ready to rent
+                        </p>
+                        <button
+                          onClick={() => goToItem(item)}
+                          className="mt-5 inline-flex items-center justify-center gap-1.5 text-[13px] font-bold text-white bg-[#E5550F] hover:bg-[#c94a0d] rounded-full px-5 py-2.5 transition-colors"
+                        >
+                          View all {item.label} →
+                        </button>
+                      </div>
+
+                      {/* Children tiles */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em]">Browse {item.label}</p>
+                          <button onClick={() => goToItem(item)} className="md:hidden text-[12px] font-bold text-[#E5550F]">All {item.label} →</button>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 md:gap-3">
+                          {children.map(child => {
+                            const img = menuImage(child, cat)
+                            const n = menuCount(child, cat)
+                            return (
+                              <button
+                                key={String(child._id || child.label)}
+                                onClick={() => goToItem(child)}
+                                className="group flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 hover:border-[#E5550F]/50 hover:bg-orange-50/60 hover:shadow-md transition-all text-left"
+                              >
+                                <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 rounded-xl bg-gray-50 flex items-center justify-center overflow-hidden">
+                                  {img
+                                    ? <img src={img} alt="" className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-200" />
+                                    : <span className="text-[14px] font-black text-gray-300">{child.label.slice(0, 2).toUpperCase()}</span>}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[13px] md:text-[14px] font-bold text-gray-800 group-hover:text-[#E5550F] leading-snug truncate">{child.label}</p>
+                                  {n && <p className="text-[11px] text-gray-400 mt-0.5">{n} item{n !== 1 ? 's' : ''}</p>}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
         </nav>
       )}
 

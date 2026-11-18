@@ -200,9 +200,7 @@ const AuthModal = ({ mode, setMode }) => {
             {/* Logo */}
             <div className="relative z-10 p-8 pb-0">
               <div className="flex items-center gap-2.5">
-                <img src="/logo.jpg" alt="Logo" className="w-8 h-8 rounded-lg object-cover opacity-80" />
-                <span className="text-white/40 text-[10px] font-semibold tracking-[0.25em] uppercase"
-                  style={{ fontFamily: 'DM Sans, sans-serif' }}>Lensmen Rentals</span>
+                <img src="/logo.jpg" alt="Lens Men" className="h-16 w-auto rounded-lg bg-white p-1.5 object-contain" />
               </div>
             </div>
 
@@ -250,8 +248,7 @@ const AuthModal = ({ mode, setMode }) => {
 
               {/* Mobile brand */}
               <div className="flex items-center gap-2 mb-7 md:hidden">
-                <img src="/logo.jpg" alt="Logo" className="w-7 h-7 rounded-md object-cover" />
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Lensmen Rentals</span>
+                <img src="/logo.jpg" alt="Lens Men" className="h-14 w-auto object-contain" />
               </div>
 
               {/* Title row */}

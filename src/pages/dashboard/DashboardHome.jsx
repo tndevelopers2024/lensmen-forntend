@@ -32,7 +32,7 @@ const STATUS_DOT = {
 const ACTIVE_STATUSES = ['Picked Up', 'During Rental', 'Return Pending', 'Active', 'Approved', 'Ready for Pickup', 'KYC Approved', 'KYC Pending', 'Request Submitted']
 
 const DashboardHome = () => {
-  const { user, userOrders, fetchUserOrders } = useGlobal()
+  const { user, userOrders, fetchUserOrders, userOrdersLoading: loading } = useGlobal()
   const width   = useWindowWidth()
   const isMobile = width < 640
 
@@ -67,8 +67,8 @@ const DashboardHome = () => {
 
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(3, 1fr)', gap: 12 }}>
-        <StatCard icon={HiOutlineCube}        label="Active Rentals" value={activeRentals.length}                sub="currently ongoing" />
-        <StatCard icon={HiOutlineCreditCard}  label="Total Spent"    value={`₹${totalSpent.toLocaleString()}`} sub={`${userOrders.length} order${userOrders.length !== 1 ? 's' : ''}`} />
+        <StatCard loading={loading} icon={HiOutlineCube}        label="Active Rentals" value={activeRentals.length}                sub="currently ongoing" />
+        <StatCard loading={loading} icon={HiOutlineCreditCard}  label="Total Spent"    value={`₹${totalSpent.toLocaleString()}`} sub={`${userOrders.length} order${userOrders.length !== 1 ? 's' : ''}`} />
         <StatCard
           icon={HiOutlineShieldCheck} label="KYC Status"
           value={isMobile ? (user?.kycStatus || 'Not set') : kycValue}
@@ -114,14 +114,18 @@ const DashboardHome = () => {
       <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '16px 18px', borderBottom: `1px solid ${LINE}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontWeight: 600, color: INK, fontSize: 15 }}>Recent Orders</div>
-          {recentOrders.length > 0 && (
+          {!loading && recentOrders.length > 0 && (
             <Link to="/dashboard/orders" style={{ fontSize: 13, color: ACCENT, fontWeight: 500, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
               View all <HiOutlineArrowNarrowRight style={{ fontSize: 15 }} />
             </Link>
           )}
         </div>
 
-        {recentOrders.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: '48px 24px', display: 'flex', justifyContent: 'center' }}>
+            <Spinner />
+          </div>
+        ) : recentOrders.length === 0 ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <HiOutlineCamera style={{ fontSize: 36, color: '#d4d7de', marginBottom: 14 }} />
             <div style={{ fontSize: 14, color: MUTED, marginBottom: 18 }}>You haven't placed any orders yet</div>
@@ -188,7 +192,14 @@ const DashboardHome = () => {
   )
 }
 
-const StatCard = ({ icon: Icon, label, value, sub, valueColor, dot, style: extraStyle }) => (
+const Spinner = ({ size = 22 }) => (
+  <>
+    <style>{`@keyframes dash-spin { to { transform: rotate(360deg) } }`}</style>
+    <span style={{ width: size, height: size, border: `2px solid ${LINE}`, borderTopColor: ACCENT, borderRadius: '50%', display: 'inline-block', animation: 'dash-spin 0.7s linear infinite' }} />
+  </>
+)
+
+const StatCard = ({ icon: Icon, label, value, sub, valueColor, dot, loading, style: extraStyle }) => (
   <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '18px 20px', ...extraStyle }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
       <div style={{ width: 32, height: 32, borderRadius: 9, background: '#f6f7f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -198,6 +209,9 @@ const StatCard = ({ icon: Icon, label, value, sub, valueColor, dot, style: extra
         {label}
       </span>
     </div>
+    {loading ? (
+      <div style={{ height: 40, display: 'flex', alignItems: 'center' }}><Spinner size={20} /></div>
+    ) : (<>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       {dot && <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
       <div style={{ fontSize: 22, fontWeight: 700, color: valueColor || INK, lineHeight: 1.1, letterSpacing: '-0.01em' }}>
@@ -205,6 +219,7 @@ const StatCard = ({ icon: Icon, label, value, sub, valueColor, dot, style: extra
       </div>
     </div>
     {sub && <div style={{ fontSize: 12, color: MUTED, marginTop: 5 }}>{sub}</div>}
+    </>)}
   </div>
 )
 

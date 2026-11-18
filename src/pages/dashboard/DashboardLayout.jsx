@@ -56,16 +56,13 @@ const DashboardLayout = ({ children }) => {
 
       {/* Brand */}
       <div style={{
-        height: 60, display: 'flex', alignItems: 'center',
+        height: 76, display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', padding: '0 16px',
         borderBottom: `1px solid ${LINE}`, flexShrink: 0,
       }}>
         <Link to="/" onClick={closeSidebar} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-          <img src="/logo.jpg" alt="Lensmen"
-            style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', border: `1px solid ${LINE}` }} />
-          <div style={{ fontSize: 15, fontWeight: 700, color: INK, letterSpacing: '-0.01em' }}>
-            Lensmen <span style={{ color: BRAND }}>Rentals</span>
-          </div>
+          <img src="/logo.jpg" alt="Lens Men"
+            style={{ height: 58, width: 'auto', objectFit: 'contain' }} />
         </Link>
         {isMobile && (
           <button onClick={closeSidebar}
@@ -199,9 +196,8 @@ const DashboardLayout = ({ children }) => {
             <HiMenu style={{ fontSize: 24 }} />
           </button>
           <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-            <img src="/logo.jpg" alt="Lensmen"
-              style={{ width: 28, height: 28, borderRadius: 7, objectFit: 'cover', border: `1px solid ${LINE}` }} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: INK }}>Lensmen <span style={{ color: BRAND }}>Rentals</span></span>
+            <img src="/logo.jpg" alt="Lens Men"
+              style={{ height: 38, width: 'auto', objectFit: 'contain' }} />
           </Link>
           <div style={{
             width: 34, height: 34, borderRadius: '50%',
