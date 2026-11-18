@@ -22,6 +22,8 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://api.lensmenrental
 
 export const GlobalProvider = ({ children }) => {
   const [products, setProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
+  const [menuLoading, setMenuLoading] = useState(true)
   const [categoriesData, setCategoriesData] = useState([]) // full objects: {name, imageUrl, subcategories}
   const [categories, setCategories]         = useState([]) // just names, for backward compat
   const [mainMenu,    setMainMenu]    = useState(null)
@@ -188,6 +190,8 @@ export const GlobalProvider = ({ children }) => {
       setProducts(data)
     } catch (error) {
       console.error('Fetch products error:', error)
+    } finally {
+      setProductsLoading(false)
     }
   }
 
@@ -208,7 +212,9 @@ export const GlobalProvider = ({ children }) => {
       const sidebar = list.find(m => m.position === 'sidebar')
       if (topNav)  setMainMenu(topNav)
       if (sidebar) setSidebarMenu(sidebar)
-    } catch {}
+    } catch {} finally {
+      setMenuLoading(false)
+    }
   }
 
   const fetchSidebarMenu = async () => { /* handled by fetchMainMenu */ }
@@ -372,7 +378,7 @@ export const GlobalProvider = ({ children }) => {
 
   return (
     <GlobalContext.Provider value={{
-      products, setProducts,
+      products, catalogLoading: productsLoading || menuLoading, setProducts,
       categories, setCategories, categoriesData,
       mainMenu, setMainMenu, fetchMainMenu,
       sidebarMenu, setSidebarMenu, fetchSidebarMenu,

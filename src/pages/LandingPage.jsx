@@ -7,6 +7,10 @@ import {
 import { MdCameraAlt } from 'react-icons/md'
 import { differenceInDays } from 'date-fns'
 import { useGlobal, getImageUrl } from '../context/GlobalContext'
+import LogoLoader from '../components/LogoLoader'
+
+// show the branded loader at least once per visit so it never just flashes
+let splashSeen = false
 
 const resolveItemUrl = (item) => {
   if (!item) return '/'
@@ -101,13 +105,19 @@ const Thumb = ({ src, label, size = 40, round = true }) => (
 
 
 const LandingPage = ({ setShowBookingModal }) => {
-  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categoriesData, mainMenu, setAuthMode, offers } = useGlobal()
+  const { products, cart, user, addToCart, removeFromCart, updateCartQty, rentalDates, categoriesData, mainMenu, setAuthMode, offers, catalogLoading } = useGlobal()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [wishlist, setWishlist] = useState(new Set())
   const [navH, setNavH] = useState(120)
   const [isMd, setIsMd] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches)
   const [spy, setSpy] = useState('')
+  const [minDone, setMinDone] = useState(splashSeen)
+  useEffect(() => {
+    if (minDone) return
+    const t = setTimeout(() => { splashSeen = true; setMinDone(true) }, 1400)
+    return () => clearTimeout(t)
+  }, [minDone])
   const uspRef = useRef(null)
   const [uspIdx, setUspIdx] = useState(0)
 
@@ -365,6 +375,8 @@ const LandingPage = ({ setShowBookingModal }) => {
   }
 
 
+  const showLoader = catalogLoading || !minDone
+
   const renderUsp = (cls = '') => (
     <div className={`rounded-2xl bg-gradient-to-r from-[#1a1a2e] via-[#241c45] to-[#2f2260] p-2.5 md:p-4 shadow-sm ${cls}`}>
       <div
@@ -407,6 +419,8 @@ const LandingPage = ({ setShowBookingModal }) => {
       {mode === 'category' && (<><span className="text-gray-300">/</span><span className="font-semibold text-gray-900">{selectedCategory}</span></>)}
     </div>
   )
+
+  if (showLoader) return <LogoLoader />
 
   return (
     <div>
